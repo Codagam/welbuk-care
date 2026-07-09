@@ -1,0 +1,23 @@
+{
+  "nav": {
+    "queue": "Queue",
+    "patients": "Patients",
+    "care": "Care",
+    "more": "More"
+  },
+  "queue": {
+    "title": "Today's queue",
+    "empty": "No appointments today."
+  },
+  "care": {
+    "title": "Care",
+    "calls": "Calls",
+    "myPatients": "My Patients",
+    "noCalls": "No active care requests.",
+    "noPatients": "No patients assigned to you."
+  },
+  "common": {
+    "signOut": "Sign out",
+    "switchFacility": "Switch facility"
+  }
+}
