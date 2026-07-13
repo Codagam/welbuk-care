@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { Button, Segmented, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
+import { TeethChart } from "../components/TeethChart";
 import { useDental, useSaveDentalExam } from "../hooks";
-import { LOWER_TEETH, UPPER_TEETH } from "../teeth";
 import type { TeethStates, ToothState } from "../types";
 
 const PRIORITY = ["Low", "Med", "High"] as const;
@@ -77,51 +77,19 @@ export function DentalChartSection({ consultationId }: { consultationId: string 
     );
   }
 
-  const Tooth = ({ n }: { n: string }) => {
-    const has = !!teeth[n];
-    const sel = selected === n;
-    return (
-      <Pressable
-        onPress={() => setSelected(n)}
-        className={`m-0.5 h-11 w-9 items-center justify-center rounded-md border ${
-          sel
-            ? "border-brand bg-brand"
-            : has
-              ? "border-amber-300 bg-amber-100"
-              : "border-neutral-200 bg-white"
-        }`}
-      >
-        <Text
-          className={`text-[11px] font-semibold ${
-            sel ? "text-white" : has ? "text-amber-800" : "text-neutral-600"
-          }`}
-        >
-          {n}
-        </Text>
-      </Pressable>
-    );
-  };
-
   return (
     <View className="gap-4">
       <View className="gap-3 rounded-2xl border border-neutral-200 bg-white p-4">
-        <Text className="text-lg font-semibold text-neutral-900">Tooth chart</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View className="gap-1">
-            <View className="flex-row">
-              {UPPER_TEETH.map((n) => (
-                <Tooth key={n} n={n} />
-              ))}
-            </View>
-            <View className="flex-row">
-              {LOWER_TEETH.map((n) => (
-                <Tooth key={n} n={n} />
-              ))}
-            </View>
-          </View>
-        </ScrollView>
-        <Text className="text-xs text-neutral-400">
-          Tap a tooth to record findings. Highlighted teeth have findings.
+        <Text className="text-lg font-semibold text-neutral-900">
+          Dental Chart
+        </Text>
+        <TeethChart
+          teethStates={teeth}
+          selectedTooth={selected}
+          onToothPress={setSelected}
+        />
+        <Text className="text-center text-xs text-neutral-400">
+          Tap a tooth to record findings. Gold = diagnosed · faded = missing.
         </Text>
       </View>
 
@@ -139,7 +107,7 @@ export function DentalChartSection({ consultationId }: { consultationId: string 
             label="Problem / condition"
             value={cur?.problem ?? ""}
             onChangeText={(v) => update({ problem: v })}
-            placeholder="e.g. Caries, fracture…"
+            placeholder="e.g. caries, fracture, missing…"
           />
           <TextField
             label="Suggested treatment"
@@ -166,13 +134,13 @@ export function DentalChartSection({ consultationId }: { consultationId: string 
         </View>
       ) : (
         <Text className="text-center text-sm text-neutral-400">
-          Select a tooth above to begin.
+          Select a tooth on the chart to begin.
         </Text>
       )}
 
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {saved ? (
-        <Text className="text-sm text-emerald-600">Tooth chart saved.</Text>
+        <Text className="text-sm text-emerald-600">Dental chart saved.</Text>
       ) : null}
 
       <Button label="Save chart" onPress={onSave} loading={save.isPending} />
