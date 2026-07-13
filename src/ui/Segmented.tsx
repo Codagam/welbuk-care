@@ -33,7 +33,8 @@ export function Segmented<T extends string>({
             }`}
           >
             <Text
-              className={`text-sm font-medium ${
+              numberOfLines={1}
+              className={`px-0.5 text-center text-xs font-medium ${
                 active ? "text-brand-foreground" : "text-neutral-600"
               }`}
             >

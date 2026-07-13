@@ -22,6 +22,8 @@ export function SectionNavigator({ sections, activeId, onSelect }: Props) {
           paddingHorizontal: 12,
           paddingVertical: 10,
           gap: 8,
+          alignItems: "center",
+          flexGrow: 1,
         }}
       >
         {sections.map((s) => {
@@ -32,11 +34,13 @@ export function SectionNavigator({ sections, activeId, onSelect }: Props) {
               onPress={() => onSelect(s.id)}
               accessibilityRole="button"
               accessibilityLabel={`Go to ${s.label}`}
-              className={`rounded-full px-4 py-2 ${
+              style={{ flexShrink: 0 }}
+              className={`rounded-full px-4 py-2.5 ${
                 isActive ? "bg-brand" : "bg-neutral-100"
               }`}
             >
               <Text
+                numberOfLines={1}
                 className={`text-sm font-medium ${
                   isActive ? "text-brand-foreground" : "text-neutral-600"
                 }`}

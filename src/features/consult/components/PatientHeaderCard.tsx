@@ -70,20 +70,38 @@ export function PatientHeaderCard({ header, loading, error }: Props) {
 
           <View className="flex-row flex-wrap gap-2">
             {patientId != null ? (
-              <View className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2 py-1">
-                <Text className="text-xs text-neutral-500">Patient ID:</Text>
-                <Text className="text-xs font-semibold text-brand">#</Text>
-                <Text className="text-xs font-medium tabular-nums text-neutral-900">
+              <View
+                style={{ flexShrink: 0 }}
+                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
+              >
+                <Text numberOfLines={1} className="text-xs text-neutral-500">
+                  Patient ID:
+                </Text>
+                <Text numberOfLines={1} className="text-xs font-semibold text-brand">
+                  #
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  className="text-xs font-medium tabular-nums text-neutral-900"
+                >
                   {patientId}
                 </Text>
               </View>
             ) : null}
 
             {dobFormatted || showAge ? (
-              <View className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2 py-1">
-                <Text className="text-xs text-neutral-500">Date of Birth:</Text>
+              <View
+                style={{ flexShrink: 0 }}
+                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
+              >
+                <Text numberOfLines={1} className="text-xs text-neutral-500">
+                  Date of Birth:
+                </Text>
                 <Ionicons name="calendar-outline" size={12} color="#FD006A" />
-                <Text className="text-xs font-medium text-neutral-900">
+                <Text
+                  numberOfLines={1}
+                  className="text-xs font-medium text-neutral-900"
+                >
                   {dobFormatted
                     ? `${dobFormatted}${showAge ? ` (${age} years)` : ""}`
                     : `${age} years`}
@@ -92,10 +110,18 @@ export function PatientHeaderCard({ header, loading, error }: Props) {
             ) : null}
 
             {phone ? (
-              <View className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2 py-1">
-                <Text className="text-xs text-neutral-500">Phone:</Text>
+              <View
+                style={{ flexShrink: 0 }}
+                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
+              >
+                <Text numberOfLines={1} className="text-xs text-neutral-500">
+                  Phone:
+                </Text>
                 <Ionicons name="call-outline" size={12} color="#FD006A" />
-                <Text className="text-xs font-medium text-neutral-900">
+                <Text
+                  numberOfLines={1}
+                  className="text-xs font-medium text-neutral-900"
+                >
                   {phone}
                 </Text>
               </View>

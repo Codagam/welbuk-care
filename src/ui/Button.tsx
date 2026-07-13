@@ -51,10 +51,16 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      style={{ flexShrink: 0 }}
       className={`flex-row items-center justify-center gap-2 rounded-xl ${SIZE[size]} ${CONTAINER[variant]} ${isDisabled ? "opacity-50" : ""} ${className}`}
     >
       {loading ? <ActivityIndicator color={spinnerColor} /> : icon}
-      <Text className={`text-base font-semibold ${LABEL[variant]}`}>{label}</Text>
+      <Text
+        numberOfLines={1}
+        className={`shrink-0 text-base font-semibold ${LABEL[variant]}`}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }

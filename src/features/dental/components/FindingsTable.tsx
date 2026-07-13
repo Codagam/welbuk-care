@@ -107,24 +107,27 @@ export function FindingsTable({
                 </View>
               ) : null}
 
-              <View className="flex-row flex-wrap gap-2">
+              <View className="flex-row flex-wrap items-center gap-2">
                 <Button
                   label="Edit"
                   variant="outline"
+                  size="md"
                   onPress={() => onEdit(e.toothId)}
-                  className="min-w-[88px]"
                 />
                 <Button
                   label="Treat"
+                  size="md"
                   onPress={() => onTreat(e)}
                   disabled={treatDisabled}
-                  className="min-w-[88px]"
                 />
                 <Pressable
                   onPress={() => onDelete(e.id)}
-                  className="justify-center px-3"
+                  style={{ flexShrink: 0 }}
+                  className="justify-center px-3 py-2"
                 >
-                  <Text className="text-sm text-red-500">Delete</Text>
+                  <Text numberOfLines={1} className="text-sm text-red-500">
+                    Delete
+                  </Text>
                 </Pressable>
               </View>
               {treatDisabled ? (

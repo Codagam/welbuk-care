@@ -383,11 +383,13 @@ export function FindingsSheet({
                   <Pressable
                     key={opt.value}
                     onPress={() => toggleProblem(opt.value)}
+                    style={{ flexShrink: 0 }}
                     className={`rounded-full px-3 py-2 ${
                       on ? "bg-brand" : "bg-white border border-neutral-300"
                     }`}
                   >
                     <Text
+                      numberOfLines={1}
                       className={`text-sm ${
                         on ? "text-brand-foreground font-medium" : "text-neutral-700"
                       }`}
