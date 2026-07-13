@@ -15,16 +15,34 @@ type Props = {
   teethStates: TeethStates;
   selectedTooth: string | null;
   onToothPress: (fdi: string) => void;
+  /** FDI ids with a linked plan row status === done */
+  treatedTeeth?: Set<string> | string[];
   maxWidth?: number;
 };
 
-type DisplayState = "default" | "checked" | "diagnosed" | "missing";
+type DisplayState =
+  | "default"
+  | "checked"
+  | "diagnosed"
+  | "missing"
+  | "treated";
+
+function isTreated(
+  fdi: string,
+  treatedTeeth?: Set<string> | string[]
+): boolean {
+  if (!treatedTeeth) return false;
+  if (treatedTeeth instanceof Set) return treatedTeeth.has(fdi);
+  return treatedTeeth.includes(fdi);
+}
 
 function displayState(
   fdi: string,
   selectedTooth: string | null,
-  teethStates: TeethStates
+  teethStates: TeethStates,
+  treatedTeeth?: Set<string> | string[]
 ): DisplayState {
+  if (isTreated(fdi, treatedTeeth)) return "treated";
   const problem = teethStates[fdi]?.problem?.trim();
   if (problem?.toLowerCase() === "missing") return "missing";
   if (selectedTooth === fdi) return "checked";
@@ -33,6 +51,7 @@ function displayState(
 }
 
 function imageVariant(state: DisplayState): ToothImageVariant {
+  if (state === "treated") return "treated";
   if (state === "checked" || state === "diagnosed") return "checked";
   if (state === "missing") return "missing";
   return "default";
@@ -67,6 +86,7 @@ export function TeethChart({
   teethStates,
   selectedTooth,
   onToothPress,
+  treatedTeeth,
   maxWidth,
 }: Props) {
   const { width: screenW } = useWindowDimensions();
@@ -104,7 +124,12 @@ export function TeethChart({
       </View>
 
       {ALL_CHART_TEETH.map((t) => {
-        const state = displayState(t.fdi, selectedTooth, teethStates);
+        const state = displayState(
+          t.fdi,
+          selectedTooth,
+          teethStates,
+          treatedTeeth
+        );
         const primary = isDeciduousFdi(t.fdi);
         const scale = primary ? TOOTH_SCALE_PRIMARY : TOOTH_SCALE_PERM;
         const toothPx = (scale / 100) * size;

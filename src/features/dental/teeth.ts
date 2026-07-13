@@ -10,6 +10,5 @@ export const LOWER_TEETH = [
 ];
 
 export function newPlanItemId(seed: number): string {
-  // App code (Date.now allowed here) — stable-ish local id for a new plan row.
   return `care-${Date.now().toString(36)}-${seed}`;
 }

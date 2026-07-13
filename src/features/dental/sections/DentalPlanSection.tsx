@@ -1,77 +1,43 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
-import { Button, Segmented, TextField } from "@/ui";
-import { describeError } from "@/lib/api/errors";
-import { useDental, useSaveDentalPlan } from "../hooks";
-import { newPlanItemId } from "../teeth";
-import type { TreatmentPlanItem } from "../types";
+import { Button } from "@/ui";
+import { PlanEditorSheet } from "../components/PlanEditorSheet";
+import { useDentalConsult } from "../DentalConsultContext";
+import type { DentalTreatmentPlanRow } from "../types";
+import { isPlanBillable, randomId, todayYmd } from "../utils";
 
-const STATUS = ["planned", "in-progress", "done"] as const;
+export function DentalPlanSection() {
+  const dental = useDentalConsult();
+  const [editRow, setEditRow] = useState<DentalTreatmentPlanRow | null>(null);
 
-export function DentalPlanSection({ consultationId }: { consultationId: string }) {
-  const q = useDental(consultationId);
-  const save = useSaveDentalPlan(consultationId);
-  const [items, setItems] = useState<TreatmentPlanItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!q.data) return;
-    if (q.data.treatmentPlanItems?.length) {
-      setItems(q.data.treatmentPlanItems);
-    } else {
-      const seeded: TreatmentPlanItem[] = Object.entries(q.data.teethStates ?? {})
-        .filter(([, s]) => s.suggestedTreatment?.trim())
-        .map(([tooth, s], i) => ({
-          id: newPlanItemId(i),
-          treatmentName: s.suggestedTreatment!.trim(),
-          status: "planned",
-          totalFee: 0,
-          findingSummary: { tooth },
-        }));
-      setItems(seeded);
-    }
-  }, [q.data]);
-
-  const update = (id: string, patch: Partial<TreatmentPlanItem>) => {
-    setResult(null);
-    setItems((list) => list.map((it) => (it.id === id ? { ...it, ...patch } : it)));
-  };
-  const remove = (id: string) =>
-    setItems((list) => list.filter((it) => it.id !== id));
-  const add = () =>
-    setItems((list) => [
-      ...list,
-      { id: newPlanItemId(list.length), treatmentName: "", status: "planned", totalFee: 0 },
-    ]);
-
-  const billable = items.filter(
-    (i) => i.status === "done" || (i.status === "in-progress" && (i.totalFee ?? 0) > 0)
+  const billable = dental.planItems.filter(isPlanBillable);
+  const total = billable.reduce(
+    (s, i) =>
+      s + (i.totalFee ?? i.providers.reduce((a, p) => a + (p.fee || 0), 0)),
+    0
   );
-  const total = billable.reduce((s, i) => s + (i.totalFee ?? 0), 0);
 
-  const onSave = async () => {
-    setError(null);
-    setResult(null);
-    const clean = items.filter((i) => i.treatmentName.trim());
-    try {
-      const res = await save.mutateAsync(clean);
-      if (res.billingSync) {
-        setResult(
-          res.billingSync.ok
-            ? `Saved. Billed ₹${res.billingSync.doneTotalRupees ?? 0}.`
-            : `Saved. Billing note: ${res.billingSync.error ?? "sync deferred"}.`
-        );
-      } else {
-        setResult("Treatment plan saved.");
-      }
-    } catch (e) {
-      setError(describeError(e));
-    }
+  const addStandalone = () => {
+    setEditRow({
+      id: randomId(),
+      treatmentName: "",
+      plannedDate: todayYmd(),
+      plannedTime: "10:00",
+      status: "planned",
+      providers: [
+        {
+          doctorId: dental.defaultDoctorId || "",
+          role: "Primary",
+          fee: 0,
+        },
+      ],
+      totalFee: 0,
+      selectedActuals: [],
+    });
   };
 
-  if (q.isLoading) {
+  if (dental.loading) {
     return (
       <View className="items-center py-10">
         <ActivityIndicator color="#FD006A" />
@@ -88,71 +54,92 @@ export function DentalPlanSection({ consultationId }: { consultationId: string }
         <Text className="text-sm font-semibold text-brand">₹{total}</Text>
       </View>
 
-      {items.length === 0 ? (
+      {dental.planItems.length === 0 ? (
         <Text className="text-sm text-neutral-400">
-          No treatments yet. Add findings in the chart, or add a row below.
+          No plan rows yet. Use Treat on a finding, or add a standalone
+          treatment.
         </Text>
       ) : (
-        items.map((it) => (
-          <View
-            key={it.id}
-            className="gap-3 rounded-2xl border border-neutral-200 bg-white p-4"
-          >
-            <View className="flex-row items-center gap-2">
-              <TextField
-                containerClassName="flex-1"
-                value={it.treatmentName}
-                onChangeText={(v) => update(it.id, { treatmentName: v })}
-                placeholder="Treatment"
-              />
-              <Pressable
-                onPress={() => remove(it.id)}
-                className="h-9 w-9 items-center justify-center rounded-full active:bg-neutral-100"
-              >
-                <Text className="text-red-500">✕</Text>
-              </Pressable>
-            </View>
-            <View className="flex-row gap-3">
-              <TextField
-                containerClassName="flex-1"
-                label="Tooth"
-                value={it.findingSummary?.tooth ?? ""}
-                onChangeText={(v) => update(it.id, { findingSummary: { tooth: v } })}
-                placeholder="e.g. 16"
-              />
-              <TextField
-                containerClassName="flex-1"
-                label="Fee (₹)"
-                value={it.totalFee ? String(it.totalFee) : ""}
-                onChangeText={(v) =>
-                  update(it.id, { totalFee: Number(v.replace(/[^0-9.]/g, "")) || 0 })
-                }
-                keyboardType="number-pad"
-                placeholder="0"
-              />
-            </View>
-            <Segmented
-              options={STATUS}
-              value={it.status}
-              onChange={(s) => update(it.id, { status: s })}
-            />
-          </View>
-        ))
+        dental.planItems.map((it) => {
+          const fee =
+            it.totalFee ??
+            it.providers.reduce((s, p) => s + (p.fee || 0), 0);
+          return (
+            <Pressable
+              key={it.id}
+              onPress={() => setEditRow(it)}
+              className="gap-2 rounded-2xl border border-neutral-200 bg-white p-4 active:bg-neutral-50"
+            >
+              <View className="flex-row items-start justify-between gap-2">
+                <View className="flex-1 gap-1">
+                  <Text className="text-base font-semibold text-neutral-900">
+                    {it.treatmentName || "Untitled treatment"}
+                  </Text>
+                  {it.findingSummary?.tooth ? (
+                    <Text className="text-sm text-neutral-500">
+                      {it.findingSummary.tooth}
+                      {it.findingSummary.conditionsText
+                        ? ` · ${it.findingSummary.conditionsText}`
+                        : ""}
+                    </Text>
+                  ) : (
+                    <Text className="text-sm text-neutral-400">Standalone</Text>
+                  )}
+                </View>
+                <View className="items-end gap-1">
+                  <View className="rounded-full bg-neutral-100 px-2 py-0.5">
+                    <Text className="text-xs text-neutral-600">{it.status}</Text>
+                  </View>
+                  <Text className="text-sm font-semibold text-neutral-900">
+                    ₹{fee}
+                  </Text>
+                </View>
+              </View>
+              {it.plannedDate ? (
+                <Text className="text-xs text-neutral-400">
+                  Planned {it.plannedDate}
+                  {it.plannedTime ? ` ${it.plannedTime}` : ""}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })
       )}
 
-      <Button label="+ Add treatment" variant="outline" onPress={add} />
+      <Button label="+ Add treatment" variant="outline" onPress={addStandalone} />
 
-      {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
-      {result ? <Text className="text-sm text-emerald-600">{result}</Text> : null}
+      {dental.error ? (
+        <Text className="text-sm text-red-500">{dental.error}</Text>
+      ) : null}
+      {dental.statusMsg ? (
+        <Text className="text-sm text-emerald-600">{dental.statusMsg}</Text>
+      ) : null}
 
-      <Button
-        label="Save plan & bill"
-        onPress={onSave}
-        loading={save.isPending}
-      />
       <Text className="text-center text-xs text-neutral-400">
-        Only &quot;done&quot; (and in-progress with a fee) rows are billed.
+        Only &quot;done&quot; (and in-progress with a fee) rows are billed on
+        save.
       </Text>
+
+      <PlanEditorSheet
+        visible={!!editRow}
+        row={editRow}
+        catalog={dental.catalog}
+        finding={
+          editRow?.diagnosisEntryId
+            ? dental.entries.find((e) => e.id === editRow.diagnosisEntryId) ??
+              null
+            : null
+        }
+        defaultDoctorId={dental.defaultDoctorId}
+        saving={dental.saving}
+        onClose={() => setEditRow(null)}
+        onSave={(row) => {
+          const next = dental.planItems.some((p) => p.id === row.id)
+            ? dental.planItems.map((p) => (p.id === row.id ? row : p))
+            : [...dental.planItems, row];
+          void dental.savePlan(next).then(() => setEditRow(null));
+        }}
+      />
     </View>
   );
 }

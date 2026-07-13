@@ -10,7 +10,7 @@ import {
 import { useLocalSearchParams } from "expo-router";
 
 import { Screen, TopBar } from "@/ui";
-import { useActiveFacility } from "@/lib/auth/store";
+import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { usePatient } from "@/features/patients/hooks";
 import { fullName } from "@/features/patients/utils";
 import { VitalsSection } from "@/features/consult/sections/VitalsSection";
@@ -18,19 +18,68 @@ import { NotesSection } from "@/features/consult/sections/NotesSection";
 import { PrescriptionsSection } from "@/features/consult/sections/PrescriptionsSection";
 import { HistorySection } from "@/features/consult/sections/HistorySection";
 import { RecordingSection } from "@/features/consult/sections/RecordingSection";
+import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalChartSection } from "@/features/dental/sections/DentalChartSection";
+import { DentalFindingsSection } from "@/features/dental/sections/DentalFindingsSection";
 import { DentalPlanSection } from "@/features/dental/sections/DentalPlanSection";
 import { EyeSection } from "@/features/eye/sections/EyeSection";
 
 const BASE_SECTIONS = ["Vitals", "Notes", "Rx", "History", "Audio"];
 
+function isDentalType(consultationType?: string | null): boolean {
+  const t = (consultationType ?? "").toLowerCase();
+  return t.includes("dent");
+}
+
 function sectionsFor(consultationType?: string | null): string[] {
   const t = (consultationType ?? "").toLowerCase();
-  if (t.includes("dent")) return ["Chart", "Plan", ...BASE_SECTIONS];
+  if (isDentalType(t)) return ["Chart", "Findings", "Plan", ...BASE_SECTIONS];
   if (t.includes("eye") || t.includes("ophthal") || t.includes("optom")) {
     return ["Eye", ...BASE_SECTIONS];
   }
   return BASE_SECTIONS;
+}
+
+function ConsultBody({
+  id,
+  patientId,
+  appointmentId,
+  active,
+}: {
+  id: string;
+  patientId?: string;
+  appointmentId?: string;
+  active: string;
+}) {
+  return (
+    <View className="mx-auto w-full max-w-3xl gap-4 p-4 pb-20">
+      {active === "Chart" && <DentalChartSection />}
+      {active === "Findings" && <DentalFindingsSection />}
+      {active === "Plan" && <DentalPlanSection />}
+      {active === "Eye" && (
+        <EyeSection consultationId={id} appointmentId={appointmentId} />
+      )}
+      {active === "Vitals" && <VitalsSection consultationId={id} />}
+      {active === "Notes" && <NotesSection consultationId={id} />}
+      {active === "Rx" && (
+        <PrescriptionsSection
+          consultationId={id}
+          appointmentId={appointmentId}
+          patientId={patientId}
+        />
+      )}
+      {active === "History" && (
+        <HistorySection consultationId={id} patientId={patientId} />
+      )}
+      {active === "Audio" && (
+        <RecordingSection
+          consultationId={id}
+          patientId={patientId}
+          appointmentId={appointmentId}
+        />
+      )}
+    </View>
+  );
 }
 
 export default function ConsultScreen() {
@@ -40,9 +89,20 @@ export default function ConsultScreen() {
     appointmentId?: string;
   }>();
   const facility = useActiveFacility();
+  const user = useAuthUser();
   const patient = usePatient(patientId);
   const SECTIONS = sectionsFor(facility?.consultationType);
   const [active, setActive] = useState<string>(SECTIONS[0]);
+  const dental = isDentalType(facility?.consultationType);
+
+  const body = (
+    <ConsultBody
+      id={id}
+      patientId={patientId}
+      appointmentId={appointmentId}
+      active={active}
+    />
+  );
 
   return (
     <Screen>
@@ -55,7 +115,11 @@ export default function ConsultScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}
+          contentContainerStyle={{
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            gap: 8,
+          }}
         >
           {SECTIONS.map((s) => {
             const isActive = s === active;
@@ -69,7 +133,9 @@ export default function ConsultScreen() {
               >
                 <Text
                   className={`text-sm font-medium ${
-                    isActive ? "text-brand-foreground" : "text-neutral-600"
+                    isActive
+                      ? "text-brand-foreground"
+                      : "text-neutral-600"
                   }`}
                 >
                   {s}
@@ -86,32 +152,18 @@ export default function ConsultScreen() {
         keyboardVerticalOffset={90}
       >
         <ScrollView keyboardShouldPersistTaps="handled">
-          <View className="mx-auto w-full max-w-3xl gap-4 p-4 pb-20">
-            {active === "Chart" && <DentalChartSection consultationId={id} />}
-            {active === "Plan" && <DentalPlanSection consultationId={id} />}
-            {active === "Eye" && (
-              <EyeSection consultationId={id} appointmentId={appointmentId} />
-            )}
-            {active === "Vitals" && <VitalsSection consultationId={id} />}
-            {active === "Notes" && <NotesSection consultationId={id} />}
-            {active === "Rx" && (
-              <PrescriptionsSection
-                consultationId={id}
-                appointmentId={appointmentId}
-                patientId={patientId}
-              />
-            )}
-            {active === "History" && (
-              <HistorySection consultationId={id} patientId={patientId} />
-            )}
-            {active === "Audio" && (
-              <RecordingSection
-                consultationId={id}
-                patientId={patientId}
-                appointmentId={appointmentId}
-              />
-            )}
-          </View>
+          {dental ? (
+            <DentalConsultProvider
+              consultationId={id}
+              appointmentId={appointmentId}
+              facilityId={facility?.id}
+              defaultDoctorId={user?.id ?? ""}
+            >
+              {body}
+            </DentalConsultProvider>
+          ) : (
+            body
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
