@@ -32,6 +32,8 @@ export function useConsultation(id: string) {
   });
 }
 
+export { useConsultPatientHeader } from "./useConsultPatientHeader";
+
 // ---- Vitals -------------------------------------------------------------
 
 export function useVitals(id: string) {
