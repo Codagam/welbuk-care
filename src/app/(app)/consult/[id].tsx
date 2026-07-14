@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -7,23 +8,22 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
 
-import { Screen, TopBar } from "@/ui";
-import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
 import { SectionNavigator } from "@/features/consult/components/SectionNavigator";
 import {
   CONSULT_SECTION_IDS,
   type SectionNavItem,
 } from "@/features/consult/sectionIds";
-import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHeader";
-import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
 import { NotesSection } from "@/features/consult/sections/NotesSection";
+import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
 import { PrescriptionsSection } from "@/features/consult/sections/PrescriptionsSection";
+import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHeader";
 import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
 import { EyeSection } from "@/features/eye/sections/EyeSection";
+import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
+import { Screen, TopBar } from "@/ui";
 
 const SCROLL_MARGIN = 12;
 /** Must match ScrollView contentContainerStyle.paddingTop */
@@ -83,6 +83,7 @@ export default function ConsultScreen() {
     error: headerErr,
     consultation,
     appointment,
+    doctorId: consultDoctorId,
   } = useConsultPatientHeader(id);
   const headerName = header?.name || "Consultation";
   const dental = isDentalType(facility?.consultationType);
@@ -230,7 +231,7 @@ export default function ConsultScreen() {
             consultationId={id}
             appointmentId={appointmentId}
             facilityId={facility?.id}
-            defaultDoctorId={user?.id ?? ""}
+            defaultDoctorId={consultDoctorId ?? user?.id ?? ""}
           >
             <ScrollView
               ref={scrollRef}

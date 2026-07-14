@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 
-import { Button, TextField } from "@/ui";
+import { Button, DateField, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { createPatientLabReport } from "@/lib/api/endpoints/consult-data";
 import { uploadFile } from "@/lib/api/endpoints/recording";
@@ -509,12 +509,11 @@ export function ConsultUploadDialog({
                 </Text>
               ) : (
                 <>
-                  <TextField
+                  <DateField
                     label="Date"
                     value={date}
-                    onChangeText={setDate}
-                    placeholder="YYYY-MM-DD"
-                    editable={!busy}
+                    onChange={setDate}
+                    disabled={busy}
                   />
 
                   <TextField

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -7,15 +7,19 @@ import {
   View,
 } from "react-native";
 
-import { Button, Segmented, TextField } from "@/ui";
+import { Button, DateField, Segmented, TextField, TimeField } from "@/ui";
+import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
+import { ToothBadge } from "./ToothBadge";
 import type {
   DentalTreatmentPlanRow,
   DiagnosisDetailsEntry,
   PlanStatus,
+  SelectedActualItem,
   TreatmentCatalogItem,
 } from "../types";
 import {
   clampDateToToday,
+  normalizeFee,
   normalizeTimeHHmm,
   randomId,
   todayYmd,
@@ -30,6 +34,7 @@ type Props = {
   row: DentalTreatmentPlanRow | null;
   catalog: TreatmentCatalogItem[];
   finding?: DiagnosisDetailsEntry | null;
+  facilityId?: string;
   defaultDoctorId: string;
   saving?: boolean;
   onClose: () => void;
@@ -54,9 +59,54 @@ function sumCatalogFees(
   return sum;
 }
 
+/** Display DD-MM-YYYY like Practice planned treatment pills. */
+function formatPlanRowDate(value?: string): string {
+  const d = toDateOnly(value);
+  if (!d || d.length < 10) return "—";
+  const [y, m, day] = d.split("-");
+  return `${day}-${m}-${y}`;
+}
+
+function diagnosisPlannedDateForTreatment(
+  entry: DiagnosisDetailsEntry | undefined,
+  treatmentName: string
+): string {
+  if (!entry) return "";
+  const name = String(treatmentName).trim();
+  if (!name) return "";
+  const fromMap = toDateOnly(
+    String(entry.suggestedTreatmentNextDates?.[name] ?? "").trim()
+  );
+  if (fromMap) return fromMap;
+  return toDateOnly(entry.nextAppointmentDate);
+}
+
+/** none → planned; partial → in-progress; all suggested treated → done */
+function statusFromSuggestedAndTreated(
+  suggestedOptions: string[] | undefined,
+  selectedActuals: SelectedActualItem[] | undefined
+): PlanStatus {
+  const sug = (suggestedOptions ?? [])
+    .map((s) => String(s).trim())
+    .filter(Boolean);
+  if (sug.length === 0) return "planned";
+  const sel = new Set(
+    (selectedActuals ?? []).map((a) => a.name.trim()).filter(Boolean)
+  );
+  if (sel.size === 0) return "planned";
+  if (sug.every((s) => sel.has(s))) return "done";
+  return "in-progress";
+}
+
+function toothNumberFromSummary(tooth?: string | null): string | null {
+  if (!tooth?.trim()) return null;
+  const m = /^Tooth\s+(.+)$/i.exec(tooth.trim());
+  return (m?.[1] ?? tooth).trim() || null;
+}
+
 export function buildPlanFromFinding(
   entry: DiagnosisDetailsEntry,
-  defaultDoctorId: string
+  _defaultDoctorId: string
 ): DentalTreatmentPlanRow {
   const suggested = (entry.suggestedTreatments ?? []).filter(
     (t) => t && t !== "Other"
@@ -70,14 +120,11 @@ export function buildPlanFromFinding(
   const providers =
     entry.treatmentProviders && entry.treatmentProviders.length > 0
       ? entry.treatmentProviders.map((p) => ({ ...p }))
-      : [
-          {
-            doctorId: defaultDoctorId || "",
-            role: "Primary",
-            fee: entry.fee ?? 0,
-          },
-        ];
-  const totalFee = providers.reduce((s, p) => s + (p.fee || 0), 0);
+      : [{ doctorId: "", role: "Primary", fee: 0 }];
+  const totalFee =
+    providers.reduce((s, p) => s + (Number(p.fee) || 0), 0) ||
+    entry.fee ||
+    0;
 
   return {
     id: randomId(),
@@ -86,6 +133,7 @@ export function buildPlanFromFinding(
     plannedTreatment: first,
     plannedDate,
     plannedTime: normalizeTimeHHmm(entry.nextAppointmentTime),
+    actualDate: todayYmd(),
     status: "planned",
     providers,
     totalFee,
@@ -105,6 +153,7 @@ export function PlanEditorSheet({
   row,
   catalog,
   finding,
+  facilityId,
   defaultDoctorId,
   saving,
   onClose,
@@ -112,40 +161,56 @@ export function PlanEditorSheet({
 }: Props) {
   const [draft, setDraft] = useState<DentalTreatmentPlanRow | null>(null);
   const [pickQuery, setPickQuery] = useState("");
+  const catalogSyncedKeyRef = useRef<string>("");
 
   useEffect(() => {
     if (!visible || !row) {
       setDraft(null);
+      catalogSyncedKeyRef.current = "";
       return;
     }
+    const suggestedOpts = row.findingSummary?.suggestedOptions;
+    const usesPicker =
+      !!row.diagnosisEntryId &&
+      Array.isArray(suggestedOpts) &&
+      suggestedOpts.some((s) => String(s).trim());
+    const selectedActuals = row.selectedActuals ?? [];
     setDraft({
       ...row,
       plannedTime: normalizeTimeHHmm(row.plannedTime),
       plannedDate: row.plannedDate || todayYmd(),
+      actualDate:
+        row.actualDate?.trim() ||
+        (row.diagnosisEntryId ? todayYmd() : ""),
+      status: usesPicker
+        ? statusFromSuggestedAndTreated(suggestedOpts, selectedActuals)
+        : row.status,
       providers:
         row.providers?.length > 0
-          ? row.providers
-          : [
-              {
-                doctorId: defaultDoctorId || "",
-                role: "Primary",
-                fee: row.totalFee ?? 0,
-              },
-            ],
+          ? row.providers.map((p) => ({ ...p }))
+          : [{ doctorId: "", role: "Primary", fee: row.totalFee ?? 0 }],
+      selectedActuals,
     });
     setPickQuery("");
-  }, [visible, row, defaultDoctorId]);
+    catalogSyncedKeyRef.current = "";
+  }, [visible, row]);
 
-  // Catalog fee sync when names change (standalone / linked) — don't wipe if sum<=0
+  // Catalog fee sync for standalone only
   useEffect(() => {
     if (!draft || !visible) return;
+    if (draft.diagnosisEntryId?.trim()) return;
+
     const labels = [
       ...(draft.treatmentNames ?? []),
       draft.treatmentName,
-      ...(draft.findingSummary?.suggestedOptions ?? []),
-    ].filter(Boolean);
+      draft.plannedTreatment,
+    ].filter(Boolean) as string[];
+    const key = labels.join("|");
     const sum = sumCatalogFees(labels, catalog);
     if (sum <= 0) return;
+    if (catalogSyncedKeyRef.current === key) return;
+    catalogSyncedKeyRef.current = key;
+
     setDraft((d) => {
       if (!d) return d;
       const providers =
@@ -154,9 +219,15 @@ export function PlanEditorSheet({
           : [{ doctorId: defaultDoctorId || "", role: "Primary", fee: sum }];
       return { ...d, providers, totalFee: sum };
     });
-    // intentionally only when treatment name set changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft?.treatmentName, draft?.treatmentNames?.join("|"), catalog, visible]);
+  }, [
+    draft?.treatmentName,
+    draft?.treatmentNames?.join("|"),
+    draft?.plannedTreatment,
+    draft?.diagnosisEntryId,
+    catalog,
+    visible,
+    defaultDoctorId,
+  ]);
 
   const suggestions = useMemo(() => {
     const q = pickQuery.trim().toLowerCase();
@@ -166,36 +237,42 @@ export function PlanEditorSheet({
 
   if (!draft) return null;
 
-  const feeDisplay = (name: string): number => {
-    const fromFinding = finding?.suggestedTreatmentFees?.[name];
-    if (fromFinding != null) return fromFinding;
-    const hit = catalog.find(
-      (c) => c.name.trim().toLowerCase() === name.trim().toLowerCase()
-    );
-    return hit?.defaultFee ?? 0;
-  };
+  const isLinked = Boolean(draft.diagnosisEntryId?.trim());
+  const suggestedOptions = (draft.findingSummary?.suggestedOptions ?? []).filter(
+    Boolean
+  );
+  const usesSuggestedPicker = isLinked && suggestedOptions.length > 0;
+  const selectedActuals = draft.selectedActuals ?? [];
+  const remainingSuggested = suggestedOptions.filter(
+    (opt) => !selectedActuals.some((a) => a.name === opt)
+  );
 
-  const toggleActual = (name: string) => {
+  const canSave = usesSuggestedPicker
+    ? selectedActuals.length > 0
+    : isLinked
+      ? Boolean(String(draft.actualTreatment ?? "").trim())
+      : Boolean(String(draft.treatmentName ?? "").trim());
+
+  const toothNum = toothNumberFromSummary(draft.findingSummary?.tooth);
+
+  const toggleActualFromSuggestion = (name: string) => {
     setDraft((d) => {
       if (!d) return d;
-      const cur = d.selectedActuals ?? [];
-      const exists = cur.some((a) => a.name === name);
-      const selectedActuals = exists
-        ? cur.filter((a) => a.name !== name)
-        : [...cur, { name, date: todayYmd() }];
-      const actualTreatment = selectedActuals.map((a) => a.name).join(", ");
-      return { ...d, selectedActuals, actualTreatment };
-    });
-  };
-
-  const setPrimaryFee = (fee: number) => {
-    setDraft((d) => {
-      if (!d) return d;
-      const providers =
-        d.providers.length > 0
-          ? d.providers.map((p, i) => (i === 0 ? { ...p, fee } : p))
-          : [{ doctorId: defaultDoctorId || "", role: "Primary", fee }];
-      return { ...d, providers, totalFee: fee };
+      const current = d.selectedActuals ?? [];
+      const exists = current.some((a) => a.name === name);
+      const next = exists
+        ? current.filter((a) => a.name !== name)
+        : [...current, { name, date: todayYmd() }];
+      const suggested = d.findingSummary?.suggestedOptions ?? [];
+      const usesPicker = suggested.some((s) => String(s).trim());
+      return {
+        ...d,
+        selectedActuals: next,
+        actualTreatment: next.map((a) => a.name).join(", "),
+        ...(usesPicker
+          ? { status: statusFromSuggestedAndTreated(suggested, next) }
+          : {}),
+      };
     });
   };
 
@@ -205,34 +282,34 @@ export function PlanEditorSheet({
       const names = Array.from(
         new Set([...(d.treatmentNames ?? []), name].filter(Boolean))
       );
-      const fee =
-        typeof defaultFee === "number" && defaultFee >= 0
-          ? defaultFee
-          : d.totalFee ?? 0;
+      const sum = sumCatalogFees(names, catalog);
       const providers =
         d.providers.length > 0
-          ? d.providers.map((p, i) =>
-              i === 0
-                ? {
-                    ...p,
-                    fee:
-                      typeof defaultFee === "number" && defaultFee > 0
-                        ? sumCatalogFees(names, catalog) || fee
-                        : p.fee,
-                  }
-                : p
-            )
+          ? d.providers.map((p, i) => {
+              if (i !== 0) return p;
+              if (d.diagnosisEntryId?.trim()) return p;
+              const nextFee =
+                sum > 0
+                  ? sum
+                  : typeof defaultFee === "number" && defaultFee > 0
+                    ? defaultFee
+                    : p.fee;
+              return { ...p, fee: nextFee };
+            })
           : [
               {
-                doctorId: defaultDoctorId || "",
+                doctorId: "",
                 role: "Primary",
                 fee:
-                  typeof defaultFee === "number" && defaultFee > 0
-                    ? defaultFee
-                    : 0,
+                  sum > 0
+                    ? sum
+                    : typeof defaultFee === "number" && defaultFee > 0
+                      ? defaultFee
+                      : 0,
               },
             ];
       const totalFee = providers.reduce((s, p) => s + (p.fee || 0), 0);
+      catalogSyncedKeyRef.current = names.join("|");
       return {
         ...d,
         treatmentName: names[0] ?? name,
@@ -245,6 +322,35 @@ export function PlanEditorSheet({
     setPickQuery("");
   };
 
+  const handleSave = () => {
+    if (!canSave) return;
+    const providers = draft.providers.map((p) => ({
+      doctorId: p.doctorId || "",
+      role: p.role?.trim() || "Primary",
+      fee: normalizeFee(Number(p.fee) || 0),
+    }));
+    const totalFee =
+      draft.totalFee != null && Number.isFinite(draft.totalFee)
+        ? normalizeFee(draft.totalFee)
+        : providers.reduce((s, p) => s + p.fee, 0);
+    onSave({
+      ...draft,
+      providers,
+      totalFee,
+      plannedTime: normalizeTimeHHmm(draft.plannedTime),
+      plannedDate: toDateOnly(draft.plannedDate) || todayYmd(),
+      actualDate: toDateOnly(draft.actualDate) || todayYmd(),
+      actualTreatment:
+        (draft.selectedActuals ?? []).map((a) => a.name).join(", ") ||
+        draft.actualTreatment,
+      treatmentName:
+        draft.treatmentName ||
+        (draft.selectedActuals ?? [])[0]?.name ||
+        draft.plannedTreatment ||
+        "",
+    });
+  };
+
   return (
     <Modal
       visible={visible}
@@ -252,192 +358,290 @@ export function PlanEditorSheet({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-neutral-50">
-        <View className="flex-row items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
-          <Text className="text-lg font-semibold text-neutral-900">
-            {draft.diagnosisEntryId ? "Treat finding" : "Treatment plan"}
+      <View className="flex-1 bg-white">
+        {/* Header — Planned Treatment + tooth badge */}
+        <View className="gap-1 border-b border-neutral-200 px-4 pb-3 pt-3">
+          <View className="flex-row items-center gap-3">
+            {toothNum ? <ToothBadge toothNumber={toothNum} size={40} /> : null}
+            <Text className="min-w-0 flex-1 text-xl font-bold text-neutral-900">
+              {isLinked ? "Planned Treatment" : "New Treatment Plan"}
+            </Text>
+            <Pressable onPress={onClose} hitSlop={10} className="px-1">
+              <Text className="text-xl leading-none text-neutral-400">×</Text>
+            </Pressable>
+          </View>
+          <Text className="text-sm text-neutral-500">
+            Planned and actual treatment, provider fee split, and status.
           </Text>
-          <Pressable onPress={onClose} hitSlop={8}>
-            <Text className="text-sm text-neutral-500">Cancel</Text>
-          </Pressable>
         </View>
 
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 14 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 16 }}
         >
-          {draft.findingSummary ? (
-            <View className="gap-1 rounded-2xl border border-brand-100 bg-brand/5 p-3">
-              <Text className="text-sm font-semibold text-neutral-900">
-                {draft.findingSummary.tooth} ·{" "}
-                {draft.findingSummary.conditionsText}
+          {/* Condition banner (linked) */}
+          {isLinked && draft.findingSummary?.conditionsText ? (
+            <View className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+              <Text className="text-sm text-neutral-600">
+                · Condition:{" "}
+                <Text className="font-semibold text-neutral-900">
+                  {draft.findingSummary.conditionsText}
+                </Text>
               </Text>
               {draft.findingSummary.clinicalNote ? (
-                <Text className="text-sm text-neutral-600">
-                  {draft.findingSummary.clinicalNote}
+                <Text className="mt-1 text-xs text-neutral-500" numberOfLines={2}>
+                  Clinical note: {draft.findingSummary.clinicalNote}
                 </Text>
               ) : null}
             </View>
           ) : null}
 
-          <TextField
-            label="Treatment name"
-            value={draft.treatmentName}
-            onChangeText={(v) =>
-              setDraft((d) => (d ? { ...d, treatmentName: v, plannedTreatment: v } : d))
-            }
-            placeholder="e.g. Composite filling"
-          />
-
-          <View className="gap-1.5">
-            <Text className="text-sm font-medium text-neutral-700">
-              Add from catalog
-            </Text>
-            <TextField
-              value={pickQuery}
-              onChangeText={setPickQuery}
-              placeholder="Search treatments…"
-            />
-            {pickQuery.trim() ? (
-              <View className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-                {suggestions.map((item) => (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => pickTreatment(item.name, item.defaultFee)}
-                    className="border-b border-neutral-100 px-3 py-2.5"
-                  >
-                    <Text className="text-sm text-neutral-900">
-                      {item.name}
-                      {item.defaultFee != null ? ` · ₹${item.defaultFee}` : ""}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-          </View>
-
-          {(draft.findingSummary?.suggestedOptions?.length ?? 0) > 0 ? (
-            <View className="gap-2">
-              <Text className="text-sm font-medium text-neutral-700">
-                Actual / treated
-              </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {draft.findingSummary!.suggestedOptions.map((name) => {
-                  const on = (draft.selectedActuals ?? []).some(
-                    (a) => a.name === name
-                  );
-                  return (
-                    <Pressable
-                      key={name}
-                      onPress={() => toggleActual(name)}
-                      className={`rounded-full px-3 py-2 ${
-                        on ? "bg-emerald-600" : "border border-neutral-300 bg-white"
-                      }`}
-                    >
-                      <Text
-                        className={`text-sm ${
-                          on ? "text-white" : "text-neutral-700"
-                        }`}
-                      >
-                        {name} · ₹{feeDisplay(name)}
+          {/* Linked: Suggested | Treated */}
+          {usesSuggestedPicker ? (
+            <View className="gap-3">
+              <View className="flex-row gap-3">
+                <View className="min-w-0 flex-1 gap-1">
+                  <Text className="text-xs text-neutral-500">Suggested</Text>
+                  <View className="min-h-[88px] rounded-lg border border-neutral-200 p-2">
+                    {remainingSuggested.length === 0 ? (
+                      <Text className="text-xs text-neutral-400">
+                        No more suggestions
                       </Text>
-                    </Pressable>
-                  );
-                })}
+                    ) : (
+                      remainingSuggested.map((opt) => {
+                        const planned = diagnosisPlannedDateForTreatment(
+                          finding ?? undefined,
+                          opt
+                        );
+                        return (
+                          <Pressable
+                            key={opt}
+                            onPress={() => toggleActualFromSuggestion(opt)}
+                            className="mb-1 flex-row items-center justify-between gap-2 rounded-md bg-brand px-2.5 py-2 active:opacity-90"
+                          >
+                            <Text
+                              className="min-w-0 flex-1 text-xs font-medium text-white"
+                              numberOfLines={1}
+                            >
+                              {opt}
+                            </Text>
+                            <Text className="shrink-0 text-xs tabular-nums text-white/90">
+                              {formatPlanRowDate(planned || draft.plannedDate)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })
+                    )}
+                  </View>
+                </View>
+
+                <View className="min-w-0 flex-1 gap-1">
+                  <Text className="text-xs text-neutral-500">Treated</Text>
+                  <View className="min-h-[88px] rounded-lg border border-neutral-200 p-2">
+                    {selectedActuals.length === 0 ? (
+                      <Text className="text-xs text-neutral-400">
+                        Click from left to add
+                      </Text>
+                    ) : (
+                      selectedActuals.map((act) => (
+                        <Pressable
+                          key={act.name}
+                          onPress={() => toggleActualFromSuggestion(act.name)}
+                          className="mb-1 flex-row items-center justify-between gap-2 rounded-md bg-brand px-2.5 py-2 active:opacity-90"
+                        >
+                          <Text
+                            className="min-w-0 flex-1 text-xs font-medium text-white"
+                            numberOfLines={1}
+                          >
+                            {act.name}
+                          </Text>
+                          <Text className="shrink-0 text-xs tabular-nums text-white/90">
+                            {formatPlanRowDate(act.date || todayYmd())}
+                          </Text>
+                          <Text className="shrink-0 text-xs text-white">✕</Text>
+                        </Pressable>
+                      ))
+                    )}
+                  </View>
+                </View>
               </View>
+
+              <View className="flex-row gap-3">
+                <View className="flex-1 gap-1.5">
+                  <Text className="text-sm font-medium text-neutral-700">
+                    Status
+                  </Text>
+                  <Segmented
+                    options={STATUS}
+                    value={draft.status}
+                    onChange={(s) =>
+                      setDraft((d) =>
+                        d ? { ...d, status: s as PlanStatus } : d
+                      )
+                    }
+                  />
+                </View>
+              </View>
+
+              <DateField
+                label="Actual date"
+                value={draft.actualDate ?? todayYmd()}
+                onChange={(v) =>
+                  setDraft((d) => (d ? { ...d, actualDate: v } : d))
+                }
+              />
             </View>
           ) : null}
 
-          <View className="flex-row gap-2">
-            <TextField
-              containerClassName="flex-1"
-              label="Planned date"
-              value={draft.plannedDate ?? ""}
-              onChangeText={(v) =>
-                setDraft((d) => (d ? { ...d, plannedDate: v } : d))
-              }
-              placeholder="YYYY-MM-DD"
-            />
-            <TextField
-              containerClassName="w-28"
-              label="Time"
-              value={draft.plannedTime ?? "10:00"}
-              onChangeText={(v) =>
-                setDraft((d) => (d ? { ...d, plannedTime: v } : d))
-              }
-              placeholder="HH:mm"
-            />
-          </View>
-
-          <TextField
-            label="Actual date"
-            value={draft.actualDate ?? ""}
-            onChangeText={(v) =>
-              setDraft((d) => (d ? { ...d, actualDate: v } : d))
-            }
-            placeholder="YYYY-MM-DD"
-          />
-
-          <View className="gap-1.5">
-            <Text className="text-sm font-medium text-neutral-700">Status</Text>
-            <Segmented
-              options={STATUS}
-              value={draft.status}
-              onChange={(s) =>
-                setDraft((d) => (d ? { ...d, status: s as PlanStatus } : d))
-              }
-            />
-          </View>
-
-          <TextField
-            label="Total fee (₹)"
-            value={
-              draft.totalFee != null
-                ? String(draft.totalFee)
-                : String(draft.providers[0]?.fee ?? "")
-            }
-            onChangeText={(v) =>
-              setPrimaryFee(Number(v.replace(/[^0-9.]/g, "")) || 0)
-            }
-            keyboardType="decimal-pad"
-            placeholder="0"
-          />
-
-          <Text className="text-xs text-neutral-400">
-            Billable when status is done, or in-progress with fee &gt; 0.
-          </Text>
-
-          <Button
-            label="Save plan"
-            loading={saving}
-            onPress={() => {
-              const providers = draft.providers.map((p, i) =>
-                i === 0
-                  ? {
-                      ...p,
-                      fee: draft.totalFee ?? p.fee,
-                      doctorId: p.doctorId || defaultDoctorId || "",
+          {/* Standalone / linked without suggestions */}
+          {!usesSuggestedPicker ? (
+            <View className="gap-3">
+              {!isLinked ? (
+                <>
+                  <TextField
+                    label="Treatment name"
+                    value={draft.treatmentName}
+                    onChangeText={(v) =>
+                      setDraft((d) =>
+                        d
+                          ? { ...d, treatmentName: v, plannedTreatment: v }
+                          : d
+                      )
                     }
-                  : p
-              );
-              const totalFee = providers.reduce(
-                (s, p) => s + (p.fee || 0),
-                0
-              );
-              onSave({
-                ...draft,
-                providers,
-                totalFee,
-                plannedTime: normalizeTimeHHmm(draft.plannedTime),
-                plannedDate: toDateOnly(draft.plannedDate) || todayYmd(),
-                actualDate: toDateOnly(draft.actualDate) || undefined,
-                actualTreatment:
-                  (draft.selectedActuals ?? []).map((a) => a.name).join(", ") ||
-                  draft.actualTreatment,
-              });
-            }}
-          />
+                    placeholder="e.g. Composite filling"
+                  />
+                  <View className="gap-1.5">
+                    <Text className="text-sm font-medium text-neutral-700">
+                      Add from catalog
+                    </Text>
+                    <TextField
+                      value={pickQuery}
+                      onChangeText={setPickQuery}
+                      placeholder="Search treatments…"
+                    />
+                    {pickQuery.trim() ? (
+                      <View className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                        {suggestions.map((item) => (
+                          <Pressable
+                            key={item.id}
+                            onPress={() =>
+                              pickTreatment(item.name, item.defaultFee)
+                            }
+                            className="border-b border-neutral-100 px-3 py-2.5"
+                          >
+                            <Text className="text-sm text-neutral-900">
+                              {item.name}
+                              {item.defaultFee != null
+                                ? ` · ₹${item.defaultFee}`
+                                : ""}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                  <View className="flex-row gap-2">
+                    <DateField
+                      containerClassName="flex-1"
+                      label="Planned date"
+                      value={draft.plannedDate || todayYmd()}
+                      onChange={(v) =>
+                        setDraft((d) => (d ? { ...d, plannedDate: v } : d))
+                      }
+                    />
+                    <TimeField
+                      containerClassName="w-28"
+                      label="Time"
+                      value={draft.plannedTime || "10:00"}
+                      onChange={(v) =>
+                        setDraft((d) => (d ? { ...d, plannedTime: v } : d))
+                      }
+                    />
+                  </View>
+                </>
+              ) : (
+                <TextField
+                  label="Actual treatment"
+                  value={draft.actualTreatment ?? ""}
+                  onChangeText={(v) =>
+                    setDraft((d) => (d ? { ...d, actualTreatment: v } : d))
+                  }
+                  placeholder="What was actually done…"
+                  multiline
+                  style={{ minHeight: 72, textAlignVertical: "top" }}
+                />
+              )}
+
+              <View className="gap-1.5">
+                <Text className="text-sm font-medium text-neutral-700">
+                  Status
+                </Text>
+                <Segmented
+                  options={STATUS}
+                  value={draft.status}
+                  onChange={(s) =>
+                    setDraft((d) =>
+                      d ? { ...d, status: s as PlanStatus } : d
+                    )
+                  }
+                />
+              </View>
+              <DateField
+                label="Actual date"
+                value={draft.actualDate || todayYmd()}
+                onChange={(v) =>
+                  setDraft((d) => (d ? { ...d, actualDate: v } : d))
+                }
+              />
+            </View>
+          ) : null}
+
+          {/* Provider fee split */}
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-neutral-900">
+              {isLinked
+                ? "Provider fee split (linked finding)"
+                : "Provider fee split"}
+            </Text>
+            <Text className="text-[11px] leading-snug text-neutral-500">
+              {isLinked
+                ? "Doctor and role follow the diagnosis chart; fee amounts match that split until you change them here."
+                : "Fee amounts are editable — set each provider's share as needed."}
+            </Text>
+            <ProviderFeeSplitEditor
+              facilityId={facilityId}
+              defaultDoctorId={defaultDoctorId}
+              value={draft.providers}
+              onChange={(providers) => {
+                const totalFee = providers.reduce(
+                  (s, p) => s + normalizeFee(Number(p.fee) || 0),
+                  0
+                );
+                setDraft((d) => (d ? { ...d, providers, totalFee } : d));
+              }}
+              showTotal
+              hideTitle
+              hideAddProvider={isLinked}
+            />
+          </View>
+
+          {!canSave && usesSuggestedPicker ? (
+            <Text className="text-xs text-amber-700">
+              Add at least one treatment under Treated before saving.
+            </Text>
+          ) : null}
         </ScrollView>
+
+        {/* Footer */}
+        <View className="gap-2 border-t border-neutral-200 bg-white px-4 py-3">
+          <Button
+            label="Save"
+            loading={saving}
+            disabled={!canSave}
+            onPress={handleSave}
+          />
+          <Button label="Cancel" variant="outline" onPress={onClose} />
+        </View>
       </View>
     </Modal>
   );

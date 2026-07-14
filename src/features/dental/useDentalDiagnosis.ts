@@ -30,8 +30,12 @@ import {
   mapRawToDiagnosisEntries,
   mapRawToPlanRows,
   mergeSuggestedTreatmentsFromPrior,
+  cloneFindingsToTeeth,
+  filterPlanRowsAfterRemovingTooth,
+  planRowsWithClonedDiagnosisLinks,
   treatmentOrderFromEntries,
 } from "./utils";
+import type { DentalDiagnosisClonePair } from "./utils";
 
 const AUTOSAVE_MS = 60_000;
 
@@ -86,7 +90,7 @@ export function useDentalDiagnosis({
   useEffect(() => {
     if (!enabled) return;
     getDiagnosisTypes("dental")
-      .then((list) => setDiagnosisTypes(list))
+      .then((data) => setDiagnosisTypes(data.diagnosisTypes))
       .catch(() => setDiagnosisTypes([]));
   }, [enabled]);
 
@@ -174,7 +178,10 @@ export function useDentalDiagnosis({
   }, []);
 
   const saveFindings = useCallback(
-    async (nextEntries: DiagnosisDetailsEntry[]): Promise<boolean> => {
+    async (
+      nextEntries: DiagnosisDetailsEntry[],
+      options?: { cloneToToothIds?: string[] }
+    ): Promise<boolean> => {
       if (!appointmentId) {
         setError("Missing appointmentId — cannot save findings.");
         return false;
@@ -183,14 +190,54 @@ export function useDentalDiagnosis({
       setError(null);
       setStatusMsg(null);
       try {
+        let toSave = nextEntries;
+        let clonedPairs: DentalDiagnosisClonePair[] = [];
+        let skippedCount = 0;
+
+        if (
+          selectedTooth &&
+          options?.cloneToToothIds &&
+          options.cloneToToothIds.length > 0
+        ) {
+          const cloned = cloneFindingsToTeeth(
+            nextEntries,
+            selectedTooth,
+            options.cloneToToothIds
+          );
+          toSave = cloned.entries;
+          clonedPairs = cloned.clonedPairs;
+          skippedCount = cloned.skippedCount;
+        }
+
         await postDentalFindings({
           appointmentId,
-          teethStates: deriveTeethStates(nextEntries),
-          treatmentOrder: treatmentOrderFromEntries(nextEntries),
-          treatmentEntries: entriesToPostBody(nextEntries),
+          teethStates: deriveTeethStates(toSave),
+          treatmentOrder: treatmentOrderFromEntries(toSave),
+          treatmentEntries: entriesToPostBody(toSave),
         });
-        setEntries(nextEntries);
-        setStatusMsg("Findings saved.");
+        setEntries(toSave);
+
+        if (clonedPairs.length > 0 && consultationId) {
+          const nextPlan = planRowsWithClonedDiagnosisLinks(
+            planRef.current,
+            clonedPairs
+          );
+          if (nextPlan.length > planRef.current.length) {
+            await patchDentalPlan(consultationId, nextPlan);
+            setPlanItems(nextPlan);
+          }
+        }
+
+        const msgs: string[] = ["Findings saved."];
+        if (clonedPairs.length > 0) {
+          msgs.push(`Cloned to ${clonedPairs.length} finding(s).`);
+        }
+        if (skippedCount > 0) {
+          msgs.push(
+            `Skipped ${skippedCount} duplicate tooth/condition pair(s).`
+          );
+        }
+        setStatusMsg(msgs.join(" "));
         setFindingsOpen(false);
         return true;
       } catch (e) {
@@ -200,7 +247,7 @@ export function useDentalDiagnosis({
         setSaving(false);
       }
     },
-    [appointmentId]
+    [appointmentId, selectedTooth, consultationId]
   );
 
   const deleteFinding = useCallback(
@@ -223,10 +270,10 @@ export function useDentalDiagnosis({
       const removed = entriesRef.current.filter((e) => e.toothId === toothId);
       const removedIds = new Set(removed.map((e) => e.id));
       const next = entriesRef.current.filter((e) => e.toothId !== toothId);
-      const nextPlan = planRef.current.filter(
-        (p) =>
-          !p.diagnosisEntryId ||
-          !removedIds.has(p.diagnosisEntryId)
+      const nextPlan = filterPlanRowsAfterRemovingTooth(
+        planRef.current,
+        toothId,
+        removedIds
       );
       if (!appointmentId) return false;
       setSaving(true);
@@ -352,6 +399,7 @@ export function useDentalDiagnosis({
     diagnosisOptions,
     catalog,
     catalogLoading: catalogQuery.isLoading,
+    facilityId,
     defaultDoctorId,
     saveFindings,
     deleteFinding,

@@ -9,6 +9,9 @@ export const LOWER_TEETH = [
   "31", "32", "33", "34", "35", "36", "37", "38",
 ];
 
+/** All permanent FDI ids — same order as Practice ALL_FDI_IDS. */
+export const ALL_FDI_IDS = [...UPPER_TEETH, ...LOWER_TEETH];
+
 export function newPlanItemId(seed: number): string {
   return `care-${Date.now().toString(36)}-${seed}`;
 }

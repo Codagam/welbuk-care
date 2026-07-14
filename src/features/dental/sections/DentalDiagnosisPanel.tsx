@@ -9,12 +9,10 @@ import {
   PlanEditorSheet,
 } from "../components/PlanEditorSheet";
 import { useDentalConsult } from "../DentalConsultContext";
-import { DentalPlanSection } from "./DentalPlanSection";
 import type { DentalTreatmentPlanRow, DiagnosisDetailsEntry } from "../types";
 
 /**
- * Practice Diagnosis Panel: odontogram + findings + treatment plan in one scroll block.
- * (Chart | Findings | Plan are not separate top-level consult nav items.)
+ * Practice Diagnosis Panel: odontogram + findings in one scroll block.
  */
 export function DentalDiagnosisPanel() {
   const dental = useDentalConsult();
@@ -76,8 +74,6 @@ export function DentalDiagnosisPanel() {
         />
       </View>
 
-      <DentalPlanSection />
-
       {dental.error ? (
         <Text className="text-sm text-red-500">{dental.error}</Text>
       ) : null}
@@ -89,8 +85,10 @@ export function DentalDiagnosisPanel() {
         visible={dental.findingsOpen}
         toothId={dental.selectedTooth}
         entries={dental.entries}
+        planItems={dental.planItems}
         diagnosisOptions={dental.diagnosisOptions}
         catalog={dental.catalog}
+        facilityId={dental.facilityId}
         defaultDoctorId={dental.defaultDoctorId}
         saving={dental.saving}
         onClose={dental.closeFindings}
@@ -103,6 +101,7 @@ export function DentalDiagnosisPanel() {
         row={planDraft}
         catalog={dental.catalog}
         finding={planFinding}
+        facilityId={dental.facilityId}
         defaultDoctorId={dental.defaultDoctorId}
         saving={dental.saving}
         onClose={() => {

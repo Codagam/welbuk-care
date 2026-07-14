@@ -5,11 +5,162 @@ import type {
   TreatmentProvider,
 } from "./types";
 
+export type DentalDiagnosisClonePair = {
+  sourceId: string;
+  newId: string;
+  toothId: string;
+};
+
 export function randomId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
   return `care-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Same slug rules as Practice diagnosis-types autocomplete / POST route. */
+export function slugFromLabel(label: string): string {
+  return (
+    label
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "") || "diagnosis"
+  );
+}
+
+export function uniqueValueFromSlug(
+  base: string,
+  selectedValues: string[]
+): string {
+  let value = base;
+  let n = 1;
+  while (selectedValues.includes(value)) {
+    value = `${base}_${++n}`;
+  }
+  return value;
+}
+
+export function normalizeFee(n: number): number {
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Duplicate findings onto clone targets. Skips existing toothId+problem pairs.
+ * Returns cloned pairs + skipped count (for toast).
+ */
+export function cloneFindingsToTeeth(
+  entries: DiagnosisDetailsEntry[],
+  selectedTooth: string,
+  cloneToToothIds: string[]
+): {
+  entries: DiagnosisDetailsEntry[];
+  clonedPairs: DentalDiagnosisClonePair[];
+  skippedCount: number;
+} {
+  const rawTargets = cloneToToothIds.map((t) => String(t).trim()).filter(Boolean);
+  const targets = [...new Set(rawTargets)].filter((t) => t !== selectedTooth);
+  if (targets.length === 0) {
+    return { entries, clonedPairs: [], skippedCount: 0 };
+  }
+
+  const result = [...entries];
+  const keySet = new Set(result.map((e) => `${e.toothId}\t${e.problem}`));
+  const sourceRows = result.filter((e) => e.toothId === selectedTooth);
+  const clonedPairs: DentalDiagnosisClonePair[] = [];
+  let skippedCount = 0;
+
+  for (const tid of targets) {
+    for (const src of sourceRows) {
+      const key = `${tid}\t${src.problem}`;
+      if (keySet.has(key)) {
+        skippedCount += 1;
+        continue;
+      }
+      const newId = randomId();
+      keySet.add(key);
+      clonedPairs.push({ sourceId: src.id, newId, toothId: tid });
+      result.push({ ...src, id: newId, toothId: tid });
+    }
+  }
+
+  return { entries: result, clonedPairs, skippedCount };
+}
+
+/** Match plan row to FDI tooth via findingSummary.tooth formats. */
+export function planRowBelongsToTooth(
+  row: DentalTreatmentPlanRow,
+  toothId: string
+): boolean {
+  const raw = row.findingSummary?.tooth?.trim() ?? "";
+  if (!raw) return false;
+  if (raw === toothId) return true;
+  const m = /^Tooth\s+(.+)$/i.exec(raw);
+  const bare = (m?.[1] ?? raw).trim();
+  return bare === toothId;
+}
+
+export function filterPlanRowsAfterRemovingTooth(
+  plan: DentalTreatmentPlanRow[],
+  toothId: string,
+  removedDiagnosisIds: Set<string>
+): DentalTreatmentPlanRow[] {
+  return plan.filter((row) => {
+    const did = String(row.diagnosisEntryId ?? "").trim();
+    if (did && removedDiagnosisIds.has(did)) return false;
+    if (planRowBelongsToTooth(row, toothId)) return false;
+    return true;
+  });
+}
+
+/**
+ * Append plan rows for cloned diagnosis ids (Practice planRowsWithClonedDiagnosisLinks).
+ */
+export function planRowsWithClonedDiagnosisLinks(
+  plan: DentalTreatmentPlanRow[],
+  pairs: DentalDiagnosisClonePair[]
+): DentalTreatmentPlanRow[] {
+  if (pairs.length === 0) return plan;
+
+  const existingDiagnosisIds = new Set(
+    plan
+      .map((r) => String(r.diagnosisEntryId ?? "").trim())
+      .filter(Boolean)
+  );
+
+  const additions: DentalTreatmentPlanRow[] = [];
+  for (const { sourceId, newId, toothId } of pairs) {
+    const newKey = String(newId).trim();
+    if (!newKey || existingDiagnosisIds.has(newKey)) continue;
+
+    const sourceRow = plan.find(
+      (row) => String(row.diagnosisEntryId ?? "") === String(sourceId)
+    );
+    if (!sourceRow) continue;
+
+    const fs = sourceRow.findingSummary;
+    additions.push({
+      ...sourceRow,
+      id: randomId(),
+      diagnosisEntryId: newId,
+      findingSummary: fs
+        ? { ...fs, tooth: `Tooth ${toothId}` }
+        : {
+            tooth: `Tooth ${toothId}`,
+            conditionsText: "",
+            clinicalNote: "",
+            suggestedOptions: [],
+          },
+      linkedFollowUpAppointmentId: undefined,
+    });
+    existingDiagnosisIds.add(newKey);
+  }
+
+  if (additions.length === 0) return plan;
+  return [...plan, ...additions];
 }
 
 export function todayYmd(): string {

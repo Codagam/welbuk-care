@@ -25,13 +25,7 @@ export function DentalPlanSection() {
       plannedDate: todayYmd(),
       plannedTime: "10:00",
       status: "planned",
-      providers: [
-        {
-          doctorId: dental.defaultDoctorId || "",
-          role: "Primary",
-          fee: 0,
-        },
-      ],
+      providers: [{ doctorId: "", role: "Primary", fee: 0 }],
       totalFee: 0,
       selectedActuals: [],
     });
@@ -130,6 +124,7 @@ export function DentalPlanSection() {
               null
             : null
         }
+        facilityId={dental.facilityId}
         defaultDoctorId={dental.defaultDoctorId}
         saving={dental.saving}
         onClose={() => setEditRow(null)}

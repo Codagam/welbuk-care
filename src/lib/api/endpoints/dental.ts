@@ -1,4 +1,3 @@
-import { api } from "@/lib/api/client";
 import type {
   BillingSync,
   DentalData,
@@ -11,6 +10,7 @@ import {
   mapRawToDiagnosisEntries,
   mapRawToPlanRows,
 } from "@/features/dental/utils";
+import { api } from "@/lib/api/client";
 
 type RawDentalResponse = {
   dental?: DentalData["dental"];
@@ -99,14 +99,73 @@ export function patchDentalPlan(
 }
 
 export function getDiagnosisTypes(
+  consultationType = "dental",
+  opts?: { search?: string; page?: number; pageSize?: number }
+): Promise<{ diagnosisTypes: DiagnosisOption[]; hasMore: boolean }> {
+  return api<{ diagnosisTypes?: DiagnosisOption[]; hasMore?: boolean }>({
+    path: "/api/consult/diagnosis-types",
+    query: {
+      consultationType,
+      search: opts?.search ?? "",
+      page: opts?.page ?? 1,
+      pageSize: opts?.pageSize ?? 80,
+    },
+  }).then((data) => ({
+    diagnosisTypes: Array.isArray(data.diagnosisTypes)
+      ? data.diagnosisTypes
+      : [],
+    hasMore: data.hasMore === true,
+  }));
+}
+
+/** Paginate diagnosis-types the same way Practice autocomplete does. */
+export async function fetchAllDiagnosisTypes(
+  search: string,
   consultationType = "dental"
 ): Promise<DiagnosisOption[]> {
-  return api<{ diagnosisTypes?: DiagnosisOption[] }>({
-    path: "/api/consult/diagnosis-types",
-    query: { consultationType },
-  }).then((data) =>
-    Array.isArray(data.diagnosisTypes) ? data.diagnosisTypes : []
-  );
+  const acc: DiagnosisOption[] = [];
+  let page = 1;
+  const pageSize = 80;
+  let hasMore = true;
+  const maxPages = 15;
+  while (hasMore && page <= maxPages) {
+    const data = await getDiagnosisTypes(consultationType, {
+      search,
+      page,
+      pageSize,
+    });
+    acc.push(...data.diagnosisTypes);
+    hasMore = data.hasMore && data.diagnosisTypes.length > 0;
+    page += 1;
+  }
+  return acc;
+}
+
+export type FacilityDoctor = {
+  id: string;
+  name: string;
+  doctorId?: number;
+  specialization?: string;
+  isDefault?: boolean;
+};
+
+export function getFacilityDoctors(
+  facilityId: string
+): Promise<FacilityDoctor[]> {
+  return api<{ doctors?: FacilityDoctor[] }>({
+    path: "/api/facility/doctors",
+    query: { facilityId, pageSize: 100, page: 1 },
+  }).then((data) => {
+    const list = Array.isArray(data.doctors) ? data.doctors : [];
+    return list.map((x) => ({
+      id: String(x.id ?? ""),
+      name: String(x.name ?? "").trim() || "Doctor",
+      doctorId: typeof x.doctorId === "number" ? x.doctorId : undefined,
+      specialization:
+        typeof x.specialization === "string" ? x.specialization : undefined,
+      isDefault: x.isDefault === true,
+    }));
+  });
 }
 
 export function getFacilityTreatments(

@@ -44,8 +44,10 @@ export function DentalChartSection() {
         visible={dental.findingsOpen}
         toothId={dental.selectedTooth}
         entries={dental.entries}
+        planItems={dental.planItems}
         diagnosisOptions={dental.diagnosisOptions}
         catalog={dental.catalog}
+        facilityId={dental.facilityId}
         defaultDoctorId={dental.defaultDoctorId}
         saving={dental.saving}
         onClose={dental.closeFindings}

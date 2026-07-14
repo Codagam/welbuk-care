@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 
 import { getConsultation } from "@/lib/api/endpoints/consult";
 import { getPatientHistory } from "@/lib/api/endpoints/consult-data";
@@ -80,6 +80,12 @@ export function useConsultPatientHeader(consultationId: string | undefined) {
     error: consultQ.error,
     consultation: consultQ.data?.consultation ?? null,
     appointment: consultQ.data?.appointment ?? null,
+    doctor: consultQ.data?.doctor ?? null,
+    doctorId:
+      consultQ.data?.doctor?.id ??
+      consultQ.data?.consultation?.doctorId ??
+      consultQ.data?.doctorId ??
+      null,
     reload: consultQ.refetch,
   };
 }

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -7,8 +8,12 @@ import {
   View,
 } from "react-native";
 
-import { Button, Segmented, TextField } from "@/ui";
+import { Button, DateField, TextField, TimeField } from "@/ui";
+import { DiagnosisTypesAutocomplete } from "./DiagnosisTypesAutocomplete";
+import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
+import { ToothBadge } from "./ToothBadge";
 import { getProblemLabel } from "../problems";
+import { ALL_FDI_IDS } from "../teeth";
 import type {
   DiagnosisDetailsEntry,
   DiagnosisOption,
@@ -19,14 +24,18 @@ import type {
 } from "../types";
 import {
   applyDiscount,
+  doneDiagnosisEntryIds,
   feeStringFromCatalogDefault,
+  normalizeFee,
   randomId,
   todayYmd,
   toDateOnly,
 } from "../utils";
+import type { DentalTreatmentPlanRow } from "../types";
 
 type ConditionDraft = {
   problem: string;
+  label: string;
   note: string;
   status: FindingStatus;
   nextAppointmentDate: string;
@@ -42,21 +51,25 @@ type Props = {
   visible: boolean;
   toothId: string | null;
   entries: DiagnosisDetailsEntry[];
+  planItems?: DentalTreatmentPlanRow[];
   diagnosisOptions: DiagnosisOption[];
   catalog: TreatmentCatalogItem[];
+  facilityId?: string;
   defaultDoctorId: string;
   saving?: boolean;
   onClose: () => void;
-  onSave: (nextEntries: DiagnosisDetailsEntry[]) => Promise<boolean>;
+  onSave: (
+    nextEntries: DiagnosisDetailsEntry[],
+    options?: { cloneToToothIds?: string[] }
+  ) => Promise<boolean>;
   onClearTooth?: (toothId: string) => Promise<boolean>;
 };
 
-const STATUS: FindingStatus[] = ["planned", "in-progress", "done"];
-
 function emptyDraft(
   problem: string,
-  doctorId: string,
-  existing?: DiagnosisDetailsEntry
+  label: string,
+  existing?: DiagnosisDetailsEntry,
+  defaultDoctorId = ""
 ): ConditionDraft {
   const today = todayYmd();
   const treatments: SuggestedTreatmentPlanRow[] = (
@@ -85,6 +98,7 @@ function emptyDraft(
 
   return {
     problem,
+    label,
     note: existing?.note ?? "",
     status: existing?.treatmentStatus ?? "planned",
     nextAppointmentDate: toDateOnly(existing?.nextAppointmentDate) || today,
@@ -92,12 +106,12 @@ function emptyDraft(
     nextAppointmentReason: existing?.nextAppointmentReason ?? "",
     treatments,
     fee: existing?.fee ?? 0,
-    providers:
-      existing?.treatmentProviders?.length
-        ? existing.treatmentProviders
-        : doctorId
-          ? [{ doctorId, role: "Primary", fee: existing?.fee ?? 0 }]
-          : [],
+    // Seed Primary consulting doctor fee 0 so fee split is open immediately
+    providers: existing?.treatmentProviders?.length
+      ? existing.treatmentProviders.map((p) => ({ ...p }))
+      : defaultDoctorId
+        ? [{ doctorId: defaultDoctorId, role: "Primary", fee: 0 }]
+        : [],
     existingId: existing?.id,
   };
 }
@@ -107,12 +121,20 @@ function catalogByName(catalog: TreatmentCatalogItem[], name: string) {
   return catalog.find((c) => c.name.trim().toLowerCase() === n);
 }
 
+function statusBadge(status: FindingStatus): string {
+  if (status === "done") return "Done";
+  if (status === "in-progress") return "In progress";
+  return "Pending";
+}
+
 export function FindingsSheet({
   visible,
   toothId,
   entries,
+  planItems = [],
   diagnosisOptions,
   catalog,
+  facilityId,
   defaultDoctorId,
   saving,
   onClose,
@@ -124,8 +146,24 @@ export function FindingsSheet({
   const [treatmentQuery, setTreatmentQuery] = useState<Record<string, string>>(
     {}
   );
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [treatmentPickerOpen, setTreatmentPickerOpen] = useState<
+    Record<string, boolean>
+  >({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [localError, setLocalError] = useState<string | null>(null);
+  const [clonePickerOpen, setClonePickerOpen] = useState(false);
+  const [cloneTargetIds, setCloneTargetIds] = useState<string[]>([]);
+
+  const doneIds = useMemo(
+    () => doneDiagnosisEntryIds(planItems),
+    [planItems]
+  );
+
+  const labelFor = (problem: string, draftLabel?: string) => {
+    if (draftLabel?.trim()) return draftLabel;
+    const hit = diagnosisOptions.find((o) => o.value === problem);
+    return hit?.label || getProblemLabel(problem);
+  };
 
   useEffect(() => {
     if (!visible || !toothId) return;
@@ -134,40 +172,77 @@ export function FindingsSheet({
     setSelectedProblems(problems);
     const next: Record<string, ConditionDraft> = {};
     for (const e of forTooth) {
-      next[e.problem] = emptyDraft(e.problem, defaultDoctorId, e);
+      next[e.problem] = emptyDraft(
+        e.problem,
+        labelFor(e.problem),
+        e,
+        defaultDoctorId
+      );
     }
     setDrafts(next);
-    setExpanded(problems[0] ?? null);
+    // Conditions start collapsed — expand only when the user taps the arrow
+    setExpanded(new Set());
     setTreatmentQuery({});
+    setTreatmentPickerOpen({});
     setLocalError(null);
-    // Re-hydrate only when opening / changing tooth — not on every entries tick while editing
+    setCloneTargetIds([]);
+    setClonePickerOpen(false);
+    // Re-hydrate only when opening / changing tooth
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, toothId, defaultDoctorId]);
 
-  const toggleProblem = (value: string) => {
-    setSelectedProblems((prev) => {
-      if (prev.includes(value)) {
-        setDrafts((d) => {
-          const n = { ...d };
-          delete n[value];
-          return n;
-        });
-        return prev.filter((p) => p !== value);
-      }
-          setDrafts((d) => ({
-            ...d,
-            [value]:
-              d[value] ??
-              emptyDraft(
-                value,
-                defaultDoctorId,
-                entries.find(
-                  (e) => e.toothId === toothId && e.problem === value
-                )
-              ),
-          }));
-      setExpanded(value);
-      return [...prev, value];
+  const otherFdiTeeth = useMemo(
+    () =>
+      toothId
+        ? ALL_FDI_IDS.filter((id) => id !== String(toothId).trim())
+        : [],
+    [toothId]
+  );
+
+  const cloneTargetsSorted = useMemo(
+    () =>
+      [...cloneTargetIds].sort(
+        (a, b) => (Number.parseInt(a, 10) || 0) - (Number.parseInt(b, 10) || 0)
+      ),
+    [cloneTargetIds]
+  );
+
+  const selectedLabels = selectedProblems.map(
+    (p) => drafts[p]?.label || labelFor(p)
+  );
+
+  const addCondition = (opt: DiagnosisOption) => {
+    if (selectedProblems.includes(opt.value)) return;
+    setSelectedProblems((prev) => [...prev, opt.value]);
+    setDrafts((d) => ({
+      ...d,
+      [opt.value]:
+        d[opt.value] ??
+        emptyDraft(
+          opt.value,
+          opt.label,
+          entries.find(
+            (e) => e.toothId === toothId && e.problem === opt.value
+          ),
+          defaultDoctorId
+        ),
+    }));
+    // Stay collapsed until user taps the arrow
+  };
+
+  const removeCondition = (problem: string) => {
+    const draft = drafts[problem];
+    if (draft?.existingId && doneIds.has(draft.existingId)) return;
+    setSelectedProblems((prev) => prev.filter((p) => p !== problem));
+    setDrafts((d) => {
+      const n = { ...d };
+      delete n[problem];
+      return n;
+    });
+    setExpanded((prev) => {
+      const n = new Set(prev);
+      n.delete(problem);
+      return n;
     });
   };
 
@@ -178,12 +253,18 @@ export function FindingsSheet({
     }));
   };
 
+  const isLocked = (problem: string) => {
+    const id = drafts[problem]?.existingId;
+    return !!(id && doneIds.has(id));
+  };
+
   const addTreatment = (
     problem: string,
     name: string,
     catalogDefaultFee?: number,
     catalogMaxDiscountPercent?: number | null
   ) => {
+    if (isLocked(problem)) return;
     const draft = drafts[problem];
     if (!draft) return;
     if (
@@ -211,11 +292,10 @@ export function FindingsSheet({
         ? draft.providers.map((p, i) =>
             i === 0 ? { ...p, fee: feeSum } : p
           )
-        : defaultDoctorId
-          ? [{ doctorId: defaultDoctorId, role: "Primary", fee: feeSum }]
-          : [];
+        : [];
     updateDraft(problem, { treatments, fee: feeSum, providers });
     setTreatmentQuery((q) => ({ ...q, [problem]: "" }));
+    setTreatmentPickerOpen((o) => ({ ...o, [problem]: true }));
   };
 
   const updateTreatment = (
@@ -223,6 +303,7 @@ export function FindingsSheet({
     rowId: string,
     patch: Partial<SuggestedTreatmentPlanRow>
   ) => {
+    if (isLocked(problem)) return;
     const draft = drafts[problem];
     if (!draft) return;
     const treatments = draft.treatments.map((t) => {
@@ -253,6 +334,7 @@ export function FindingsSheet({
   };
 
   const removeTreatment = (problem: string, rowId: string) => {
+    if (isLocked(problem)) return;
     const draft = drafts[problem];
     if (!draft) return;
     const treatments = draft.treatments.filter((t) => t.id !== rowId);
@@ -263,17 +345,33 @@ export function FindingsSheet({
     updateDraft(problem, { treatments, fee: feeSum, providers });
   };
 
+  const canSaveFindings = useMemo(() => {
+    if (selectedProblems.length === 0) return false;
+    return selectedProblems.every((problem) => {
+      const list = drafts[problem]?.treatments ?? [];
+      return list.some((t) => String(t.treatmentName ?? "").trim().length > 0);
+    });
+  }, [selectedProblems, drafts]);
+
   const handleSave = async () => {
     if (!toothId) return;
     if (selectedProblems.length === 0) {
-      setLocalError("Select at least one condition, or clear the tooth.");
+      setLocalError("Select at least one condition, or delete the tooth plan.");
+      return;
+    }
+    if (!canSaveFindings) {
+      setLocalError(
+        "Add a suggested treatment for each selected diagnosis before saving."
+      );
       return;
     }
     setLocalError(null);
 
     const rest = entries.filter((e) => e.toothId !== toothId);
     const built: DiagnosisDetailsEntry[] = selectedProblems.map((problem) => {
-      const d = drafts[problem] ?? emptyDraft(problem, defaultDoctorId);
+      const d =
+        drafts[problem] ??
+        emptyDraft(problem, labelFor(problem), undefined, defaultDoctorId);
       const suggestedTreatments = d.treatments
         .map((t) => t.treatmentName.trim())
         .filter(Boolean);
@@ -293,6 +391,13 @@ export function FindingsSheet({
         (s, n) => s + n,
         0
       );
+      const providers = (d.providers ?? [])
+        .filter((p) => String(p.doctorId ?? "").trim())
+        .map((p) => ({
+          doctorId: p.doctorId,
+          role: p.role?.trim() || "Primary",
+          fee: normalizeFee(Number(p.fee) || 0),
+        }));
       return {
         id: d.existingId ?? randomId(),
         toothId,
@@ -313,33 +418,61 @@ export function FindingsSheet({
         nextAppointmentTime: d.nextAppointmentTime.trim() || undefined,
         nextAppointmentReason: d.nextAppointmentReason.trim() || undefined,
         treatmentStatus: d.status,
-        treatmentProviders:
-          d.providers.length > 0
-            ? d.providers
-            : defaultDoctorId
-              ? [
-                  {
-                    doctorId: defaultDoctorId,
-                    role: "Primary",
-                    fee: feeSum || 0,
-                  },
-                ]
-              : undefined,
+        treatmentProviders: providers.length > 0 ? providers : undefined,
       };
     });
 
-    await onSave([...rest, ...built]);
+    await onSave([...rest, ...built], {
+      cloneToToothIds:
+        cloneTargetIds.length > 0 ? cloneTargetIds : undefined,
+    });
+  };
+
+  const confirmClearTooth = () => {
+    if (!toothId || !onClearTooth) return;
+    Alert.alert(
+      "Delete tooth plan",
+      `Remove all findings and linked plan rows for tooth ${toothId}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void onClearTooth(toothId),
+        },
+      ]
+    );
+  };
+
+  const toggleCloneTarget = (id: string) => {
+    setCloneTargetIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   };
 
   const suggestionsFor = (problem: string) => {
     const q = (treatmentQuery[problem] ?? "").trim().toLowerCase();
-    if (!q) return catalog.slice(0, 8);
+    if (!q) return catalog.slice(0, 50);
     return catalog
       .filter((c) => c.name.toLowerCase().includes(q))
-      .slice(0, 8);
+      .slice(0, 50);
   };
 
+  const isTreatmentSelected = (problem: string, name: string) =>
+    (drafts[problem]?.treatments ?? []).some(
+      (t) => t.treatmentName.trim().toLowerCase() === name.trim().toLowerCase()
+    );
+
+  const expandAll = () => setExpanded(new Set(selectedProblems));
+  const collapseAll = () => setExpanded(new Set());
+
   if (!toothId) return null;
+
+  const treatmentFeeTotal = (problem: string) =>
+    (drafts[problem]?.treatments ?? []).reduce(
+      (s, t) => s + (Number(t.fee) || 0),
+      0
+    );
 
   return (
     <Modal
@@ -349,189 +482,321 @@ export function FindingsSheet({
       onRequestClose={onClose}
     >
       <View className="flex-1 bg-neutral-50">
-        <View className="flex-row items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
-          <Text className="text-lg font-semibold text-neutral-900">
-            Tooth {toothId}
-          </Text>
-          <View className="flex-row items-center gap-3">
-            {onClearTooth ? (
+        {/* Header */}
+        <View className="gap-3 border-b border-neutral-200 bg-white px-4 pb-3 pt-3">
+          <View className="flex-row items-center justify-between gap-3">
+            <Text className="min-w-0 flex-1 text-lg font-semibold text-neutral-900">
+              Treatment Plan
+            </Text>
+            <View className="flex-row items-center gap-3">
               <Pressable
-                onPress={() => void onClearTooth(toothId)}
-                hitSlop={8}
+                onPress={() => setClonePickerOpen(true)}
+                className="rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5"
               >
-                <Text className="text-sm text-red-500">Clear tooth</Text>
+                <Text className="text-xs text-neutral-700">
+                  Clone to teeth…
+                </Text>
               </Pressable>
-            ) : null}
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Text className="text-sm text-neutral-500">Cancel</Text>
-            </Pressable>
+              <ToothBadge toothNumber={toothId} size={40} />
+              {cloneTargetsSorted.map((tid) => (
+                <ToothBadge key={tid} toothNumber={tid} size={36} />
+              ))}
+              <Pressable onPress={onClose} hitSlop={10} className="px-1 py-1">
+                <Text className="text-xl leading-none text-neutral-400">×</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Add diagnosis — dropdown autocomplete */}
+          <View className="flex-row items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1.5">
+            <Text className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+              Add Diagnosis
+            </Text>
+            <DiagnosisTypesAutocomplete
+              selectedValues={selectedProblems}
+              selectedLabels={selectedLabels}
+              onSelect={addCondition}
+              placeholder="Search or type…"
+            />
           </View>
         </View>
 
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 12 }}
         >
-          <View className="gap-2">
-            <Text className="text-sm font-medium text-neutral-700">
-              Conditions
-            </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {diagnosisOptions.map((opt) => {
-                const on = selectedProblems.includes(opt.value);
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => toggleProblem(opt.value)}
-                    style={{ flexShrink: 0 }}
-                    className={`rounded-full px-3 py-2 ${
-                      on ? "bg-brand" : "bg-white border border-neutral-300"
-                    }`}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      className={`text-sm ${
-                        on ? "text-brand-foreground font-medium" : "text-neutral-700"
-                      }`}
-                    >
-                      {opt.label || getProblemLabel(opt.value)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+          {selectedProblems.length > 0 ? (
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                Conditions ({selectedProblems.length})
+              </Text>
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={expandAll}
+                  className="rounded-md border border-neutral-300 bg-white px-2 py-1"
+                >
+                  <Text className="text-xs text-neutral-600">Expand all</Text>
+                </Pressable>
+                <Pressable
+                  onPress={collapseAll}
+                  className="rounded-md border border-neutral-300 bg-white px-2 py-1"
+                >
+                  <Text className="text-xs text-neutral-600">Collapse all</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          ) : null}
 
           {selectedProblems.map((problem) => {
             const d = drafts[problem];
             if (!d) return null;
-            const isOpen = expanded === problem;
+            const isOpen = expanded.has(problem);
+            const locked = isLocked(problem);
+            const feeSum = treatmentFeeTotal(problem);
+            const providerSum = (d.providers ?? []).reduce(
+              (s, p) => s + (Number(p.fee) || 0),
+              0
+            );
+            const totalDisplay = feeSum || providerSum || d.fee || 0;
+
             return (
               <View
                 key={problem}
-                className="overflow-hidden rounded-2xl border border-neutral-200 bg-white"
+                className="overflow-hidden rounded-xl border border-brand/20 bg-brand/5"
               >
                 <Pressable
-                  onPress={() => setExpanded(isOpen ? null : problem)}
-                  className="flex-row items-center justify-between px-4 py-3"
+                  onPress={() =>
+                    setExpanded((prev) => {
+                      const n = new Set(prev);
+                      if (n.has(problem)) n.delete(problem);
+                      else n.add(problem);
+                      return n;
+                    })
+                  }
+                  className="flex-row items-center gap-2 px-3 py-3"
                 >
-                  <Text className="text-base font-semibold text-neutral-900">
-                    {getProblemLabel(problem)}
+                  <Text
+                    className="flex-1 text-base font-semibold text-neutral-900"
+                    numberOfLines={1}
+                  >
+                    {d.label || labelFor(problem)}
                   </Text>
-                  <Text className="text-neutral-400">{isOpen ? "▲" : "▼"}</Text>
+                  <View className="rounded-full bg-sky-100 px-2 py-0.5">
+                    <Text className="text-[11px] font-medium text-sky-800">
+                      {statusBadge(d.status)}
+                    </Text>
+                  </View>
+                  <View className="rounded-full bg-white px-2 py-0.5">
+                    <Text className="text-[11px] text-neutral-700">
+                      Total: ₹ {totalDisplay}
+                    </Text>
+                  </View>
+                  {!locked ? (
+                    <Pressable
+                      onPress={() => removeCondition(problem)}
+                      hitSlop={6}
+                      className="px-1"
+                    >
+                      <Text className="text-sm text-red-500">✕</Text>
+                    </Pressable>
+                  ) : null}
+                  <Text className="text-neutral-400">
+                    {isOpen ? "▲" : "▼"}
+                  </Text>
                 </Pressable>
 
                 {isOpen ? (
-                  <View className="gap-3 border-t border-neutral-100 px-4 pb-4 pt-3">
-                    <TextField
-                      label="Clinical note"
-                      value={d.note}
-                      onChangeText={(v) => updateDraft(problem, { note: v })}
-                      placeholder="e.g. occlusal decay"
-                      multiline
-                      style={{ minHeight: 64, textAlignVertical: "top" }}
-                    />
+                  <View className="gap-3 border-t border-brand/10 bg-white px-3 pb-4 pt-3">
+                    {locked ? (
+                      <Text className="text-xs text-neutral-400">
+                        Linked treatment is done — this condition is read-only.
+                      </Text>
+                    ) : null}
 
                     <View className="gap-1.5">
-                      <Text className="text-sm font-medium text-neutral-700">
-                        Suggested treatments
+                      <Text className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                        Suggested treatment
                       </Text>
-                      <TextField
-                        value={treatmentQuery[problem] ?? ""}
-                        onChangeText={(v) =>
-                          setTreatmentQuery((q) => ({ ...q, [problem]: v }))
-                        }
-                        placeholder="Search catalog or type custom…"
-                        onSubmitEditing={() => {
-                          const name = (treatmentQuery[problem] ?? "").trim();
-                          if (!name) return;
-                          const hit = catalogByName(catalog, name);
-                          if (hit) {
-                            addTreatment(
-                              problem,
-                              hit.name,
-                              hit.defaultFee,
-                              hit.maxDiscountPercent
-                            );
-                          } else {
-                            addTreatment(problem, name);
-                          }
-                        }}
-                      />
-                      {(treatmentQuery[problem] ?? "").trim() ? (
-                        <View className="overflow-hidden rounded-xl border border-neutral-200">
-                          {suggestionsFor(problem).map((item) => (
-                            <Pressable
-                              key={item.id}
-                              onPress={() =>
+                      {!locked ? (
+                        <>
+                          <TextField
+                            value={treatmentQuery[problem] ?? ""}
+                            onChangeText={(v) => {
+                              setTreatmentQuery((q) => ({
+                                ...q,
+                                [problem]: v,
+                              }));
+                              setTreatmentPickerOpen((o) => ({
+                                ...o,
+                                [problem]: true,
+                              }));
+                            }}
+                            onFocus={() =>
+                              setTreatmentPickerOpen((o) => ({
+                                ...o,
+                                [problem]: true,
+                              }))
+                            }
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setTreatmentPickerOpen((o) => ({
+                                  ...o,
+                                  [problem]: false,
+                                }));
+                              }, 180);
+                            }}
+                            placeholder="Search or type a treatment…"
+                            onSubmitEditing={() => {
+                              const name = (
+                                treatmentQuery[problem] ?? ""
+                              ).trim();
+                              if (!name) return;
+                              const hit = catalogByName(catalog, name);
+                              if (hit) {
                                 addTreatment(
                                   problem,
-                                  item.name,
-                                  item.defaultFee,
-                                  item.maxDiscountPercent
-                                )
+                                  hit.name,
+                                  hit.defaultFee,
+                                  hit.maxDiscountPercent
+                                );
+                              } else {
+                                addTreatment(problem, name);
                               }
-                              className="border-b border-neutral-100 px-3 py-2.5 active:bg-neutral-50"
-                            >
-                              <Text className="text-sm text-neutral-900">
-                                {item.name}
-                                {item.defaultFee != null
-                                  ? ` · ₹${item.defaultFee}`
-                                  : ""}
-                              </Text>
-                            </Pressable>
-                          ))}
-                          {!catalogByName(
-                            catalog,
-                            treatmentQuery[problem] ?? ""
-                          ) ? (
-                            <Pressable
-                              onPress={() =>
-                                addTreatment(
-                                  problem,
-                                  (treatmentQuery[problem] ?? "").trim()
-                                )
-                              }
-                              className="px-3 py-2.5 active:bg-neutral-50"
-                            >
-                              <Text className="text-sm text-brand">
-                                Use &quot;{(treatmentQuery[problem] ?? "").trim()}&quot;
-                                (custom)
-                              </Text>
-                            </Pressable>
+                            }}
+                          />
+                          {treatmentPickerOpen[problem] ? (
+                            <View className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                              {catalog.length === 0 ? (
+                                <View className="px-3 py-3">
+                                  <Text className="text-sm text-neutral-500">
+                                    Loading treatments…
+                                  </Text>
+                                </View>
+                              ) : suggestionsFor(problem).length === 0 &&
+                                !(treatmentQuery[problem] ?? "").trim() ? (
+                                <View className="px-3 py-3">
+                                  <Text className="text-sm text-neutral-500">
+                                    No treatments available.
+                                  </Text>
+                                </View>
+                              ) : (
+                                <ScrollView
+                                  nestedScrollEnabled
+                                  keyboardShouldPersistTaps="handled"
+                                  style={{ maxHeight: 220 }}
+                                >
+                                  {suggestionsFor(problem).map((item) => {
+                                    const selected = isTreatmentSelected(
+                                      problem,
+                                      item.name
+                                    );
+                                    return (
+                                      <Pressable
+                                        key={item.id}
+                                        onPress={() => {
+                                          if (selected) return;
+                                          addTreatment(
+                                            problem,
+                                            item.name,
+                                            item.defaultFee,
+                                            item.maxDiscountPercent
+                                          );
+                                        }}
+                                        style={
+                                          selected
+                                            ? {
+                                                backgroundColor:
+                                                  "rgba(253, 0, 106, 0.14)",
+                                              }
+                                            : undefined
+                                        }
+                                        className={`flex-row items-center justify-between border-b border-neutral-100 px-3 py-2.5 ${
+                                          selected ? "" : "active:bg-neutral-50"
+                                        }`}
+                                      >
+                                        <Text
+                                          className={`flex-1 text-sm ${
+                                            selected
+                                              ? "font-semibold text-brand"
+                                              : "text-neutral-900"
+                                          }`}
+                                        >
+                                          {item.name}
+                                          {item.defaultFee != null
+                                            ? ` · ₹${item.defaultFee}`
+                                            : ""}
+                                        </Text>
+                                        {selected ? (
+                                          <Text className="ml-2 text-sm font-bold text-brand">
+                                            ✓
+                                          </Text>
+                                        ) : null}
+                                      </Pressable>
+                                    );
+                                  })}
+                                  {(treatmentQuery[problem] ?? "").trim() &&
+                                  !catalogByName(
+                                    catalog,
+                                    treatmentQuery[problem] ?? ""
+                                  ) ? (
+                                    <Pressable
+                                      onPress={() =>
+                                        addTreatment(
+                                          problem,
+                                          (treatmentQuery[problem] ?? "").trim()
+                                        )
+                                      }
+                                      className="px-3 py-2.5 active:bg-neutral-50"
+                                    >
+                                      <Text className="text-sm text-brand">
+                                        Use &quot;
+                                        {(treatmentQuery[problem] ?? "").trim()}
+                                        &quot; (custom)
+                                      </Text>
+                                    </Pressable>
+                                  ) : null}
+                                </ScrollView>
+                              )}
+                            </View>
                           ) : null}
-                        </View>
+                        </>
                       ) : null}
 
                       {d.treatments.map((row) => (
                         <View
                           key={row.id}
-                          className="gap-2 rounded-xl border border-neutral-100 bg-neutral-50 p-3"
+                          className="gap-2 rounded-xl border border-brand/25 p-3"
+                          style={{ backgroundColor: "rgba(253, 0, 106, 0.08)" }}
                         >
                           <View className="flex-row items-center justify-between">
-                            <Text className="flex-1 text-sm font-medium text-neutral-900">
+                            <Text className="flex-1 text-sm font-semibold text-brand">
                               {row.treatmentName}
                             </Text>
-                            <Pressable
-                              onPress={() => removeTreatment(problem, row.id)}
-                            >
-                              <Text className="text-sm text-red-500">Remove</Text>
-                            </Pressable>
+                            {!locked ? (
+                              <Pressable
+                                onPress={() =>
+                                  removeTreatment(problem, row.id)
+                                }
+                              >
+                                <Text className="text-sm text-red-500">✕</Text>
+                              </Pressable>
+                            ) : null}
                           </View>
                           <View className="flex-row gap-2">
-                            <TextField
+                            <DateField
                               containerClassName="flex-1"
                               label="Date"
-                              value={row.date}
-                              onChangeText={(v) =>
+                              value={row.date || todayYmd()}
+                              disabled={locked}
+                              onChange={(v) =>
                                 updateTreatment(problem, row.id, { date: v })
                               }
-                              placeholder="YYYY-MM-DD"
                             />
                             <TextField
                               containerClassName="flex-1"
-                              label="Fee (₹)"
+                              label="Fees"
                               value={row.fee}
+                              editable={!locked}
                               onChangeText={(v) =>
                                 updateTreatment(problem, row.id, {
                                   fee: v.replace(/[^0-9.]/g, ""),
@@ -544,6 +809,7 @@ export function FindingsSheet({
                               containerClassName="w-20"
                               label="Disc %"
                               value={row.discountPct}
+                              editable={!locked}
                               onChangeText={(v) =>
                                 updateTreatment(problem, row.id, {
                                   discountPct: v.replace(/[^0-9.]/g, ""),
@@ -557,58 +823,36 @@ export function FindingsSheet({
                       ))}
                     </View>
 
-                    <View className="flex-row gap-2">
-                      <TextField
-                        containerClassName="flex-1"
-                        label="Next date"
-                        value={d.nextAppointmentDate}
-                        onChangeText={(v) =>
-                          updateDraft(problem, { nextAppointmentDate: v })
-                        }
-                        placeholder="YYYY-MM-DD"
-                      />
-                      <TextField
-                        containerClassName="w-28"
-                        label="Time"
-                        value={d.nextAppointmentTime}
-                        onChangeText={(v) =>
-                          updateDraft(problem, { nextAppointmentTime: v })
-                        }
-                        placeholder="HH:mm"
-                      />
-                    </View>
-                    <TextField
-                      label="Next visit reason"
-                      value={d.nextAppointmentReason}
-                      onChangeText={(v) =>
-                        updateDraft(problem, { nextAppointmentReason: v })
+                    <TimeField
+                      label="Planned time (optional)"
+                      value={d.nextAppointmentTime}
+                      disabled={locked}
+                      onChange={(v) =>
+                        updateDraft(problem, { nextAppointmentTime: v })
                       }
                       placeholder="Optional"
                     />
 
-                    <View className="gap-1.5">
-                      <Text className="text-sm font-medium text-neutral-700">
-                        Status
-                      </Text>
-                      <Segmented
-                        options={STATUS}
-                        value={d.status}
-                        onChange={(s) =>
-                          updateDraft(problem, { status: s as FindingStatus })
-                        }
-                      />
-                    </View>
-
                     <TextField
-                      label="Aggregate fee (₹)"
-                      value={d.fee ? String(d.fee) : ""}
-                      onChangeText={(v) =>
-                        updateDraft(problem, {
-                          fee: Number(v.replace(/[^0-9.]/g, "")) || 0,
-                        })
+                      label="Clinical note"
+                      value={d.note}
+                      editable={!locked}
+                      onChangeText={(v) => updateDraft(problem, { note: v })}
+                      placeholder="Clinical note…"
+                      multiline
+                      style={{ minHeight: 64, textAlignVertical: "top" }}
+                    />
+
+                    <ProviderFeeSplitEditor
+                      facilityId={facilityId}
+                      defaultDoctorId={defaultDoctorId}
+                      disabled={locked}
+                      additionalFeeTotal={0}
+                      showTotal={false}
+                      value={d.providers}
+                      onChange={(next) =>
+                        updateDraft(problem, { providers: next })
                       }
-                      keyboardType="decimal-pad"
-                      placeholder="Sum of treatments"
                     />
                   </View>
                 ) : null}
@@ -619,14 +863,115 @@ export function FindingsSheet({
           {localError ? (
             <Text className="text-sm text-red-500">{localError}</Text>
           ) : null}
-
-          <Button
-            label="Save findings"
-            onPress={() => void handleSave()}
-            loading={saving}
-          />
+          {!canSaveFindings && selectedProblems.length > 0 ? (
+            <Text className="text-xs text-amber-700">
+              Add a suggested treatment to each condition before saving.
+            </Text>
+          ) : null}
         </ScrollView>
+
+        {/* Footer */}
+        <View className="gap-3 border-t border-neutral-200 bg-white px-4 py-3">
+          <Text className="text-[11px] leading-snug text-neutral-500">
+            Use Add diagnosis in the header to add conditions. Expand a row to
+            plan treatment, notes, and provider split (saved as planned). Pick
+            extra teeth under Clone to teeth — they appear above and copy when
+            you Save findings.
+          </Text>
+          <View className="flex-row flex-wrap items-center justify-end gap-2">
+            {onClearTooth && selectedProblems.length > 0 ? (
+              <Pressable
+                onPress={confirmClearTooth}
+                className="rounded-lg border border-red-200 px-3 py-2"
+              >
+                <Text className="text-sm font-medium text-red-600">
+                  Delete tooth plan
+                </Text>
+              </Pressable>
+            ) : null}
+            <Button
+              label="Cancel"
+              variant="outline"
+              size="md"
+              onPress={onClose}
+            />
+            <Button
+              label="Save"
+              size="md"
+              loading={saving}
+              disabled={!canSaveFindings}
+              onPress={() => void handleSave()}
+            />
+          </View>
+        </View>
       </View>
+
+      {/* Clone tooth picker */}
+      <Modal
+        visible={clonePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setClonePickerOpen(false)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-center bg-black/40 px-6"
+          onPress={() => setClonePickerOpen(false)}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            className="max-h-[70%] w-full overflow-hidden rounded-2xl bg-white"
+          >
+            <View className="border-b border-neutral-100 px-4 py-3">
+              <Text className="text-base font-semibold text-neutral-900">
+                Select target teeth
+              </Text>
+              <Text className="mt-1 text-xs text-neutral-500">
+                Findings copy to these teeth when you Save. Source tooth{" "}
+                {toothId} is excluded.
+              </Text>
+            </View>
+            <ScrollView
+              contentContainerStyle={{ padding: 12, gap: 4 }}
+              style={{ maxHeight: 360 }}
+            >
+              {otherFdiTeeth.map((tid) => {
+                const on = cloneTargetIds.includes(tid);
+                return (
+                  <Pressable
+                    key={tid}
+                    onPress={() => toggleCloneTarget(tid)}
+                    className="flex-row items-center gap-3 rounded-lg px-2 py-2.5 active:bg-neutral-50"
+                  >
+                    <View
+                      className={`h-5 w-5 items-center justify-center rounded border ${
+                        on
+                          ? "border-brand bg-brand"
+                          : "border-neutral-300 bg-white"
+                      }`}
+                    >
+                      {on ? (
+                        <Text className="text-[10px] font-bold text-white">
+                          ✓
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text className="text-sm text-neutral-900">
+                      Tooth {tid}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View className="flex-row justify-end gap-2 border-t border-neutral-100 px-4 py-3">
+              <Button
+                label="Done"
+                size="md"
+                onPress={() => setClonePickerOpen(false)}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Modal>
   );
 }
