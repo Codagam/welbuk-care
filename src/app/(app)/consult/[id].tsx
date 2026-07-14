@@ -12,18 +12,15 @@ import { useLocalSearchParams } from "expo-router";
 import { Screen, TopBar } from "@/ui";
 import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
-import { PatientHeaderCard } from "@/features/consult/components/PatientHeaderCard";
 import { SectionNavigator } from "@/features/consult/components/SectionNavigator";
 import {
   CONSULT_SECTION_IDS,
   type SectionNavItem,
 } from "@/features/consult/sectionIds";
 import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHeader";
-import { VitalsSection } from "@/features/consult/sections/VitalsSection";
+import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
 import { NotesSection } from "@/features/consult/sections/NotesSection";
 import { PrescriptionsSection } from "@/features/consult/sections/PrescriptionsSection";
-import { HistorySection } from "@/features/consult/sections/HistorySection";
-import { RecordingSection } from "@/features/consult/sections/RecordingSection";
 import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
 import { EyeSection } from "@/features/eye/sections/EyeSection";
@@ -44,7 +41,7 @@ function isEyeType(consultationType?: string | null): boolean {
   );
 }
 
-/** Practice-aligned nav rail (not Chart/Findings/Plan chips). */
+/** Practice-aligned nav rail — audio lives inside Patient details (Live Conversation). */
 function buildNavItems(consultationType?: string | null): SectionNavItem[] {
   const items: SectionNavItem[] = [
     {
@@ -65,14 +62,13 @@ function buildNavItems(consultationType?: string | null): SectionNavItem[] {
   }
   items.push(
     { id: CONSULT_SECTION_IDS.clinical, label: "Clinical notes" },
-    { id: CONSULT_SECTION_IDS.recordings, label: "Audio" },
     { id: CONSULT_SECTION_IDS.plan, label: "Plan of care" }
   );
   return items;
 }
 
 export default function ConsultScreen() {
-  const { id, patientId, appointmentId } = useLocalSearchParams<{
+  const { id, patientId: patientIdParam, appointmentId } = useLocalSearchParams<{
     id: string;
     patientId?: string;
     appointmentId?: string;
@@ -81,13 +77,22 @@ export default function ConsultScreen() {
   const user = useAuthUser();
   const {
     header,
+    patient,
     isLoading: headerLoading,
     isError: headerError,
     error: headerErr,
+    consultation,
+    appointment,
   } = useConsultPatientHeader(id);
   const headerName = header?.name || "Consultation";
   const dental = isDentalType(facility?.consultationType);
   const eye = isEyeType(facility?.consultationType);
+
+  const resolvedPatientId =
+    patientIdParam ||
+    patient?.id ||
+    consultation?.patientId ||
+    undefined;
 
   const navItems = useMemo(
     () => buildNavItems(facility?.consultationType),
@@ -146,18 +151,17 @@ export default function ConsultScreen() {
       <ConsultSectionCard
         id={CONSULT_SECTION_IDS.consultation}
         title="Patient details"
-        subtitle="Demographics, vitals, and history"
+        subtitle="Identity, vitals, intake, records, conversation, and reports"
         onLayoutY={onSectionLayout}
       >
-        <View className="gap-4">
-          <PatientHeaderCard
-            header={header}
-            loading={headerLoading}
-            error={headerError ? headerErr : null}
-          />
-          <VitalsSection consultationId={id} />
-          <HistorySection consultationId={id} patientId={patientId} />
-        </View>
+        <PatientDetailsSection
+          consultationId={id}
+          patientId={resolvedPatientId}
+          header={header}
+          headerLoading={headerLoading}
+          headerError={headerError ? headerErr : null}
+          appointment={appointment}
+        />
       </ConsultSectionCard>
 
       {dental ? (
@@ -192,19 +196,6 @@ export default function ConsultScreen() {
       </ConsultSectionCard>
 
       <ConsultSectionCard
-        id={CONSULT_SECTION_IDS.recordings}
-        title="Audio"
-        subtitle="Consult recordings"
-        onLayoutY={onSectionLayout}
-      >
-        <RecordingSection
-          consultationId={id}
-          patientId={patientId}
-          appointmentId={appointmentId}
-        />
-      </ConsultSectionCard>
-
-      <ConsultSectionCard
         id={CONSULT_SECTION_IDS.plan}
         title="Plan of care"
         subtitle="Prescriptions and complete visit"
@@ -213,7 +204,7 @@ export default function ConsultScreen() {
         <PrescriptionsSection
           consultationId={id}
           appointmentId={appointmentId}
-          patientId={patientId}
+          patientId={resolvedPatientId}
         />
       </ConsultSectionCard>
     </View>

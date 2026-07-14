@@ -1,0 +1,543 @@
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
+
+import { Button } from "@/ui";
+import { getAuthToken } from "@/lib/api/client";
+import { describeError } from "@/lib/api/errors";
+import { fileProxyUrl } from "@/lib/api/endpoints/recording";
+import { useFacilityId } from "@/lib/auth/store";
+import { useDeleteLabReport, useSummary } from "../hooks";
+import {
+  isImageUrl,
+  isReportAttachmentPdf,
+  labReportFileUrls,
+  labReportForFileUrl,
+  labReportHasViewableFiles,
+  labReportSourceLabel,
+} from "../labReports";
+import type { DoctorNote, LabReportItem } from "../types";
+import { ConsultUploadDialog } from "./ConsultUploadDialog";
+import { SectionChrome } from "./SectionChrome";
+
+function AccordionBlock({
+  title,
+  icon,
+  badge,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  badge?: number;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <View className="overflow-hidden rounded-lg border border-neutral-200">
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        className="flex-row items-center gap-2 px-3 py-3 active:bg-neutral-50"
+      >
+        <Ionicons name={icon} size={16} color="#374151" />
+        <Text className="flex-1 text-sm font-semibold text-neutral-900">
+          {title}
+        </Text>
+        {badge != null && badge > 0 ? (
+          <View className="rounded-full bg-neutral-100 px-1.5 py-0.5">
+            <Text className="text-xs text-neutral-700">{badge}</Text>
+          </View>
+        ) : null}
+        <Ionicons
+          name={open ? "chevron-up" : "chevron-down"}
+          size={16}
+          color="#9ca3af"
+        />
+      </Pressable>
+      {open ? <View className="px-3 pb-3">{children}</View> : null}
+    </View>
+  );
+}
+
+export function ReportsPanel({
+  consultationId,
+  patientId,
+  patientName,
+  labReports,
+  doctorNotes,
+  onRefresh,
+}: {
+  consultationId: string;
+  patientId?: string;
+  patientName?: string;
+  labReports: LabReportItem[];
+  doctorNotes: DoctorNote[];
+  onRefresh?: () => void;
+}) {
+  const facilityId = useFacilityId();
+  const summaryQ = useSummary(consultationId);
+  const deleteLab = useDeleteLabReport(patientId, consultationId);
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewUrls, setViewUrls] = useState<string[]>([]);
+  const [viewNote, setViewNote] = useState<string | null>(null);
+  const [authHeader, setAuthHeader] = useState<string | null>(null);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const attachedUrls = useMemo(() => {
+    const urls = summaryQ.data?.reportAttachmentUrls ?? [];
+    return Array.isArray(urls) ? urls.filter(Boolean) : [];
+  }, [summaryQ.data?.reportAttachmentUrls]);
+
+  const currentUrl = attachedUrls[previewIndex];
+  const currentLab = currentUrl
+    ? labReportForFileUrl(currentUrl, labReports)
+    : undefined;
+  const canDeleteCurrent = Boolean(currentLab?.canDelete);
+
+  const refreshLists = () => {
+    void summaryQ.refetch();
+    onRefresh?.();
+  };
+
+  const openProxy = async (url: string) => {
+    const token = await getAuthToken();
+    const proxy = fileProxyUrl(url);
+    if (isImageUrl(url)) {
+      setAuthHeader(token ? `Bearer ${token}` : null);
+      setViewUrls([url]);
+      setViewNote(null);
+      setViewOpen(true);
+      return;
+    }
+    // PDFs / other: open in system browser (proxy needs auth via cookie on web only).
+    // Prefer fetching blob isn't available; open proxy URL — Bearer not supported by Linking.
+    // Download via authenticated fetch then open local file would be ideal; for now open proxy
+    // and also try WebBrowser (token query not supported). Use WebBrowser with headers unavailable.
+    try {
+      if (!token) {
+        await Linking.openURL(proxy);
+        return;
+      }
+      const res = await fetch(proxy, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load file");
+      // Fall back to opening proxy (may 401 without cookie) — show note content instead if text.
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("image")) {
+        setAuthHeader(`Bearer ${token}`);
+        setViewUrls([url]);
+        setViewNote(null);
+        setViewOpen(true);
+        return;
+      }
+      await WebBrowser.openBrowserAsync(proxy);
+    } catch (e) {
+      setError(describeError(e));
+    }
+  };
+
+  const openLabReport = async (item: LabReportItem) => {
+    const payload = item.reportPayload;
+    const urls = labReportFileUrls(payload);
+    const note =
+      payload?.reportNote?.trim() ||
+      payload?.radiologyReport?.trim() ||
+      null;
+    if (urls.length === 0 && !note) return;
+    const token = await getAuthToken();
+    setAuthHeader(token ? `Bearer ${token}` : null);
+    setViewUrls(urls);
+    setViewNote(note);
+    setViewOpen(true);
+  };
+
+  const confirmDelete = (opts: {
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }) => {
+    Alert.alert(opts.title, opts.message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: opts.onConfirm },
+    ]);
+  };
+
+  const handleDeleteLab = (item: LabReportItem) => {
+    if (!item.canDelete) return;
+    const fileUrl =
+      item.reportPayload?.labReportAttachmentUrls?.[0] ??
+      item.reportPayload?.reportImageUrls?.[0] ??
+      item.result;
+    if (!fileUrl) return;
+    confirmDelete({
+      title: "Delete this uploaded report?",
+      message:
+        "Only the facility or patient who uploaded this report can delete it.",
+      onConfirm: async () => {
+        setError(null);
+        try {
+          await deleteLab.mutateAsync({
+            id: item.id,
+            fileUrl,
+            patientId,
+            consultationId,
+          });
+          refreshLists();
+        } catch (e) {
+          setError(describeError(e));
+        }
+      },
+    });
+  };
+
+  const handleDeleteVisitFile = () => {
+    if (!currentUrl || !canDeleteCurrent) return;
+    confirmDelete({
+      title: "Delete this visit file?",
+      message:
+        "Only your facility can remove files it uploaded. Lab referral reports cannot be deleted here.",
+      onConfirm: async () => {
+        setError(null);
+        try {
+          await deleteLab.mutateAsync({
+            id: currentLab?.id,
+            fileUrl: currentUrl,
+            patientId,
+            consultationId,
+          });
+          setPreviewOpen(false);
+          refreshLists();
+        } catch (e) {
+          setError(describeError(e));
+        }
+      },
+    });
+  };
+
+  return (
+    <View className="gap-3">
+      <SectionChrome title="Reports">
+        <View className="gap-2 rounded-lg border border-neutral-200 bg-white p-3">
+          <View className="flex-row items-center justify-between gap-2">
+            <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
+              <Ionicons name="folder-outline" size={16} color="#FD006A" />
+              <Text className="text-sm font-semibold text-neutral-900">
+                Documents
+              </Text>
+              {attachedUrls.length > 0 ? (
+                <Text className="text-xs font-medium text-brand">
+                  {attachedUrls.length} visit file
+                  {attachedUrls.length !== 1 ? "s" : ""}
+                </Text>
+              ) : (
+                <Text className="text-xs text-neutral-500">
+                  No visit files yet
+                </Text>
+              )}
+            </View>
+            <Button
+              label="Upload"
+              variant="outline"
+              size="md"
+              className="shrink-0"
+              onPress={() => setUploadOpen(true)}
+              disabled={!consultationId}
+              icon={<Ionicons name="add" size={16} color="#111827" />}
+            />
+          </View>
+
+          {attachedUrls.length > 0 ? (
+            <View className="flex-row flex-wrap gap-1.5">
+              {attachedUrls.slice(0, 5).map((url, index) => (
+                <Pressable
+                  key={`${url}-${index}`}
+                  onPress={() => {
+                    setPreviewIndex(index);
+                    setPreviewOpen(true);
+                  }}
+                  className="h-9 w-9 items-center justify-center overflow-hidden rounded-md border border-brand/30 bg-neutral-100"
+                >
+                  {isReportAttachmentPdf(url) ? (
+                    <Ionicons
+                      name="document-text-outline"
+                      size={16}
+                      color="#FD006A"
+                    />
+                  ) : (
+                    <Ionicons name="image-outline" size={16} color="#FD006A" />
+                  )}
+                </Pressable>
+              ))}
+              {attachedUrls.length > 5 ? (
+                <Pressable
+                  onPress={() => {
+                    setPreviewIndex(5);
+                    setPreviewOpen(true);
+                  }}
+                  className="h-9 w-9 items-center justify-center rounded-md border border-brand/30 bg-neutral-100"
+                >
+                  <Text className="text-xs font-medium text-brand">
+                    +{attachedUrls.length - 5}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      </SectionChrome>
+
+      <AccordionBlock
+        title="Lab Reports"
+        icon="document-text-outline"
+        badge={labReports.length}
+      >
+        {labReports.length === 0 ? (
+          <Text className="text-xs italic text-neutral-500">
+            No lab reports yet. Use Upload above and choose Lab report.
+          </Text>
+        ) : (
+          <View className="gap-2">
+            <Text className="mb-1 text-xs text-neutral-500">
+              Patient history from all facilities.
+            </Text>
+            {labReports.map((item, idx) => (
+              <View
+                key={item.id ?? idx}
+                className="rounded-lg border border-cyan-200 bg-white p-2"
+              >
+                <View className="mb-1 flex-row items-start justify-between gap-2">
+                  <View className="min-w-0 flex-1 gap-0.5">
+                    <Text className="text-xs text-neutral-500">
+                      {item.date}
+                    </Text>
+                    <Text className="text-[10px] text-neutral-500">
+                      {labReportSourceLabel(item.source)}
+                      {item.referralType ? ` · ${item.referralType}` : ""}
+                      {item.facilityLabel ? ` · ${item.facilityLabel}` : ""}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center gap-1">
+                    {labReportHasViewableFiles(item.reportPayload) ? (
+                      <Pressable
+                        onPress={() => void openLabReport(item)}
+                        className="h-7 flex-row items-center gap-1 rounded-md bg-brand px-2"
+                      >
+                        <Ionicons name="document-text" size={12} color="#fff" />
+                        <Text className="text-xs font-medium text-white">
+                          View
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {item.canDelete ? (
+                      <Pressable
+                        onPress={() => handleDeleteLab(item)}
+                        disabled={deleteLab.isPending}
+                        className="h-7 w-7 items-center justify-center rounded-md border border-neutral-200"
+                        accessibilityLabel="Delete report"
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={14}
+                          color="#dc2626"
+                        />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+                <Text className="text-xs font-medium text-neutral-900">
+                  {item.test}
+                </Text>
+                {item.result ? (
+                  <Text
+                    className="mt-0.5 text-xs text-neutral-500"
+                    numberOfLines={2}
+                  >
+                    {item.result}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        )}
+      </AccordionBlock>
+
+      <AccordionBlock
+        title="Previous Notes"
+        icon="calendar-outline"
+        badge={doctorNotes.length}
+      >
+        {doctorNotes.length === 0 ? (
+          <Text className="text-xs italic text-neutral-500">
+            No previous notes
+          </Text>
+        ) : (
+          <View className="gap-2">
+            {doctorNotes.map((item, idx) => (
+              <View
+                key={idx}
+                className="rounded-lg border border-amber-200 bg-white p-2"
+              >
+                <View className="mb-1 flex-row items-start justify-between">
+                  <Text className="text-xs text-neutral-500">{item.date}</Text>
+                  <Text className="text-xs font-medium text-neutral-700">
+                    {item.doctor}
+                  </Text>
+                </View>
+                <Text className="text-xs text-neutral-500">{item.note}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </AccordionBlock>
+
+      {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
+      {summaryQ.isLoading || deleteLab.isPending ? (
+        <ActivityIndicator color="#FD006A" />
+      ) : null}
+
+      <ConsultUploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        consultationId={consultationId}
+        patientId={patientId}
+        facilityId={facilityId}
+        existingAttachmentUrls={attachedUrls}
+        onSuccess={refreshLists}
+      />
+
+      {/* Visit file preview */}
+      <Modal
+        visible={previewOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPreviewOpen(false)}
+      >
+        <View className="flex-1 bg-white">
+          <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
+            <Text className="text-sm font-medium text-neutral-900">
+              {attachedUrls.length > 1
+                ? `Visit file ${previewIndex + 1} of ${attachedUrls.length}`
+                : "Visit file"}
+            </Text>
+            <Pressable onPress={() => setPreviewOpen(false)} hitSlop={12}>
+              <Ionicons name="close" size={24} color="#6b7280" />
+            </Pressable>
+          </View>
+          <View className="flex-row items-center justify-between px-4 py-2">
+            {attachedUrls.length > 1 ? (
+              <View className="flex-row gap-1">
+                <Pressable
+                  disabled={previewIndex <= 0}
+                  onPress={() => setPreviewIndex((i) => Math.max(0, i - 1))}
+                  className="h-8 w-8 items-center justify-center rounded-md border border-neutral-200"
+                >
+                  <Ionicons name="chevron-back" size={16} color="#374151" />
+                </Pressable>
+                <Pressable
+                  disabled={previewIndex >= attachedUrls.length - 1}
+                  onPress={() =>
+                    setPreviewIndex((i) =>
+                      Math.min(attachedUrls.length - 1, i + 1)
+                    )
+                  }
+                  className="h-8 w-8 items-center justify-center rounded-md border border-neutral-200"
+                >
+                  <Ionicons name="chevron-forward" size={16} color="#374151" />
+                </Pressable>
+              </View>
+            ) : (
+              <View />
+            )}
+            {canDeleteCurrent ? (
+              <Button
+                label="Delete"
+                variant="danger"
+                size="md"
+                onPress={handleDeleteVisitFile}
+                icon={<Ionicons name="trash-outline" size={14} color="#fff" />}
+              />
+            ) : null}
+          </View>
+          <View className="flex-1 items-center justify-center p-4">
+            {currentUrl ? (
+              <Button
+                label="Open file"
+                onPress={() => void openProxy(currentUrl)}
+              />
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Lab / content view */}
+      <Modal
+        visible={viewOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setViewOpen(false)}
+      >
+        <View className="flex-1 bg-white">
+          <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
+            <Text className="text-base font-semibold text-neutral-900">
+              {patientName ? `${patientName} — report` : "Lab report"}
+            </Text>
+            <Pressable onPress={() => setViewOpen(false)} hitSlop={12}>
+              <Ionicons name="close" size={24} color="#6b7280" />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+            {viewNote ? (
+              <Text className="text-sm text-neutral-700">{viewNote}</Text>
+            ) : null}
+            {viewUrls.map((url) => {
+              const proxy = fileProxyUrl(url);
+              if (isImageUrl(url)) {
+                return (
+                  <Image
+                    key={url}
+                    source={{
+                      uri: proxy,
+                      headers: authHeader
+                        ? { Authorization: authHeader }
+                        : undefined,
+                    }}
+                    style={{ width: "100%", height: 320, borderRadius: 8 }}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              return (
+                <Button
+                  key={url}
+                  label={
+                    isReportAttachmentPdf(url) ? "Open PDF" : "Open attachment"
+                  }
+                  variant="outline"
+                  onPress={() => void openProxy(url)}
+                />
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
+  );
+}

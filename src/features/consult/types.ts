@@ -48,11 +48,66 @@ export interface PrescriptionItemInput {
   drugId?: string;
 }
 
+export interface MedicalCondition {
+  name: string;
+  since?: string;
+}
+
+export interface MedicationRecord {
+  name: string;
+  dosage?: string;
+}
+
+export interface AllergyRecord {
+  name: string;
+  severity?: string;
+}
+
+export interface LabReportPayload {
+  labReportAttachmentUrls?: string[];
+  reportImageUrls?: string[];
+  reportNote?: string;
+  radiologyReport?: string;
+  results?: unknown;
+  reportGeneratedAt?: string;
+  patientName?: string;
+}
+
+export interface LabReportItem {
+  id?: string;
+  date?: string;
+  test?: string;
+  result?: string;
+  status?: string;
+  source?: "upload" | "referral" | "visit";
+  facilityLabel?: string;
+  referralType?: string;
+  canDelete?: boolean;
+  reportPayload?: LabReportPayload;
+}
+
+export interface DoctorNote {
+  date: string;
+  doctor: string;
+  note: string;
+}
+
 export interface PatientHistory {
-  medicalHistory?: unknown;
-  medications?: unknown[];
-  allergies?: unknown[];
-  labReports?: unknown[];
+  patient?: {
+    height?: string | null;
+    weight?: string | null;
+    bloodPressure?: string | null;
+    spO2?: string | null;
+    temperature?: string | null;
+    bloodSugar?: string | null;
+    [key: string]: unknown;
+  } | null;
+  medicalHistory?: MedicalCondition[] | unknown;
+  medications?: MedicationRecord[] | unknown[];
+  allergies?: AllergyRecord[] | unknown[];
+  labReports?: LabReportItem[];
+  doctorNotes?: DoctorNote[];
+  /** Legacy field some clients used; prefer doctorNotes */
   previousNotes?: PreviousNote[];
 }
 
@@ -64,6 +119,13 @@ export interface PreviousNote {
   plan?: string | null;
   doctorName?: string | null;
   diagnosisCodes?: DiagnosisCode[];
+}
+
+export interface ConversationMessage {
+  id: string;
+  speaker: "doctor" | "patient" | string;
+  text: string;
+  timestamp: string;
 }
 
 export interface Recording {

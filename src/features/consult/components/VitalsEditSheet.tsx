@@ -1,0 +1,168 @@
+import { useEffect, useState } from "react";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+
+import { Button, TextField } from "@/ui";
+import { describeError } from "@/lib/api/errors";
+import { useSaveVitals } from "../hooks";
+import {
+  buildVitalsPayload,
+  initialVitalsToForm,
+  sanitizeBloodPressure,
+  sanitizeBloodSugar,
+  sanitizeDecimal,
+  sanitizeInteger,
+  sanitizeTemperature,
+  validateVitalsForm,
+  type VitalsFormState,
+} from "../vitalsFormat";
+
+type VitalsValues = {
+  temperature?: string;
+  height?: string;
+  weight?: string;
+  bloodPressure?: string;
+  spO2?: string;
+  bloodSugar?: string;
+};
+
+export function VitalsEditSheet({
+  open,
+  onClose,
+  consultationId,
+  initialVitals,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  consultationId: string;
+  initialVitals: VitalsValues;
+  onSaved?: () => void;
+}) {
+  const save = useSaveVitals(consultationId);
+  const [form, setForm] = useState<VitalsFormState>(() =>
+    initialVitalsToForm(initialVitals)
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(initialVitalsToForm(initialVitals));
+    setError(null);
+    // Reset form only when the sheet opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [open]);
+
+  const set =
+    (key: keyof VitalsFormState, sanitize: (v: string) => string) =>
+    (v: string) =>
+      setForm((f) => ({ ...f, [key]: sanitize(v) }));
+
+  const onSave = async () => {
+    setError(null);
+    const validation = validateVitalsForm(form);
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    const payload = buildVitalsPayload(form);
+    if (!Object.values(payload).some((v) => v)) {
+      setError("Enter at least one vital before saving.");
+      return;
+    }
+    try {
+      await save.mutateAsync(payload);
+      onSaved?.();
+      onClose();
+    } catch (e) {
+      setError(describeError(e));
+    }
+  };
+
+  return (
+    <Modal
+      visible={open}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View className="flex-1 bg-white">
+        <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
+          <Text className="text-lg font-semibold text-neutral-900">
+            Edit vitals
+          </Text>
+          <Pressable onPress={onClose} hitSlop={12}>
+            <Ionicons name="close" size={24} color="#6b7280" />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 16, gap: 12 }}
+        >
+          <Text className="mb-1 text-sm text-neutral-500">
+            Units are applied automatically (temp °F, height cm, weight kg).
+          </Text>
+          <TextField
+            label="Temperature (°F)"
+            value={form.temperature}
+            onChangeText={set("temperature", sanitizeTemperature)}
+            placeholder="98.6"
+            keyboardType="decimal-pad"
+          />
+          <TextField
+            label="Height (cm)"
+            value={form.height}
+            onChangeText={set("height", sanitizeDecimal)}
+            placeholder="170"
+            keyboardType="decimal-pad"
+          />
+          <TextField
+            label="Weight (kg)"
+            value={form.weight}
+            onChangeText={set("weight", sanitizeDecimal)}
+            placeholder="70"
+            keyboardType="decimal-pad"
+          />
+          <TextField
+            label="Blood pressure"
+            value={form.bloodPressure}
+            onChangeText={set("bloodPressure", sanitizeBloodPressure)}
+            placeholder="120/80"
+          />
+          <TextField
+            label="SpO₂ (%)"
+            value={form.spO2}
+            onChangeText={set("spO2", sanitizeInteger)}
+            placeholder="98"
+            keyboardType="number-pad"
+          />
+          <TextField
+            label="Blood sugar (mg/dL)"
+            value={form.bloodSugar}
+            onChangeText={set("bloodSugar", sanitizeBloodSugar)}
+            placeholder="110"
+            keyboardType="number-pad"
+          />
+          {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
+        </ScrollView>
+
+        <View className="flex-row gap-3 border-t border-neutral-200 px-4 py-3">
+          <Button
+            label="Cancel"
+            variant="outline"
+            className="flex-1"
+            onPress={onClose}
+            disabled={save.isPending}
+          />
+          <Button
+            label="Save"
+            className="flex-1"
+            onPress={onSave}
+            loading={save.isPending}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}

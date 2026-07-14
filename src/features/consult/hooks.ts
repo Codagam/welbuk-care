@@ -7,12 +7,15 @@ import {
 import { getConsultation } from "@/lib/api/endpoints/consult";
 import {
   addPrescriptionLine,
+  deletePatientLabReport,
   deletePrescriptionLine,
   finalizePrescription,
+  getConversation,
   getPatientHistory,
   getPrescriptions,
   getSummary,
   getVitals,
+  patchReportAttachmentUrls,
   saveSummary,
   saveVitals,
   searchDiagnosisCodes,
@@ -141,6 +144,74 @@ export function usePatientHistory(
         facilityId: facilityId!,
         consultationId,
       }),
+  });
+}
+
+export function useInvalidatePatientHistory(
+  patientId: string | undefined,
+  consultationId: string
+) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return () =>
+    qc.invalidateQueries({
+      queryKey: ["patient-history", patientId, facilityId, consultationId],
+    });
+}
+
+// ---- Conversation -------------------------------------------------------
+
+export function useConversation(consultationId: string) {
+  return useQuery({
+    queryKey: ["conversation", consultationId],
+    enabled: !!consultationId,
+    queryFn: () => getConversation(consultationId),
+  });
+}
+
+export function useDeleteLabReport(
+  patientId: string | undefined,
+  consultationId: string
+) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (body: {
+      id?: string;
+      fileUrl?: string;
+      patientId?: string;
+      consultationId?: string;
+    }) =>
+      deletePatientLabReport({
+        facilityId: facilityId ?? undefined,
+        ...body,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["patient-history", patientId, facilityId, consultationId],
+      });
+      qc.invalidateQueries({ queryKey: ["summary", consultationId] });
+    },
+  });
+}
+
+export function usePatchReportAttachments(
+  consultationId: string,
+  patientId?: string
+) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (attachmentUrls: string[]) =>
+      patchReportAttachmentUrls(consultationId, attachmentUrls),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["summary", consultationId] });
+      if (patientId && facilityId) {
+        qc.invalidateQueries({
+          queryKey: ["patient-history", patientId, facilityId, consultationId],
+        });
+      }
+    },
   });
 }
 
