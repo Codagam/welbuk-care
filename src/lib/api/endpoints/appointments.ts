@@ -2,11 +2,11 @@ import { api } from "@/lib/api/client";
 import type {
   AppointmentSearchParams,
   AppointmentSearchResult,
-} from "@/features/queue/types";
+} from "@/features/appointments/types";
 
 /**
- * The consult/queue DataTable endpoint. Sending a date range + facility returns
- * that day's queue, sorted by status priority (IN_PROGRESS > WAITING > … ).
+ * Practice DataTable list endpoint.
+ * POST /api/facility/appointment-search (alias: /api/facility/appointments/search)
  */
 export function searchAppointments(
   params: AppointmentSearchParams,
@@ -73,6 +73,15 @@ export function updateFacilityAppointment(
     path: "/api/facility/appointments",
     method: "PUT",
     body,
+  });
+}
+
+/** Soft-delete — cannot delete COMPLETED. */
+export function deleteFacilityAppointment(id: string): Promise<{ message?: string }> {
+  return api({
+    path: "/api/facility/appointments",
+    method: "DELETE",
+    query: { id },
   });
 }
 

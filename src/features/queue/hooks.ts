@@ -40,7 +40,7 @@ export function useTodayQueue() {
         page: 1,
         pageSize: 100,
         sortBy: "startTime",
-        sortOrder: "asc",
+        sortOrder: "asc" as const,
       };
       console.log("[queue] appointment-search request", params);
       const result = await searchAppointments(params, signal);

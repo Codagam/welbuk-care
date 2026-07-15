@@ -9,6 +9,7 @@ export default function TabsLayout() {
   const { t } = useTranslation();
   return (
     <Tabs
+      initialRouteName="home"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: WHITE,
@@ -23,6 +24,15 @@ export default function TabsLayout() {
         },
       }}
     >
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: t("nav.home"),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" color={color} size={size} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="queue"
         options={{
@@ -47,15 +57,6 @@ export default function TabsLayout() {
           title: t("nav.care"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pulse-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: t("nav.more"),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="ellipsis-horizontal" color={color} size={size} />
           ),
         }}
       />

@@ -26,7 +26,7 @@ export default function LoginScreen() {
 
   // Already signed in → leave the login screen.
   if (status === "authed") {
-    return <Redirect href={activeFacilityId ? "/queue" : "/select-facility"} />;
+    return <Redirect href={activeFacilityId ? "/home" : "/select-facility"} />;
   }
 
   const onSubmit = async () => {
@@ -39,7 +39,7 @@ export default function LoginScreen() {
     try {
       await signIn({ email, password });
       const facilityId = useAuthStore.getState().activeFacilityId;
-      router.replace(facilityId ? "/queue" : "/select-facility");
+      router.replace(facilityId ? "/home" : "/select-facility");
     } catch (e) {
       setError(describeError(e));
     } finally {

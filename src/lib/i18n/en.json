@@ -3,11 +3,18 @@
     "queue": "Queue",
     "patients": "Patients",
     "care": "Care",
+    "home": "Home",
     "more": "More"
   },
   "queue": {
     "title": "Today's queue",
     "empty": "No appointments today."
+  },
+  "appointments": {
+    "searchPlaceholder": "Search appointments…",
+    "empty": "No appointments found",
+    "errorLoading": "Error loading appointments",
+    "permissionDenied": "You don’t have permission to view appointments."
   },
   "care": {
     "title": "Care",
