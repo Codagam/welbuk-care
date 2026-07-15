@@ -6,15 +6,33 @@
  * screens/store never change when SSO lands.
  */
 
-export type GlobalRole = "USER" | "FACILITY_ADMIN" | "SUPER_ADMIN" | string;
+export type GlobalRole =
+  | "USER"
+  | "FACILITY_ADMIN"
+  | "SUPER_ADMIN"
+  | "user"
+  | "facility_admin"
+  | "super_admin"
+  | string;
 
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  /** Primary role slug (may mirror globalRole from /me). */
   role: GlobalRole;
   image?: string | null;
   displayName?: string | null;
+  /**
+   * Linked clinical Doctor.id from GET /api/auth/me.
+   * Not present on login JWT / login `user` — always resolve via /me.
+   */
+  doctorId?: string | null;
+  /** Authoritative staff tier from DB (prefer over JWT `role`). */
+  globalRole?: GlobalRole | null;
+  roles?: string[];
+  roleLabels?: string[];
+  rolesByFacility?: Record<string, string[]>;
 }
 
 export interface Facility {

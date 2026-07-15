@@ -10,7 +10,12 @@ import { useRouter } from "expo-router";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import { useActiveFacility } from "@/lib/auth/store";
+import {
+  isDoctorHome,
+  timeOfDayGreeting,
+  userDisplayName,
+} from "@/lib/auth/roles";
+import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { useOpenConsult, useTodayQueue } from "@/features/queue/hooks";
 import { formatTime, statusStyle } from "@/features/queue/status";
 import type { Appointment } from "@/features/queue/types";
@@ -19,11 +24,14 @@ import { fullName } from "@/features/patients/utils";
 export default function QueueScreen() {
   const router = useRouter();
   const facility = useActiveFacility();
+  const user = useAuthUser();
   const q = useTodayQueue();
   const open = useOpenConsult();
   const [openingId, setOpeningId] = useState<string | null>(null);
 
   const appointments = q.data?.data ?? [];
+  const greetName = userDisplayName(user);
+  const doctorScoped = isDoctorHome(user);
 
   const onOpen = async (appt: Appointment) => {
     setOpeningId(appt.id);
@@ -47,10 +55,18 @@ export default function QueueScreen() {
   return (
     <Screen>
       <View className="gap-1 border-b border-neutral-200 bg-white px-6 pb-4 pt-6">
-        <Text className="text-2xl font-bold text-neutral-900">Today&apos;s queue</Text>
+        {greetName ? (
+          <Text className="text-sm text-neutral-500">
+            {timeOfDayGreeting()}, {greetName}
+          </Text>
+        ) : null}
+        <Text className="text-2xl font-bold text-neutral-900">
+          {doctorScoped ? "My queue" : "Today's queue"}
+        </Text>
         <Text className="text-xs text-neutral-500">
           {facility?.name}
           {appointments.length ? `  ·  ${appointments.length} appointments` : ""}
+          {doctorScoped ? "  ·  your appointments only" : ""}
         </Text>
       </View>
 

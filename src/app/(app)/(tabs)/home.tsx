@@ -3,6 +3,10 @@ import { useRouter } from "expo-router";
 
 import { Button, Screen } from "@/ui";
 import {
+  timeOfDayGreeting,
+  userDisplayName,
+} from "@/lib/auth/roles";
+import {
   useActiveFacility,
   useAuthStore,
   useAuthUser,
@@ -13,6 +17,7 @@ export default function MoreScreen() {
   const facility = useActiveFacility();
   const user = useAuthUser();
   const signOut = useAuthStore((s) => s.signOut);
+  const greetName = userDisplayName(user);
 
   return (
     <Screen>
@@ -20,7 +25,9 @@ export default function MoreScreen() {
         <View className="mx-auto w-full max-w-3xl gap-6 p-6">
           <View className="gap-1">
             <Text className="text-sm text-neutral-500">
-              Signed in as {user?.name ?? user?.email}
+              {greetName
+                ? `${timeOfDayGreeting()}, ${greetName}`
+                : "Signed in"}
             </Text>
             <Text className="text-2xl font-bold text-neutral-900">
               {facility?.name ?? "Welbuk Care"}
