@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -6,32 +6,47 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { setStatusBarStyle } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import {
-  isDoctorHome,
-  timeOfDayGreeting,
-  userDisplayName,
-} from "@/lib/auth/roles";
+import { userDisplayName } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { useOpenConsult, useTodayQueue } from "@/features/queue/hooks";
 import { formatTime, statusStyle } from "@/features/queue/status";
 import type { Appointment } from "@/features/queue/types";
 import { fullName } from "@/features/patients/utils";
 
+function doctorWelcomeName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
+}
+
 export default function QueueScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const facility = useActiveFacility();
   const user = useAuthUser();
   const q = useTodayQueue();
   const open = useOpenConsult();
   const [openingId, setOpeningId] = useState<string | null>(null);
 
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle("light");
+      return () => setStatusBarStyle("dark");
+    }, [])
+  );
+
   const appointments = q.data?.data ?? [];
   const greetName = userDisplayName(user);
-  const doctorScoped = isDoctorHome(user);
+  const welcomeTitle = greetName
+    ? `Welcome, ${doctorWelcomeName(greetName)}`
+    : "Welcome";
 
   const onOpen = async (appt: Appointment) => {
     setOpeningId(appt.id);
@@ -53,21 +68,36 @@ export default function QueueScreen() {
   };
 
   return (
-    <Screen>
-      <View className="gap-1 border-b border-neutral-200 bg-white px-6 pb-4 pt-6">
-        {greetName ? (
-          <Text className="text-sm text-neutral-500">
-            {timeOfDayGreeting()}, {greetName}
-          </Text>
-        ) : null}
-        <Text className="text-2xl font-bold text-neutral-900">
-          {doctorScoped ? "My queue" : "Today's queue"}
-        </Text>
-        <Text className="text-xs text-neutral-500">
-          {facility?.name}
-          {appointments.length ? `  ·  ${appointments.length} appointments` : ""}
-          {doctorScoped ? "  ·  your appointments only" : ""}
-        </Text>
+    <Screen edges={["left", "right", "bottom"]}>
+      <View
+        className="bg-brand px-6 pb-5"
+        style={{ paddingTop: Math.max(insets.top, 12) + 12 }}
+      >
+        <View className="flex-row items-start justify-between gap-4">
+          <View className="min-w-0 flex-1 gap-1">
+            <Text
+              className="text-2xl font-bold text-brand-foreground"
+              numberOfLines={1}
+            >
+              {welcomeTitle}
+            </Text>
+            <Text className="text-sm text-white/90">
+              Here is your appointment list for today.
+            </Text>
+          </View>
+
+          {facility?.name ? (
+            <View className="max-w-[42%] shrink-0 flex-row items-center justify-end gap-2 pt-1">
+              <Ionicons name="business-outline" size={18} color="#FFFFFF" />
+              <Text
+                className="shrink text-right text-sm font-medium text-brand-foreground"
+                numberOfLines={2}
+              >
+                {facility.name}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       {q.isLoading ? (
