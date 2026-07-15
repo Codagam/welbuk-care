@@ -17,7 +17,8 @@ export function Segmented<T extends string>({
 }: SegmentedProps<T>) {
   return (
     <View
-      className={`flex-row rounded-xl border border-neutral-300 bg-white p-1 ${
+      style={{ height: 48, minHeight: 48 }}
+      className={`h-12 flex-row items-stretch rounded-xl border border-neutral-300 bg-white p-1 ${
         disabled ? "opacity-50" : ""
       } ${className}`}
     >
@@ -28,7 +29,7 @@ export function Segmented<T extends string>({
             key={opt}
             disabled={disabled}
             onPress={() => onChange(opt)}
-            className={`flex-1 items-center rounded-lg py-2 ${
+            className={`min-h-0 flex-1 items-center justify-center rounded-lg ${
               active ? "bg-brand" : "bg-transparent"
             }`}
           >

@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, Text } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 type Variant = "primary" | "outline" | "ghost" | "danger";
 type Size = "md" | "lg";
@@ -32,6 +38,7 @@ export interface ButtonProps {
   disabled?: boolean;
   icon?: ReactNode;
   className?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
 export function Button({
@@ -43,16 +50,25 @@ export function Button({
   disabled = false,
   icon,
   className = "",
+  style,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
   const spinnerColor =
     variant === "primary" || variant === "danger" ? "#fff" : "#111827";
+  const fixedHeight =
+    typeof style === "object" &&
+    style != null &&
+    !Array.isArray(style) &&
+    "height" in style;
+
   return (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
-      style={{ flexShrink: 0 }}
-      className={`flex-row items-center justify-center gap-2 rounded-xl ${SIZE[size]} ${CONTAINER[variant]} ${isDisabled ? "opacity-50" : ""} ${className}`}
+      style={[{ flexShrink: 0 }, style]}
+      className={`flex-row items-center justify-center gap-2 rounded-xl ${
+        fixedHeight ? "px-4" : SIZE[size]
+      } ${CONTAINER[variant]} ${isDisabled ? "opacity-50" : ""} ${className}`}
     >
       {loading ? <ActivityIndicator color={spinnerColor} /> : icon}
       <Text

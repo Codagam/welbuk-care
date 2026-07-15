@@ -358,16 +358,8 @@ export function useDentalDiagnosis({
       try {
         const res = await patchDentalPlan(consultationId, nextPlan);
         setPlanItems(nextPlan);
-        if (res.billingSync) {
-          setStatusMsg(
-            res.billingSync.ok
-              ? `Plan saved. Billed ₹${res.billingSync.doneTotalRupees ?? 0}.`
-              : `Plan saved. Billing: ${res.billingSync.error ?? "deferred"}.`
-          );
-          return res.billingSync;
-        }
-        setStatusMsg("Treatment plan saved.");
-        return null;
+        setStatusMsg(null);
+        return res.billingSync ?? null;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to save plan");
         return null;

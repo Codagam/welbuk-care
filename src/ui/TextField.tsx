@@ -10,6 +10,8 @@ export function TextField({
   label,
   error,
   containerClassName = "",
+  multiline,
+  style,
   ...props
 }: TextFieldProps) {
   return (
@@ -19,9 +21,21 @@ export function TextField({
       ) : null}
       <TextInput
         placeholderTextColor="#9ca3af"
-        className={`rounded-xl border bg-white px-4 py-3 text-base text-neutral-900 ${
-          error ? "border-red-400" : "border-neutral-300"
-        }`}
+        multiline={multiline}
+        className={`rounded-xl border bg-white px-4 text-base text-neutral-900 ${
+          multiline ? "py-3" : "h-12"
+        } ${error ? "border-red-400" : "border-neutral-300"}`}
+        style={[
+          multiline
+            ? { textAlignVertical: "top" }
+            : {
+                height: 48,
+                minHeight: 48,
+                textAlignVertical: "center",
+                paddingVertical: 0,
+              },
+          style,
+        ]}
         {...props}
       />
       {error ? <Text className="text-xs text-red-500">{error}</Text> : null}

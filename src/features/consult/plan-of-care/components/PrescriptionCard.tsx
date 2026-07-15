@@ -1,3 +1,4 @@
+import * as DocumentPicker from "expo-document-picker";
 import { useMemo, useState } from "react";
 import {
   Alert,
@@ -7,17 +8,12 @@ import {
   Text,
   View,
 } from "react-native";
-import * as DocumentPicker from "expo-document-picker";
 
-import { Button, Segmented, TextField } from "@/ui";
-import { describeError, ApiError } from "@/lib/api/errors";
 import type { DrugCatalogItem } from "@/lib/api/endpoints/drugs";
+import { ApiError, describeError } from "@/lib/api/errors";
+import { Button, Segmented, TextField } from "@/ui";
 
 import { formatAllergyMatchSummaryLine } from "../allergy";
-import {
-  dosePatternAfterCatalogDrugPick,
-  validatePrescriptionItem,
-} from "../validation";
 import {
   filterDrugCatalog,
   useAttachPrescription,
@@ -30,6 +26,10 @@ import type {
   AttachedRxImage,
   PlanPrescription,
 } from "../types";
+import {
+  dosePatternAfterCatalogDrugPick,
+  validatePrescriptionItem,
+} from "../validation";
 
 const TIMING = ["BF", "AF"] as const;
 
@@ -273,15 +273,19 @@ function AddMedicineForm({
     [drugs, name]
   );
 
+  const canAdd = name.trim().length > 0;
+
   const pickDrug = (d: DrugCatalogItem) => {
     const brand = (d.brandName ?? "").trim() || (d.genericName ?? "").trim();
     setName(brand);
     setDrugId(d.id);
     setDose(dosePatternAfterCatalogDrugPick(dose, d.dosageForm));
     setShowHints(false);
+    setError(null);
   };
 
   const onSave = () => {
+    if (!canAdd) return;
     setError(null);
     const duplicate = existingNames.some(
       (n) => n.trim().toLowerCase() === name.trim().toLowerCase()
@@ -312,7 +316,58 @@ function AddMedicineForm({
     setTiming("AF");
     setDuration("5");
     setDrugId(undefined);
+    setShowHints(false);
   };
+
+  const medicineHints = showHints && hints.length > 0 ? (
+    <View className="mt-1 max-h-40 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        {hints.map((d) => (
+          <Pressable
+            key={d.id}
+            onPress={() => pickDrug(d)}
+            className="border-b border-neutral-100 px-3 py-2 active:bg-neutral-50"
+          >
+            <Text className="text-sm font-medium text-neutral-900">
+              {d.brandName || d.genericName}
+            </Text>
+            <Text className="text-xs text-neutral-500">
+              {[d.genericName, d.dosageForm, d.strength]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  ) : null;
+
+  const medicineField = (
+    <TextField
+      label="Medicine"
+      value={name}
+      onChangeText={(v) => {
+        setName(v);
+        setDrugId(undefined);
+        setShowHints(true);
+      }}
+      onFocus={() => setShowHints(true)}
+      onPressIn={() => setShowHints(true)}
+      placeholder="Tap to pick medicine…"
+    />
+  );
+
+  const addButton = (
+    <Button
+      label={tabletLayout ? "Add" : "Add to prescription"}
+      size="md"
+      variant="primary"
+      onPress={onSave}
+      disabled={!canAdd}
+      className="h-12 min-h-[48px] justify-center py-0"
+      style={{ height: 48 }}
+    />
+  );
 
   return (
     <View className="gap-3 rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-4">
@@ -321,107 +376,57 @@ function AddMedicineForm({
       </Text>
 
       {tabletLayout ? (
-        <View className="flex-row items-start gap-3">
-          <View className="min-w-0 flex-[2]">
-            <TextField
-              label="Medicine"
-              value={name}
-              onChangeText={(v) => {
-                setName(v);
-                setDrugId(undefined);
-                setShowHints(true);
-              }}
-              onFocus={() => setShowHints(true)}
-              placeholder="Type to search medicine…"
-            />
-            {showHints && name.trim().length >= 1 && hints.length > 0 ? (
-              <View className="mt-1 max-h-36 overflow-hidden rounded-xl border border-neutral-200 bg-white">
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled
-                >
-                  {hints.map((d) => (
-                    <Pressable
-                      key={d.id}
-                      onPress={() => pickDrug(d)}
-                      className="border-b border-neutral-100 px-3 py-2 active:bg-neutral-50"
-                    >
-                      <Text className="text-sm font-medium text-neutral-900">
-                        {d.brandName || d.genericName}
-                      </Text>
-                      <Text className="text-xs text-neutral-500">
-                        {[d.genericName, d.dosageForm, d.strength]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
+        <View className="gap-1">
+          <View className="flex-row items-end gap-3">
+            <View className="min-w-0 flex-[2] gap-1.5">
+              <Text className="text-sm font-medium text-neutral-700">
+                Medicine
+              </Text>
+              <TextField
+                value={name}
+                onChangeText={(v) => {
+                  setName(v);
+                  setDrugId(undefined);
+                  setShowHints(true);
+                }}
+                onFocus={() => setShowHints(true)}
+                onPressIn={() => setShowHints(true)}
+                placeholder="Tap to pick medicine…"
+              />
+            </View>
+            <View className="w-28 gap-1.5">
+              <Text className="text-sm font-medium text-neutral-700">Dose</Text>
+              <TextField
+                value={dose}
+                onChangeText={setDose}
+                placeholder="1-0-1"
+              />
+            </View>
+            <View className="w-36 gap-1.5">
+              <Text className="text-sm font-medium text-neutral-700">Food</Text>
+              <Segmented options={TIMING} value={timing} onChange={setTiming} />
+            </View>
+            <View className="w-20 gap-1.5">
+              <Text className="text-sm font-medium text-neutral-700">Days</Text>
+              <TextField
+                value={duration}
+                onChangeText={setDuration}
+                keyboardType="number-pad"
+                placeholder="5"
+              />
+            </View>
+            <View className="gap-1.5">
+              <Text className="text-sm font-medium text-transparent">Add</Text>
+              {addButton}
+            </View>
           </View>
-          <TextField
-            containerClassName="w-28"
-            label="Dose"
-            value={dose}
-            onChangeText={setDose}
-            placeholder="1-0-1"
-          />
-          <View className="w-36 gap-1.5">
-            <Text className="text-sm font-medium text-neutral-700">Food</Text>
-            <Segmented options={TIMING} value={timing} onChange={setTiming} />
-          </View>
-          <TextField
-            containerClassName="w-20"
-            label="Days"
-            value={duration}
-            onChangeText={setDuration}
-            keyboardType="number-pad"
-            placeholder="5"
-          />
-          <View className="pt-6">
-            <Button label="Add" size="md" variant="outline" onPress={onSave} />
-          </View>
+          {medicineHints}
         </View>
       ) : (
         <>
           <View>
-            <TextField
-              label="Medicine"
-              value={name}
-              onChangeText={(v) => {
-                setName(v);
-                setDrugId(undefined);
-                setShowHints(true);
-              }}
-              onFocus={() => setShowHints(true)}
-              placeholder="Type to search medicine…"
-            />
-            {showHints && name.trim().length >= 1 && hints.length > 0 ? (
-              <View className="mt-1 max-h-40 overflow-hidden rounded-xl border border-neutral-200 bg-white">
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled
-                >
-                  {hints.map((d) => (
-                    <Pressable
-                      key={d.id}
-                      onPress={() => pickDrug(d)}
-                      className="border-b border-neutral-100 px-3 py-2 active:bg-neutral-50"
-                    >
-                      <Text className="text-sm font-medium text-neutral-900">
-                        {d.brandName || d.genericName}
-                      </Text>
-                      <Text className="text-xs text-neutral-500">
-                        {[d.genericName, d.dosageForm, d.strength]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
+            {medicineField}
+            {medicineHints}
           </View>
 
           <View className="flex-row gap-3">
@@ -447,11 +452,7 @@ function AddMedicineForm({
             <Segmented options={TIMING} value={timing} onChange={setTiming} />
           </View>
 
-          <Button
-            label="Add to prescription"
-            variant="outline"
-            onPress={onSave}
-          />
+          {addButton}
         </>
       )}
 
@@ -567,7 +568,7 @@ function TemplateBar({
     <View className={compact ? "flex-row flex-wrap items-center gap-2" : "gap-2"}>
       <Pressable
         onPress={() => setPickerOpen(true)}
-        className={`rounded-xl border border-neutral-300 bg-white px-3 py-2.5 ${
+        className={`h-12 justify-center rounded-xl border border-neutral-300 bg-white px-3 ${
           compact ? "min-w-[160px]" : "flex-1"
         }`}
       >
@@ -582,7 +583,7 @@ function TemplateBar({
           setTemplateName(selected);
           setNameOpen(true);
         }}
-        className={`rounded-xl border px-3 py-2.5 ${
+        className={`h-12 justify-center rounded-xl border px-3 ${
           disabled
             ? "border-neutral-200 opacity-40"
             : "border-neutral-300 bg-white"
@@ -600,7 +601,7 @@ function TemplateBar({
             setTemplateName(selected);
             setNameOpen(true);
           }}
-          className={`rounded-xl border px-3 py-2.5 ${
+          className={`h-12 justify-center rounded-xl border px-3 ${
             disabled
               ? "border-neutral-200 opacity-40"
               : "border-neutral-300 bg-white"
@@ -763,6 +764,7 @@ function AttachBar({
         size="md"
         onPress={onPick}
         loading={upload.isPending || patch.isPending}
+        className="h-12 justify-center"
       />
       {attachedImages.length > 0 ? (
         <View className="flex-row flex-wrap gap-2">

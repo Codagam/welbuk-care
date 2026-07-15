@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
     Modal,
     Pressable,
     ScrollView,
+    StyleSheet,
     Text,
     View,
 } from "react-native";
@@ -146,13 +147,25 @@ export function FindingsSheet({
   const [treatmentQuery, setTreatmentQuery] = useState<Record<string, string>>(
     {}
   );
-  const [treatmentPickerOpen, setTreatmentPickerOpen] = useState<
-    Record<string, boolean>
-  >({});
+  const [treatmentPickerOpenFor, setTreatmentPickerOpenFor] = useState<
+    string | null
+  >(null);
+  const [treatmentPickerAnchor, setTreatmentPickerAnchor] = useState({
+    x: 0,
+    y: 0,
+    width: 280,
+    height: 40,
+  });
+  const treatmentFieldRefs = useRef<Record<string, View | null>>({});
+  const [diagnosisOpen, setDiagnosisOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [localError, setLocalError] = useState<string | null>(null);
   const [clonePickerOpen, setClonePickerOpen] = useState(false);
   const [cloneTargetIds, setCloneTargetIds] = useState<string[]>([]);
+
+  const closeTreatmentPicker = () => {
+    setTreatmentPickerOpenFor(null);
+  };
 
   const doneIds = useMemo(
     () => doneDiagnosisEntryIds(planItems),
@@ -183,7 +196,8 @@ export function FindingsSheet({
     // Conditions start collapsed — expand only when the user taps the arrow
     setExpanded(new Set());
     setTreatmentQuery({});
-    setTreatmentPickerOpen({});
+    setTreatmentPickerOpenFor(null);
+    setDiagnosisOpen(false);
     setLocalError(null);
     setCloneTargetIds([]);
     setClonePickerOpen(false);
@@ -258,6 +272,25 @@ export function FindingsSheet({
     return !!(id && doneIds.has(id));
   };
 
+  const openTreatmentPicker = (problem: string) => {
+    if (isLocked(problem)) return;
+    setDiagnosisOpen(false);
+    // Open immediately — do not wait on measureInWindow (can fail after Modal close)
+    setTreatmentPickerOpenFor(problem);
+    treatmentFieldRefs.current[problem]?.measureInWindow?.(
+      (x, y, width, height) => {
+        if (width > 0 && height > 0) {
+          setTreatmentPickerAnchor({
+            x,
+            y,
+            width: Math.max(width, 240),
+            height,
+          });
+        }
+      }
+    );
+  };
+
   const addTreatment = (
     problem: string,
     name: string,
@@ -290,7 +323,6 @@ export function FindingsSheet({
     // Doctor fee split stays at 0 until the user enters amounts (separate from treatment fees)
     updateDraft(problem, { treatments, fee: feeSum });
     setTreatmentQuery((q) => ({ ...q, [problem]: "" }));
-    setTreatmentPickerOpen((o) => ({ ...o, [problem]: true }));
   };
 
   const updateTreatment = (
@@ -333,6 +365,25 @@ export function FindingsSheet({
     const treatments = draft.treatments.filter((t) => t.id !== rowId);
     const feeSum = treatments.reduce((s, t) => s + (Number(t.fee) || 0), 0);
     updateDraft(problem, { treatments, fee: feeSum });
+  };
+
+  const toggleTreatment = (
+    problem: string,
+    name: string,
+    catalogDefaultFee?: number,
+    catalogMaxDiscountPercent?: number | null
+  ) => {
+    if (isLocked(problem)) return;
+    const draft = drafts[problem];
+    if (!draft) return;
+    const existing = draft.treatments.find(
+      (t) => t.treatmentName.trim().toLowerCase() === name.trim().toLowerCase()
+    );
+    if (existing) {
+      removeTreatment(problem, existing.id);
+      return;
+    }
+    addTreatment(problem, name, catalogDefaultFee, catalogMaxDiscountPercent);
   };
 
   const canSaveFindings = useMemo(() => {
@@ -506,6 +557,12 @@ export function FindingsSheet({
               selectedValues={selectedProblems}
               selectedLabels={selectedLabels}
               onSelect={addCondition}
+              onDeselect={(opt) => removeCondition(opt.value)}
+              open={diagnosisOpen}
+              onOpenChange={(open) => {
+                setDiagnosisOpen(open);
+                if (open) closeTreatmentPicker();
+              }}
               placeholder="Search or type…"
             />
           </View>
@@ -609,7 +666,12 @@ export function FindingsSheet({
                         Suggested treatment
                       </Text>
                       {!locked ? (
-                        <>
+                        <View
+                          ref={(node) => {
+                            treatmentFieldRefs.current[problem] = node;
+                          }}
+                          collapsable={false}
+                        >
                           <TextField
                             value={treatmentQuery[problem] ?? ""}
                             onChangeText={(v) => {
@@ -617,25 +679,10 @@ export function FindingsSheet({
                                 ...q,
                                 [problem]: v,
                               }));
-                              setTreatmentPickerOpen((o) => ({
-                                ...o,
-                                [problem]: true,
-                              }));
+                              openTreatmentPicker(problem);
                             }}
-                            onFocus={() =>
-                              setTreatmentPickerOpen((o) => ({
-                                ...o,
-                                [problem]: true,
-                              }))
-                            }
-                            onBlur={() => {
-                              setTimeout(() => {
-                                setTreatmentPickerOpen((o) => ({
-                                  ...o,
-                                  [problem]: false,
-                                }));
-                              }, 180);
-                            }}
+                            onFocus={() => openTreatmentPicker(problem)}
+                            onPressIn={() => openTreatmentPicker(problem)}
                             placeholder="Search or type a treatment…"
                             onSubmitEditing={() => {
                               const name = (
@@ -644,113 +691,18 @@ export function FindingsSheet({
                               if (!name) return;
                               const hit = catalogByName(catalog, name);
                               if (hit) {
-                                addTreatment(
+                                toggleTreatment(
                                   problem,
                                   hit.name,
                                   hit.defaultFee,
                                   hit.maxDiscountPercent
                                 );
                               } else {
-                                addTreatment(problem, name);
+                                toggleTreatment(problem, name);
                               }
                             }}
                           />
-                          {treatmentPickerOpen[problem] ? (
-                            <View className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-                              {catalog.length === 0 ? (
-                                <View className="px-3 py-3">
-                                  <Text className="text-sm text-neutral-500">
-                                    Loading treatments…
-                                  </Text>
-                                </View>
-                              ) : suggestionsFor(problem).length === 0 &&
-                                !(treatmentQuery[problem] ?? "").trim() ? (
-                                <View className="px-3 py-3">
-                                  <Text className="text-sm text-neutral-500">
-                                    No treatments available.
-                                  </Text>
-                                </View>
-                              ) : (
-                                <ScrollView
-                                  nestedScrollEnabled
-                                  keyboardShouldPersistTaps="handled"
-                                  style={{ maxHeight: 220 }}
-                                >
-                                  {suggestionsFor(problem).map((item) => {
-                                    const selected = isTreatmentSelected(
-                                      problem,
-                                      item.name
-                                    );
-                                    return (
-                                      <Pressable
-                                        key={item.id}
-                                        onPress={() => {
-                                          if (selected) return;
-                                          addTreatment(
-                                            problem,
-                                            item.name,
-                                            item.defaultFee,
-                                            item.maxDiscountPercent
-                                          );
-                                        }}
-                                        style={
-                                          selected
-                                            ? {
-                                                backgroundColor:
-                                                  "rgba(253, 0, 106, 0.14)",
-                                              }
-                                            : undefined
-                                        }
-                                        className={`flex-row items-center justify-between border-b border-neutral-100 px-3 py-2.5 ${
-                                          selected ? "" : "active:bg-neutral-50"
-                                        }`}
-                                      >
-                                        <Text
-                                          className={`flex-1 text-sm ${
-                                            selected
-                                              ? "font-semibold text-brand"
-                                              : "text-neutral-900"
-                                          }`}
-                                        >
-                                          {item.name}
-                                          {item.defaultFee != null
-                                            ? ` · ₹${item.defaultFee}`
-                                            : ""}
-                                        </Text>
-                                        {selected ? (
-                                          <Text className="ml-2 text-sm font-bold text-brand">
-                                            ✓
-                                          </Text>
-                                        ) : null}
-                                      </Pressable>
-                                    );
-                                  })}
-                                  {(treatmentQuery[problem] ?? "").trim() &&
-                                  !catalogByName(
-                                    catalog,
-                                    treatmentQuery[problem] ?? ""
-                                  ) ? (
-                                    <Pressable
-                                      onPress={() =>
-                                        addTreatment(
-                                          problem,
-                                          (treatmentQuery[problem] ?? "").trim()
-                                        )
-                                      }
-                                      className="px-3 py-2.5 active:bg-neutral-50"
-                                    >
-                                      <Text className="text-sm text-brand">
-                                        Use &quot;
-                                        {(treatmentQuery[problem] ?? "").trim()}
-                                        &quot; (custom)
-                                      </Text>
-                                    </Pressable>
-                                  ) : null}
-                                </ScrollView>
-                              )}
-                            </View>
-                          ) : null}
-                        </>
+                        </View>
                       ) : null}
 
                       {d.treatments.map((row) => (
@@ -897,6 +849,161 @@ export function FindingsSheet({
         </View>
       </View>
 
+      {/* Suggested treatment dropdown — outside tap closes; re-tap toggles off */}
+      <Modal
+        visible={!!treatmentPickerOpenFor}
+        transparent
+        animationType="fade"
+        onRequestClose={closeTreatmentPicker}
+      >
+        <View style={styles.pickerModalRoot}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={closeTreatmentPicker}
+            accessibilityLabel="Close treatment dropdown"
+          />
+          {treatmentPickerOpenFor ? (
+            <View
+              style={[
+                styles.pickerPanel,
+                {
+                  top: Math.max(8, treatmentPickerAnchor.y),
+                  left: Math.max(8, treatmentPickerAnchor.x),
+                  width: Math.min(
+                    Math.max(treatmentPickerAnchor.width, 260),
+                    420
+                  ),
+                },
+              ]}
+            >
+              <TextField
+                value={treatmentQuery[treatmentPickerOpenFor] ?? ""}
+                onChangeText={(v) =>
+                  setTreatmentQuery((q) => ({
+                    ...q,
+                    [treatmentPickerOpenFor]: v,
+                  }))
+                }
+                placeholder="Search or type a treatment…"
+                autoFocus
+                onSubmitEditing={() => {
+                  const problem = treatmentPickerOpenFor;
+                  const name = (treatmentQuery[problem] ?? "").trim();
+                  if (!name) return;
+                  const hit = catalogByName(catalog, name);
+                  if (hit) {
+                    toggleTreatment(
+                      problem,
+                      hit.name,
+                      hit.defaultFee,
+                      hit.maxDiscountPercent
+                    );
+                  } else {
+                    toggleTreatment(problem, name);
+                  }
+                }}
+              />
+              <View
+                className="mt-1 overflow-hidden rounded-xl border border-neutral-200 bg-white"
+                style={{ elevation: 8, maxHeight: 240 }}
+              >
+                {catalog.length === 0 ? (
+                  <View className="px-3 py-3">
+                    <Text className="text-sm text-neutral-500">
+                      Loading treatments…
+                    </Text>
+                  </View>
+                ) : suggestionsFor(treatmentPickerOpenFor).length === 0 &&
+                  !(treatmentQuery[treatmentPickerOpenFor] ?? "").trim() ? (
+                  <View className="px-3 py-3">
+                    <Text className="text-sm text-neutral-500">
+                      No treatments available.
+                    </Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    style={{ maxHeight: 220 }}
+                  >
+                    {suggestionsFor(treatmentPickerOpenFor).map((item) => {
+                      const selected = isTreatmentSelected(
+                        treatmentPickerOpenFor,
+                        item.name
+                      );
+                      return (
+                        <Pressable
+                          key={item.id}
+                          onPress={() =>
+                            toggleTreatment(
+                              treatmentPickerOpenFor,
+                              item.name,
+                              item.defaultFee,
+                              item.maxDiscountPercent
+                            )
+                          }
+                          style={
+                            selected
+                              ? {
+                                  backgroundColor: "rgba(253, 0, 106, 0.14)",
+                                }
+                              : undefined
+                          }
+                          className={`flex-row items-center justify-between border-b border-neutral-100 px-3 py-2.5 ${
+                            selected ? "" : "active:bg-neutral-50"
+                          }`}
+                        >
+                          <Text
+                            className={`flex-1 text-sm ${
+                              selected
+                                ? "font-semibold text-brand"
+                                : "text-neutral-900"
+                            }`}
+                          >
+                            {item.name}
+                            {item.defaultFee != null
+                              ? ` · ₹${item.defaultFee}`
+                              : ""}
+                          </Text>
+                          {selected ? (
+                            <Text className="ml-2 text-sm font-bold text-brand">
+                              ✓
+                            </Text>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                    {(treatmentQuery[treatmentPickerOpenFor] ?? "").trim() &&
+                    !catalogByName(
+                      catalog,
+                      treatmentQuery[treatmentPickerOpenFor] ?? ""
+                    ) ? (
+                      <Pressable
+                        onPress={() =>
+                          toggleTreatment(
+                            treatmentPickerOpenFor,
+                            (
+                              treatmentQuery[treatmentPickerOpenFor] ?? ""
+                            ).trim()
+                          )
+                        }
+                        className="px-3 py-2.5 active:bg-neutral-50"
+                      >
+                        <Text className="text-sm text-brand">
+                          Use &quot;
+                          {(treatmentQuery[treatmentPickerOpenFor] ?? "").trim()}
+                          &quot; (custom)
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </ScrollView>
+                )}
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
       {/* Clone tooth picker */}
       <Modal
         visible={clonePickerOpen}
@@ -966,3 +1073,14 @@ export function FindingsSheet({
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  pickerModalRoot: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+  pickerPanel: {
+    position: "absolute",
+    zIndex: 2,
+  },
+});
