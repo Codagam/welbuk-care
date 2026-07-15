@@ -36,6 +36,7 @@ export interface Prescription {
   foodTiming?: string | null;
   duration?: string | number | null;
   qtyPrescribed?: number | null;
+  drugId?: string;
   isAttachment?: boolean;
 }
 

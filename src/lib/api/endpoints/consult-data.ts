@@ -4,8 +4,6 @@ import type {
   ConversationMessage,
   DiagnosisCode,
   PatientHistory,
-  Prescription,
-  PrescriptionItemInput,
   Vitals,
 } from "@/features/consult/types";
 
@@ -62,18 +60,15 @@ export async function searchDiagnosisCodes(
 
 // ---- Prescriptions ------------------------------------------------------
 
-export async function getPrescriptions(
-  consultationId: string
-): Promise<{ prescriptions: Prescription[]; prescriptionAttachmentUrls: string[] }> {
-  const res = await api<{
-    prescriptions?: Prescription[];
-    prescriptionAttachmentUrls?: string[];
-  }>({ path: "/api/consult/prescription", query: { consultationId } });
-  return {
-    prescriptions: res.prescriptions ?? [],
-    prescriptionAttachmentUrls: res.prescriptionAttachmentUrls ?? [],
-  };
-}
+export {
+  getPrescriptions,
+  finalizePrescription,
+  patchPrescriptionAttachmentUrls,
+  validateConsultPrescription,
+  getPrescriptionTemplates,
+  createPrescriptionTemplate,
+  updatePrescriptionTemplate,
+} from "./prescription";
 
 export function addPrescriptionLine(body: {
   consultationId: string;
@@ -89,20 +84,6 @@ export function addPrescriptionLine(body: {
 
 export function deletePrescriptionLine(id: string): Promise<unknown> {
   return api({ path: "/api/consult/prescription", method: "DELETE", query: { id } });
-}
-
-export function finalizePrescription(body: {
-  consultationId: string;
-  appointmentId?: string;
-  patientId?: string;
-  prescriptions: PrescriptionItemInput[];
-  attachmentUrls?: string[];
-}): Promise<{ consultationNumber?: string; prescriptions?: Prescription[] }> {
-  return api({
-    path: "/api/consult/prescription/finalize",
-    method: "POST",
-    body,
-  });
 }
 
 // ---- Patient history ----------------------------------------------------

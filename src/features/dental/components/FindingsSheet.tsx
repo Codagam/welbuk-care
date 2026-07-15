@@ -1,37 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
+    Alert,
+    Modal,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
 } from "react-native";
 
 import { Button, DateField, TextField, TimeField } from "@/ui";
-import { DiagnosisTypesAutocomplete } from "./DiagnosisTypesAutocomplete";
-import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
-import { ToothBadge } from "./ToothBadge";
 import { getProblemLabel } from "../problems";
 import { ALL_FDI_IDS } from "../teeth";
 import type {
-  DiagnosisDetailsEntry,
-  DiagnosisOption,
-  FindingStatus,
-  SuggestedTreatmentPlanRow,
-  TreatmentCatalogItem,
-  TreatmentProvider,
+    DentalTreatmentPlanRow,
+    DiagnosisDetailsEntry,
+    DiagnosisOption,
+    FindingStatus,
+    SuggestedTreatmentPlanRow,
+    TreatmentCatalogItem,
+    TreatmentProvider,
 } from "../types";
 import {
-  applyDiscount,
-  doneDiagnosisEntryIds,
-  feeStringFromCatalogDefault,
-  normalizeFee,
-  randomId,
-  todayYmd,
-  toDateOnly,
+    applyDiscount,
+    doneDiagnosisEntryIds,
+    feeStringFromCatalogDefault,
+    normalizeFee,
+    randomId,
+    toDateOnly,
+    todayYmd,
 } from "../utils";
-import type { DentalTreatmentPlanRow } from "../types";
+import { DiagnosisTypesAutocomplete } from "./DiagnosisTypesAutocomplete";
+import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
+import { ToothBadge } from "./ToothBadge";
 
 type ConditionDraft = {
   problem: string;
@@ -287,13 +287,8 @@ export function FindingsSheet({
     };
     const treatments = [...draft.treatments, row];
     const feeSum = treatments.reduce((s, t) => s + (Number(t.fee) || 0), 0);
-    const providers =
-      draft.providers.length > 0
-        ? draft.providers.map((p, i) =>
-            i === 0 ? { ...p, fee: feeSum } : p
-          )
-        : [];
-    updateDraft(problem, { treatments, fee: feeSum, providers });
+    // Doctor fee split stays at 0 until the user enters amounts (separate from treatment fees)
+    updateDraft(problem, { treatments, fee: feeSum });
     setTreatmentQuery((q) => ({ ...q, [problem]: "" }));
     setTreatmentPickerOpen((o) => ({ ...o, [problem]: true }));
   };
@@ -327,10 +322,8 @@ export function FindingsSheet({
       return next;
     });
     const feeSum = treatments.reduce((s, t) => s + (Number(t.fee) || 0), 0);
-    const providers = draft.providers.map((p, i) =>
-      i === 0 ? { ...p, fee: feeSum } : p
-    );
-    updateDraft(problem, { treatments, fee: feeSum, providers });
+    // Keep provider fees independent of treatment catalog amounts
+    updateDraft(problem, { treatments, fee: feeSum });
   };
 
   const removeTreatment = (problem: string, rowId: string) => {
@@ -339,10 +332,7 @@ export function FindingsSheet({
     if (!draft) return;
     const treatments = draft.treatments.filter((t) => t.id !== rowId);
     const feeSum = treatments.reduce((s, t) => s + (Number(t.fee) || 0), 0);
-    const providers = draft.providers.map((p, i) =>
-      i === 0 ? { ...p, fee: feeSum } : p
-    );
-    updateDraft(problem, { treatments, fee: feeSum, providers });
+    updateDraft(problem, { treatments, fee: feeSum });
   };
 
   const canSaveFindings = useMemo(() => {
@@ -557,7 +547,8 @@ export function FindingsSheet({
               (s, p) => s + (Number(p.fee) || 0),
               0
             );
-            const totalDisplay = feeSum || providerSum || d.fee || 0;
+            // Treatment fees + doctor fees (provider split starts at 0 until entered)
+            const totalDisplay = feeSum + providerSum;
 
             return (
               <View
@@ -847,8 +838,8 @@ export function FindingsSheet({
                       facilityId={facilityId}
                       defaultDoctorId={defaultDoctorId}
                       disabled={locked}
-                      additionalFeeTotal={0}
-                      showTotal={false}
+                      additionalFeeTotal={feeSum}
+                      showTotal
                       value={d.providers}
                       onChange={(next) =>
                         updateDraft(problem, { providers: next })

@@ -1,31 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
+    Modal,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
 } from "react-native";
 
 import { Button, DateField, Segmented, TextField, TimeField } from "@/ui";
-import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
-import { ToothBadge } from "./ToothBadge";
+import { formatConditionLabel } from "../problems";
 import type {
-  DentalTreatmentPlanRow,
-  DiagnosisDetailsEntry,
-  PlanStatus,
-  SelectedActualItem,
-  TreatmentCatalogItem,
+    DentalTreatmentPlanRow,
+    DiagnosisDetailsEntry,
+    PlanStatus,
+    SelectedActualItem,
+    TreatmentCatalogItem,
 } from "../types";
 import {
-  clampDateToToday,
-  normalizeFee,
-  normalizeTimeHHmm,
-  randomId,
-  todayYmd,
-  toDateOnly,
+    clampDateToToday,
+    normalizeFee,
+    normalizeTimeHHmm,
+    providerFeeSum,
+    randomId,
+    selectedActualsTreatmentFee,
+    toDateOnly,
+    todayYmd,
 } from "../utils";
-import { formatConditionLabel } from "../problems";
+import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
+import { ToothBadge } from "./ToothBadge";
 
 const STATUS: PlanStatus[] = ["planned", "in-progress", "done"];
 
@@ -41,22 +43,32 @@ type Props = {
   onSave: (row: DentalTreatmentPlanRow) => void;
 };
 
-function sumCatalogFees(
-  names: string[],
-  catalog: TreatmentCatalogItem[]
+function feesMapFrom(
+  finding?: DiagnosisDetailsEntry | null,
+  summary?: DentalTreatmentPlanRow["findingSummary"]
+): Record<string, number> | undefined {
+  return (
+    finding?.suggestedTreatmentFees ??
+    summary?.suggestedTreatmentFees ??
+    undefined
+  );
+}
+
+function combinedPlanTotal(
+  providers: { fee?: number }[],
+  selectedActuals: SelectedActualItem[] | undefined,
+  finding?: DiagnosisDetailsEntry | null,
+  summary?: DentalTreatmentPlanRow["findingSummary"],
+  catalog?: TreatmentCatalogItem[]
 ): number {
-  const seen = new Set<string>();
-  let sum = 0;
-  for (const name of names) {
-    const key = name.trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    const hit = catalog.find((c) => c.name.trim().toLowerCase() === key);
-    if (hit && typeof hit.defaultFee === "number" && hit.defaultFee > 0) {
-      sum += hit.defaultFee;
-    }
-  }
-  return sum;
+  return normalizeFee(
+    providerFeeSum(providers) +
+      selectedActualsTreatmentFee(
+        selectedActuals,
+        feesMapFrom(finding, summary),
+        catalog
+      )
+  );
 }
 
 /** Display DD-MM-YYYY like Practice planned treatment pills. */
@@ -121,10 +133,7 @@ export function buildPlanFromFinding(
     entry.treatmentProviders && entry.treatmentProviders.length > 0
       ? entry.treatmentProviders.map((p) => ({ ...p }))
       : [{ doctorId: "", role: "Primary", fee: 0 }];
-  const totalFee =
-    providers.reduce((s, p) => s + (Number(p.fee) || 0), 0) ||
-    entry.fee ||
-    0;
+  const totalFee = providers.reduce((s, p) => s + (Number(p.fee) || 0), 0);
 
   return {
     id: randomId(),
@@ -143,6 +152,9 @@ export function buildPlanFromFinding(
       conditionsText: formatConditionLabel(entry.problem),
       clinicalNote: entry.note ?? "",
       suggestedOptions: suggested,
+      suggestedTreatmentFees: entry.suggestedTreatmentFees
+        ? { ...entry.suggestedTreatmentFees }
+        : undefined,
     },
     selectedActuals: [],
   };
@@ -161,12 +173,10 @@ export function PlanEditorSheet({
 }: Props) {
   const [draft, setDraft] = useState<DentalTreatmentPlanRow | null>(null);
   const [pickQuery, setPickQuery] = useState("");
-  const catalogSyncedKeyRef = useRef<string>("");
 
   useEffect(() => {
     if (!visible || !row) {
       setDraft(null);
-      catalogSyncedKeyRef.current = "";
       return;
     }
     const suggestedOpts = row.findingSummary?.suggestedOptions;
@@ -175,6 +185,18 @@ export function PlanEditorSheet({
       Array.isArray(suggestedOpts) &&
       suggestedOpts.some((s) => String(s).trim());
     const selectedActuals = row.selectedActuals ?? [];
+    const providers =
+      row.providers?.length > 0
+        ? row.providers.map((p) => ({ ...p }))
+        : [{ doctorId: "", role: "Primary", fee: 0 }];
+    const findingSummary = row.findingSummary
+      ? {
+          ...row.findingSummary,
+          suggestedTreatmentFees:
+            row.findingSummary.suggestedTreatmentFees ??
+            finding?.suggestedTreatmentFees,
+        }
+      : row.findingSummary;
     setDraft({
       ...row,
       plannedTime: normalizeTimeHHmm(row.plannedTime),
@@ -185,49 +207,21 @@ export function PlanEditorSheet({
       status: usesPicker
         ? statusFromSuggestedAndTreated(suggestedOpts, selectedActuals)
         : row.status,
-      providers:
-        row.providers?.length > 0
-          ? row.providers.map((p) => ({ ...p }))
-          : [{ doctorId: "", role: "Primary", fee: row.totalFee ?? 0 }],
+      providers,
+      findingSummary,
       selectedActuals,
+      totalFee: combinedPlanTotal(
+        providers,
+        selectedActuals,
+        finding,
+        findingSummary,
+        catalog
+      ),
     });
     setPickQuery("");
-    catalogSyncedKeyRef.current = "";
+    // Hydrate when the sheet opens for a row; finding/catalog are read for fee snapshot only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, row]);
-
-  // Catalog fee sync for standalone only
-  useEffect(() => {
-    if (!draft || !visible) return;
-    if (draft.diagnosisEntryId?.trim()) return;
-
-    const labels = [
-      ...(draft.treatmentNames ?? []),
-      draft.treatmentName,
-      draft.plannedTreatment,
-    ].filter(Boolean) as string[];
-    const key = labels.join("|");
-    const sum = sumCatalogFees(labels, catalog);
-    if (sum <= 0) return;
-    if (catalogSyncedKeyRef.current === key) return;
-    catalogSyncedKeyRef.current = key;
-
-    setDraft((d) => {
-      if (!d) return d;
-      const providers =
-        d.providers.length > 0
-          ? d.providers.map((p, i) => (i === 0 ? { ...p, fee: sum } : p))
-          : [{ doctorId: defaultDoctorId || "", role: "Primary", fee: sum }];
-      return { ...d, providers, totalFee: sum };
-    });
-  }, [
-    draft?.treatmentName,
-    draft?.treatmentNames?.join("|"),
-    draft?.plannedTreatment,
-    draft?.diagnosisEntryId,
-    catalog,
-    visible,
-    defaultDoctorId,
-  ]);
 
   const suggestions = useMemo(() => {
     const q = pickQuery.trim().toLowerCase();
@@ -245,6 +239,11 @@ export function PlanEditorSheet({
   const selectedActuals = draft.selectedActuals ?? [];
   const remainingSuggested = suggestedOptions.filter(
     (opt) => !selectedActuals.some((a) => a.name === opt)
+  );
+  const treatmentCost = selectedActualsTreatmentFee(
+    selectedActuals,
+    feesMapFrom(finding, draft.findingSummary),
+    catalog
   );
 
   const canSave = usesSuggestedPicker
@@ -269,6 +268,13 @@ export function PlanEditorSheet({
         ...d,
         selectedActuals: next,
         actualTreatment: next.map((a) => a.name).join(", "),
+        totalFee: combinedPlanTotal(
+          d.providers,
+          next,
+          finding,
+          d.findingSummary,
+          catalog
+        ),
         ...(usesPicker
           ? { status: statusFromSuggestedAndTreated(suggested, next) }
           : {}),
@@ -276,47 +282,30 @@ export function PlanEditorSheet({
     });
   };
 
-  const pickTreatment = (name: string, defaultFee?: number) => {
+  const pickTreatment = (name: string) => {
     setDraft((d) => {
       if (!d) return d;
       const names = Array.from(
         new Set([...(d.treatmentNames ?? []), name].filter(Boolean))
       );
-      const sum = sumCatalogFees(names, catalog);
+      // Doctor fee split stays at whatever the user entered (default 0)
       const providers =
         d.providers.length > 0
-          ? d.providers.map((p, i) => {
-              if (i !== 0) return p;
-              if (d.diagnosisEntryId?.trim()) return p;
-              const nextFee =
-                sum > 0
-                  ? sum
-                  : typeof defaultFee === "number" && defaultFee > 0
-                    ? defaultFee
-                    : p.fee;
-              return { ...p, fee: nextFee };
-            })
-          : [
-              {
-                doctorId: "",
-                role: "Primary",
-                fee:
-                  sum > 0
-                    ? sum
-                    : typeof defaultFee === "number" && defaultFee > 0
-                      ? defaultFee
-                      : 0,
-              },
-            ];
-      const totalFee = providers.reduce((s, p) => s + (p.fee || 0), 0);
-      catalogSyncedKeyRef.current = names.join("|");
+          ? d.providers
+          : [{ doctorId: "", role: "Primary", fee: 0 }];
       return {
         ...d,
         treatmentName: names[0] ?? name,
         treatmentNames: names,
         plannedTreatment: names.join(", "),
         providers,
-        totalFee,
+        totalFee: combinedPlanTotal(
+          providers,
+          d.selectedActuals,
+          finding,
+          d.findingSummary,
+          catalog
+        ),
       };
     });
     setPickQuery("");
@@ -329,10 +318,13 @@ export function PlanEditorSheet({
       role: p.role?.trim() || "Primary",
       fee: normalizeFee(Number(p.fee) || 0),
     }));
-    const totalFee =
-      draft.totalFee != null && Number.isFinite(draft.totalFee)
-        ? normalizeFee(draft.totalFee)
-        : providers.reduce((s, p) => s + p.fee, 0);
+    const totalFee = combinedPlanTotal(
+      providers,
+      draft.selectedActuals,
+      finding,
+      draft.findingSummary,
+      catalog
+    );
     onSave({
       ...draft,
       providers,
@@ -524,9 +516,7 @@ export function PlanEditorSheet({
                         {suggestions.map((item) => (
                           <Pressable
                             key={item.id}
-                            onPress={() =>
-                              pickTreatment(item.name, item.defaultFee)
-                            }
+                            onPress={() => pickTreatment(item.name)}
                             className="border-b border-neutral-100 px-3 py-2.5"
                           >
                             <Text className="text-sm text-neutral-900">
@@ -605,17 +595,21 @@ export function PlanEditorSheet({
             </Text>
             <Text className="text-[11px] leading-snug text-neutral-500">
               {isLinked
-                ? "Doctor and role follow the diagnosis chart; fee amounts match that split until you change them here."
-                : "Fee amounts are editable — set each provider's share as needed."}
+                ? "Treated treatment costs plus doctor fees make the total. Doctor fee split starts at 0 until you enter amounts."
+                : "Fee amounts are editable — doctor fees start at 0 and are separate from treatment costs."}
             </Text>
             <ProviderFeeSplitEditor
               facilityId={facilityId}
               defaultDoctorId={defaultDoctorId}
               value={draft.providers}
+              additionalFeeTotal={isLinked ? treatmentCost : 0}
               onChange={(providers) => {
-                const totalFee = providers.reduce(
-                  (s, p) => s + normalizeFee(Number(p.fee) || 0),
-                  0
+                const totalFee = combinedPlanTotal(
+                  providers,
+                  draft.selectedActuals,
+                  finding,
+                  draft.findingSummary,
+                  catalog
                 );
                 setDraft((d) => (d ? { ...d, providers, totalFee } : d));
               }}

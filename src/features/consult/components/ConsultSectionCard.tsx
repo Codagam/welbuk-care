@@ -25,7 +25,12 @@ export function ConsultSectionCard({
   };
 
   return (
-    <View onLayout={onLayout} collapsable={false} className="gap-3">
+    <View
+      onLayout={onLayout}
+      collapsable={false}
+      style={{ width: "100%", flexDirection: "column", gap: 12 }}
+      className="w-full flex-col gap-3"
+    >
       <View className="gap-0.5 px-1">
         <Text className="text-xl font-semibold text-neutral-900">{title}</Text>
         {subtitle ? (

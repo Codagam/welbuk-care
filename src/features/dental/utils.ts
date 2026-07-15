@@ -448,8 +448,86 @@ export function entriesToPostBody(entries: DiagnosisDetailsEntry[]) {
   }));
 }
 
+/** Look up fee for one treatment name from finding map or catalog. */
+export function feeForTreatmentName(
+  name: string,
+  fees?: Record<string, number> | null,
+  catalog?: { name: string; defaultFee?: number }[]
+): number {
+  const key = name.trim().toLowerCase();
+  if (!key) return 0;
+  if (fees) {
+    const exact = fees[name];
+    if (typeof exact === "number" && Number.isFinite(exact) && exact >= 0) {
+      return exact;
+    }
+    const hit = Object.entries(fees).find(
+      ([k]) => k.trim().toLowerCase() === key
+    );
+    if (hit && Number.isFinite(hit[1]) && hit[1] >= 0) return hit[1];
+  }
+  const cat = catalog?.find((c) => c.name.trim().toLowerCase() === key);
+  if (cat && typeof cat.defaultFee === "number" && cat.defaultFee > 0) {
+    return cat.defaultFee;
+  }
+  return 0;
+}
+
+/** Sum of catalog/finding fees for treatments moved to Treated. */
+export function selectedActualsTreatmentFee(
+  selectedActuals: { name: string }[] | undefined,
+  fees?: Record<string, number> | null,
+  catalog?: { name: string; defaultFee?: number }[]
+): number {
+  const seen = new Set<string>();
+  let sum = 0;
+  for (const a of selectedActuals ?? []) {
+    const n = String(a.name ?? "").trim();
+    const k = n.toLowerCase();
+    if (!n || seen.has(k)) continue;
+    seen.add(k);
+    sum += feeForTreatmentName(n, fees, catalog);
+  }
+  return normalizeFee(sum);
+}
+
+export function providerFeeSum(
+  providers: { fee?: number }[] | undefined
+): number {
+  return normalizeFee(
+    (providers ?? []).reduce((s, p) => s + (Number(p.fee) || 0), 0)
+  );
+}
+
+/**
+ * Billable plan total = treated treatment costs + doctor fee split.
+ * For linked rows with selectedActuals, always recompute so older provider-only
+ * totals still pick up treatment costs.
+ */
+export function planRowBillableFee(
+  row: DentalTreatmentPlanRow,
+  findingFees?: Record<string, number> | null,
+  catalog?: { name: string; defaultFee?: number }[]
+): number {
+  const providerSum = providerFeeSum(row.providers);
+  const fees =
+    findingFees ?? row.findingSummary?.suggestedTreatmentFees ?? undefined;
+  const treatmentSum = selectedActualsTreatmentFee(
+    row.selectedActuals,
+    fees,
+    catalog
+  );
+  if (row.diagnosisEntryId && (row.selectedActuals?.length ?? 0) > 0) {
+    return normalizeFee(treatmentSum + providerSum);
+  }
+  if (row.totalFee != null && Number.isFinite(row.totalFee)) {
+    return normalizeFee(row.totalFee);
+  }
+  return providerSum;
+}
+
 export function isPlanBillable(row: DentalTreatmentPlanRow): boolean {
-  const fee = row.totalFee ?? row.providers.reduce((s, p) => s + (p.fee || 0), 0);
+  const fee = planRowBillableFee(row);
   return row.status === "done" || (row.status === "in-progress" && fee > 0);
 }
 

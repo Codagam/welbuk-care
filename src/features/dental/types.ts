@@ -60,6 +60,8 @@ export type DentalTreatmentPlanRow = {
     conditionsText: string;
     clinicalNote: string;
     suggestedOptions: string[];
+    /** Snapshot of finding treatment fees for billing when treatments are done. */
+    suggestedTreatmentFees?: Record<string, number>;
   } | null;
   selectedActuals?: SelectedActualItem[];
   linkedFollowUpAppointmentId?: string;

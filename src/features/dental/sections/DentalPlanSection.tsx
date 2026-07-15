@@ -5,18 +5,24 @@ import { Button } from "@/ui";
 import { PlanEditorSheet } from "../components/PlanEditorSheet";
 import { useDentalConsult } from "../DentalConsultContext";
 import type { DentalTreatmentPlanRow } from "../types";
-import { isPlanBillable, randomId, todayYmd } from "../utils";
+import { isPlanBillable, planRowBillableFee, randomId, todayYmd } from "../utils";
 
 export function DentalPlanSection() {
   const dental = useDentalConsult();
   const [editRow, setEditRow] = useState<DentalTreatmentPlanRow | null>(null);
 
+  const feesFor = (row: DentalTreatmentPlanRow) =>
+    planRowBillableFee(
+      row,
+      row.diagnosisEntryId
+        ? dental.entries.find((e) => e.id === row.diagnosisEntryId)
+            ?.suggestedTreatmentFees
+        : undefined,
+      dental.catalog
+    );
+
   const billable = dental.planItems.filter(isPlanBillable);
-  const total = billable.reduce(
-    (s, i) =>
-      s + (i.totalFee ?? i.providers.reduce((a, p) => a + (p.fee || 0), 0)),
-    0
-  );
+  const total = billable.reduce((s, i) => s + feesFor(i), 0);
 
   const addStandalone = () => {
     setEditRow({
@@ -55,9 +61,7 @@ export function DentalPlanSection() {
         </Text>
       ) : (
         dental.planItems.map((it) => {
-          const fee =
-            it.totalFee ??
-            it.providers.reduce((s, p) => s + (p.fee || 0), 0);
+          const fee = feesFor(it);
           return (
             <Pressable
               key={it.id}

@@ -11,13 +11,13 @@ import {
 
 import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
 import { SectionNavigator } from "@/features/consult/components/SectionNavigator";
+import { PlanOfCareSection } from "@/features/consult/plan-of-care/PlanOfCareSection";
 import {
   CONSULT_SECTION_IDS,
   type SectionNavItem,
 } from "@/features/consult/sectionIds";
 import { NotesSection } from "@/features/consult/sections/NotesSection";
 import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
-import { PrescriptionsSection } from "@/features/consult/sections/PrescriptionsSection";
 import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHeader";
 import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
@@ -146,7 +146,8 @@ export default function ConsultScreen() {
 
   const content = (
     <View
-      className="mx-auto w-full max-w-3xl gap-8"
+      style={{ width: "100%", maxWidth: 1152, alignSelf: "center", flexDirection: "column", gap: 32 }}
+      className="mx-auto w-full max-w-6xl flex-col gap-8"
       collapsable={false}
     >
       <ConsultSectionCard
@@ -199,13 +200,18 @@ export default function ConsultScreen() {
       <ConsultSectionCard
         id={CONSULT_SECTION_IDS.plan}
         title="Plan of care"
-        subtitle="Prescriptions and complete visit"
+        subtitle="Prescription, labs, notes, follow-up, and complete"
         onLayoutY={onSectionLayout}
       >
-        <PrescriptionsSection
+        <PlanOfCareSection
           consultationId={id}
           appointmentId={appointmentId}
           patientId={resolvedPatientId}
+          patientName={header?.name}
+          patientAge={header?.age ?? patient?.age ?? undefined}
+          patientPhone={header?.phone ?? patient?.phone ?? undefined}
+          doctorId={consultDoctorId ?? user?.id}
+          doctorName={user?.name ?? user?.email}
         />
       </ConsultSectionCard>
     </View>

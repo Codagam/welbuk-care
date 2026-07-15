@@ -10,7 +10,8 @@ export type UploadPurpose =
   | "care_recording"
   | "patient_document"
   | "consult_report"
-  | "patient_lab_report";
+  | "patient_lab_report"
+  | "consult_prescription";
 
 export interface UploadContext {
   facilityId?: string;
