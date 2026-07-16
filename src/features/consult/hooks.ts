@@ -51,7 +51,12 @@ export function useSaveVitals(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vitals: Partial<Vitals>) => saveVitals(id, vitals),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["vitals", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vitals", id] });
+      // Backend moves appointment SCHEDULED → WAITING after vitals save.
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["queue"] });
+    },
   });
 }
 

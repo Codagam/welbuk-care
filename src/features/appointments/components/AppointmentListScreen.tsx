@@ -22,7 +22,7 @@ import {
   useAppointmentListState,
   useOpenConsult,
 } from "../hooks/useAppointmentList";
-import { canOpenConsultFromMenu } from "../lib/appointmentGates";
+import { canOpenAppointmentFromList } from "../lib/appointmentGates";
 import type { Appointment } from "../types";
 
 function doctorWelcomeName(name: string): string {
@@ -72,10 +72,10 @@ export function AppointmentListScreen() {
     : "Welcome";
 
   const onOpen = async (appt: Appointment) => {
-    if (!canOpenConsultFromMenu(appt)) {
+    if (!canOpenAppointmentFromList(appt)) {
       Alert.alert(
         "Consult unavailable",
-        "Open Consult is available for Waiting, In Progress, or Completed visits today."
+        "Only today's appointments can be opened. Scheduled visits become available on the day of the visit; follow-up fees and time slots must be completed first."
       );
       return;
     }

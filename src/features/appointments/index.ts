@@ -13,6 +13,7 @@ export {
 } from "./hooks/useAppointmentList";
 export { buildSearchParams, defaultListFilters } from "./lib/buildSearchParams";
 export {
+  canOpenAppointmentFromList,
   canOpenConsultFromMenu,
   isAppointmentFollowUp,
   isFollowUpAwaitingTimeSlot,

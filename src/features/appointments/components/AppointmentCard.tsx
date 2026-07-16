@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { fullName } from "@/features/patients/utils";
 import type { Appointment } from "../types";
 import {
-  canOpenConsultFromMenu,
+  canOpenAppointmentFromList,
   formatAppointmentDate,
   formatDoctorNameForDisplay,
   formatTime12h,
@@ -49,7 +49,7 @@ function AppointmentCardInner({
   const end = formatTime12h(appointment.endTime);
   const timeLabel =
     start && end ? `${start} – ${end}` : start || "—";
-  const canOpen = canOpenConsultFromMenu(appointment);
+  const canOpen = canOpenAppointmentFromList(appointment);
   const followUp = isAppointmentFollowUp(appointment);
   const awaitingSlot = isFollowUpAwaitingTimeSlot(appointment);
   const comingSoon =

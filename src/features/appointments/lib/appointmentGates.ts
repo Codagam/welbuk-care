@@ -108,6 +108,36 @@ export function canOpenConsultFromMenu(appointment: Appointment): boolean {
   );
 }
 
+/**
+ * Primary row open action — web "Add Vital" (pre-vital, today) plus ⋮ "Open Consult".
+ * @see practice/Welbuk_/components/appointments/list.tsx
+ */
+export function canOpenAppointmentFromList(
+  appointment: Appointment
+): boolean {
+  const followUpFeeDueAfterSlot = isFollowUpFeeDueAfterSlotSet(appointment);
+  if (followUpFeeDueAfterSlot) return false;
+  if (isFollowUpAwaitingTimeSlot(appointment)) return false;
+  if (!isAppointmentOnToday(appointment)) return false;
+
+  const appointmentStatus = normalizeStatusToken(appointment.status);
+  if (
+    appointmentStatus === "WAITING" ||
+    appointmentStatus === "IN_PROGRESS" ||
+    appointmentStatus === "COMPLETED"
+  ) {
+    return true;
+  }
+
+  if (isPreConsultVitalStatus(appointment.status)) {
+    if (!appointment.appointmentDate && !appointment.startTime) return false;
+    if (isAppointmentInFuture(appointment)) return false;
+    return true;
+  }
+
+  return false;
+}
+
 export function canDownloadAppointmentInvoice(
   appointment: Appointment
 ): boolean {
