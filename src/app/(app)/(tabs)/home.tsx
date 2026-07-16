@@ -1,6 +1,7 @@
 import { ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import { HeaderActions } from "@/features/header";
 import { Button, Screen } from "@/ui";
 import { timeOfDayGreeting, userDisplayName } from "@/lib/auth/roles";
 import {
@@ -20,20 +21,23 @@ export default function MoreScreen() {
     <Screen>
       <ScrollView>
         <View className="mx-auto w-full max-w-3xl gap-6 p-6">
-          <View className="gap-1">
-            <Text className="text-sm text-neutral-500">
-              {greetName
-                ? `${timeOfDayGreeting()}, ${greetName}`
-                : "Signed in"}
-            </Text>
-            <Text className="text-2xl font-bold text-neutral-900">
-              {facility?.name ?? "Welbuk Care"}
-            </Text>
-            {facility?.consultationType ? (
-              <Text className="text-xs uppercase tracking-wide text-brand">
-                {facility.consultationType} practice
+          <View className="flex-row items-start justify-between gap-3">
+            <View className="min-w-0 flex-1 gap-1">
+              <Text className="text-sm text-neutral-500">
+                {greetName
+                  ? `${timeOfDayGreeting()}, ${greetName}`
+                  : "Signed in"}
               </Text>
-            ) : null}
+              <Text className="text-2xl font-bold text-neutral-900">
+                {facility?.name ?? "Welbuk Care"}
+              </Text>
+              {facility?.consultationType ? (
+                <Text className="text-xs uppercase tracking-wide text-brand">
+                  {facility.consultationType} practice
+                </Text>
+              ) : null}
+            </View>
+            <HeaderActions light={false} />
           </View>
 
           <View className="gap-3">

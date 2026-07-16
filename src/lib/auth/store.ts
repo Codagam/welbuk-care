@@ -7,6 +7,7 @@ import { create } from "zustand";
 
 import { setTokenProvider, setUnauthorizedHandler } from "@/lib/api/client";
 import { fetchMe } from "@/lib/api/endpoints/auth";
+import { clearFacilityQrCache } from "@/features/header/facilityQrCache";
 import { authProvider } from "./practice-provider";
 import { activeFacilityStorage, sessionStorage } from "./secure-storage";
 import type { Facility, LoginInput, Session } from "./types";
@@ -115,7 +116,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // best-effort
     }
-    await Promise.all([sessionStorage.clear(), activeFacilityStorage.clear()]);
+    await Promise.all([
+      sessionStorage.clear(),
+      activeFacilityStorage.clear(),
+      clearFacilityQrCache(),
+    ]);
     set({ session: null, activeFacilityId: null, status: "anon", sessionExpired: false });
   },
 
@@ -168,6 +173,7 @@ setUnauthorizedHandler(() => {
   if (useAuthStore.getState().status === "anon") return;
   sessionStorage.clear().catch(() => {});
   activeFacilityStorage.clear().catch(() => {});
+  clearFacilityQrCache().catch(() => {});
   useAuthStore.setState({
     session: null,
     activeFacilityId: null,

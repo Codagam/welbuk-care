@@ -15,6 +15,7 @@ import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { userDisplayName } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
+import { HeaderActions } from "@/features/header";
 import { AppointmentCard } from "./AppointmentCard";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
 import {
@@ -125,17 +126,20 @@ export function AppointmentListScreen() {
             ) : null}
           </View>
 
-          {facility?.name ? (
-            <View className="max-w-[42%] shrink-0 flex-row items-center justify-end gap-2 pt-1">
-              <Ionicons name="business-outline" size={18} color="#FFFFFF" />
-              <Text
-                className="shrink text-right text-sm font-medium text-brand-foreground"
-                numberOfLines={2}
-              >
-                {facility.name}
-              </Text>
-            </View>
-          ) : null}
+          <View className="max-w-[48%] shrink-0 items-end gap-2 pt-0.5">
+            <HeaderActions light />
+            {facility?.name ? (
+              <View className="flex-row items-center justify-end gap-2">
+                <Ionicons name="business-outline" size={18} color="#FFFFFF" />
+                <Text
+                  className="shrink text-right text-sm font-medium text-brand-foreground"
+                  numberOfLines={2}
+                >
+                  {facility.name}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       </View>
 
