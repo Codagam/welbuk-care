@@ -17,7 +17,7 @@ export default function SelectFacilityScreen() {
 
   const choose = async (id: string) => {
     await setActiveFacility(id);
-    router.replace("/home");
+    router.replace("/queue");
   };
 
   return (

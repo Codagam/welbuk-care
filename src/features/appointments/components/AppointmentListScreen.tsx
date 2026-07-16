@@ -3,8 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
-  Pressable,
   Text,
   View,
 } from "react-native";
@@ -16,11 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { userDisplayName } from "@/lib/auth/roles";
-import {
-  useActiveFacility,
-  useAuthStore,
-  useAuthUser,
-} from "@/lib/auth/store";
+import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { AppointmentCard } from "./AppointmentCard";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
 import {
@@ -42,9 +36,7 @@ export function AppointmentListScreen() {
   const insets = useSafeAreaInsets();
   const facility = useActiveFacility();
   const user = useAuthUser();
-  const signOut = useAuthStore((s) => s.signOut);
   const [openingId, setOpeningId] = useState<string | null>(null);
-  const [accountOpen, setAccountOpen] = useState(false);
 
   const {
     search,
@@ -133,26 +125,17 @@ export function AppointmentListScreen() {
             ) : null}
           </View>
 
-          <View className="max-w-[42%] shrink-0 items-end gap-2 pt-1">
-            {facility?.name ? (
-              <View className="flex-row items-center justify-end gap-2">
-                <Ionicons name="business-outline" size={18} color="#FFFFFF" />
-                <Text
-                  className="shrink text-right text-sm font-medium text-brand-foreground"
-                  numberOfLines={2}
-                >
-                  {facility.name}
-                </Text>
-              </View>
-            ) : null}
-            <Pressable
-              onPress={() => setAccountOpen(true)}
-              hitSlop={8}
-              className="h-9 w-9 items-center justify-center rounded-full bg-white/15"
-            >
-              <Ionicons name="ellipsis-horizontal" size={18} color="#FFFFFF" />
-            </Pressable>
-          </View>
+          {facility?.name ? (
+            <View className="max-w-[42%] shrink-0 flex-row items-center justify-end gap-2 pt-1">
+              <Ionicons name="business-outline" size={18} color="#FFFFFF" />
+              <Text
+                className="shrink text-right text-sm font-medium text-brand-foreground"
+                numberOfLines={2}
+              >
+                {facility.name}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -215,45 +198,6 @@ export function AppointmentListScreen() {
           onEndReachedThreshold={0.4}
         />
       )}
-
-      <Modal
-        visible={accountOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAccountOpen(false)}
-      >
-        <Pressable
-          className="flex-1 justify-end bg-black/40"
-          onPress={() => setAccountOpen(false)}
-        >
-          <Pressable
-            className="rounded-t-3xl bg-white px-6 pb-8 pt-4"
-            onPress={(e) => e.stopPropagation?.()}
-          >
-            <Text className="mb-3 text-lg font-semibold text-neutral-900">
-              Account
-            </Text>
-            <Pressable
-              className="h-12 justify-center border-b border-neutral-100"
-              onPress={() => {
-                setAccountOpen(false);
-                router.replace("/select-facility");
-              }}
-            >
-              <Text className="text-base text-neutral-800">Switch facility</Text>
-            </Pressable>
-            <Pressable
-              className="h-12 justify-center"
-              onPress={() => {
-                setAccountOpen(false);
-                void signOut();
-              }}
-            >
-              <Text className="text-base text-red-600">Sign out</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </Screen>
   );
 }

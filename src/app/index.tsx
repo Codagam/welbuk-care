@@ -21,5 +21,5 @@ export default function Index() {
 
   if (status === "anon") return <Redirect href="/login" />;
   if (!activeFacilityId) return <Redirect href="/select-facility" />;
-  return <Redirect href="/home" />;
+  return <Redirect href="/queue" />;
 }
