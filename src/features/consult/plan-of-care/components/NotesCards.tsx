@@ -19,13 +19,17 @@ function NotesShell({
   return (
     <View
       style={fill ? { flex: 1 } : undefined}
-      className="w-full flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-5"
+      className="w-full flex-col gap-3.5 rounded-2xl border border-neutral-200 bg-white p-5"
     >
       <View className="flex-row items-center gap-2">
-        <Text className="text-base font-semibold text-neutral-900">{title}</Text>
+        <Text className="text-base font-semibold tracking-tight text-neutral-900">
+          {title}
+        </Text>
         {badge ? (
-          <View className="rounded-full bg-brand-50 px-2 py-0.5">
-            <Text className="text-[10px] font-semibold text-brand">{badge}</Text>
+          <View className="rounded-md bg-brand-50 px-2 py-0.5">
+            <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand">
+              {badge}
+            </Text>
           </View>
         ) : null}
       </View>

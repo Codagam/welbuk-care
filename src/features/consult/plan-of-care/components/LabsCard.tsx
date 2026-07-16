@@ -15,17 +15,21 @@ export function LabsCard({
       className="w-full flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-5"
     >
       <View className="flex-row items-center justify-between gap-3">
-        <View className="gap-0.5">
-          <Text className="text-lg font-semibold text-neutral-900">Labs</Text>
-          <Text className="text-xs text-neutral-500">
+        <View className="min-w-0 flex-1 gap-0.5">
+          <Text className="text-lg font-semibold tracking-tight text-neutral-900">
+            Labs
+          </Text>
+          <Text className="text-sm text-neutral-500">
             Patient lab reports on file
           </Text>
         </View>
         <Pressable
           onPress={onRefer}
-          className="rounded-xl bg-brand px-4 py-2.5 active:bg-brand-600"
+          accessibilityRole="button"
+          accessibilityLabel="Refer"
+          className="min-h-[48px] min-w-[96px] items-center justify-center rounded-xl bg-brand px-5 py-3 active:bg-brand-600"
         >
-          <Text className="text-sm font-semibold text-white">Refer</Text>
+          <Text className="text-base font-semibold text-white">Refer</Text>
         </Pressable>
       </View>
 

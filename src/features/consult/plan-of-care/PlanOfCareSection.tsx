@@ -1,7 +1,12 @@
-import { useMemo, useState } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Alert,
-  Linking,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -17,9 +22,9 @@ import {
 import { useDentalFlushOptional } from "@/features/dental/DentalConsultContext";
 import { describeError } from "@/lib/api/errors";
 import { useAuthUser, useFacilityId } from "@/lib/auth/store";
-import { config } from "@/lib/config";
 
 import { CompleteBar } from "./components/CompleteBar";
+import { CompleteFooter } from "./components/CompleteFooter";
 import { FollowUpSheet } from "./components/FollowUpSheet";
 import { LabsCard } from "./components/LabsCard";
 import {
@@ -55,10 +60,6 @@ function normalizeAllergies(
     .filter((a): a is { name: string; severity?: string } => !!a?.name?.trim());
 }
 
-function isMongoId(id: string | undefined | null): boolean {
-  return !!id && /^[a-f\d]{24}$/i.test(id.trim());
-}
-
 export function PlanOfCareSection({
   consultationId,
   appointmentId,
@@ -69,6 +70,7 @@ export function PlanOfCareSection({
   patientPhone,
   doctorId,
   doctorName,
+  onStickyFooter,
 }: {
   consultationId: string;
   appointmentId?: string;
@@ -79,6 +81,8 @@ export function PlanOfCareSection({
   patientPhone?: string;
   doctorId?: string;
   doctorName?: string;
+  /** Renders the Complete CTA as a sticky screen footer (UI placement only). */
+  onStickyFooter?: (footer: ReactNode | null) => void;
 }) {
   const { width } = useWindowDimensions();
   /** Tablet / landscape: notes share a horizontal row */
@@ -120,15 +124,6 @@ export function PlanOfCareSection({
   const patientLine =
     patientName ||
     (patientId ? `Patient ${patientId.slice(-6)}` : "Patient");
-
-  const openInvoice = () => {
-    const base = config.practiceUrl.replace(/\/$/, "");
-    const pid = (patientId ?? "").trim();
-    const url = isMongoId(pid)
-      ? `${base}/billing?patientId=${encodeURIComponent(pid)}`
-      : `${base}/billing`;
-    void Linking.openURL(url);
-  };
 
   const runComplete = async () => {
     setError(null);
@@ -187,20 +182,41 @@ export function PlanOfCareSection({
     await proceed();
   };
 
+  const completeDisabled = allergy.allergyPrintBlocked;
+  const completeDisabledReason = completeDisabled
+    ? "Acknowledge allergy warnings to unlock Complete."
+    : null;
+
+  const runCompleteRef = useRef(runComplete);
+  runCompleteRef.current = runComplete;
+
+  useLayoutEffect(() => {
+    if (!onStickyFooter) return;
+    onStickyFooter(
+      <CompleteFooter
+        onComplete={() => void runCompleteRef.current()}
+        completing={complete.isPending}
+        completeDisabled={completeDisabled}
+        completeDisabledReason={completeDisabledReason}
+        error={error}
+        done={done}
+      />
+    );
+    return () => onStickyFooter(null);
+  }, [
+    onStickyFooter,
+    complete.isPending,
+    completeDisabled,
+    completeDisabledReason,
+    error,
+    done,
+  ]);
+
   return (
     <View style={styles.stack}>
       <CompleteBar
         followUpSummaryLine={followUpLine}
         onFollowUp={() => setFollowUpOpen(true)}
-        onInvoice={openInvoice}
-        onComplete={() => void runComplete()}
-        completing={complete.isPending}
-        completeDisabled={allergy.allergyPrintBlocked}
-        completeDisabledReason={
-          allergy.allergyPrintBlocked
-            ? "Acknowledge allergy warnings to unlock Complete."
-            : null
-        }
       />
 
       {draft.isLoading || summaryQ.isLoading ? (
@@ -237,6 +253,7 @@ export function PlanOfCareSection({
             <DoctorNotesCard
               consultationId={consultationId}
               initialNotes={summaryQ.data?.doctorNotes}
+              fill
             />
           </View>
           <View style={styles.notesCol}>
@@ -244,6 +261,7 @@ export function PlanOfCareSection({
               consultationId={consultationId}
               initialSummary={summaryQ.data?.summary}
               isAIGenerated={!!summaryQ.data?.isAIGenerated}
+              fill
             />
           </View>
         </View>
@@ -261,8 +279,16 @@ export function PlanOfCareSection({
         </View>
       )}
 
-      {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
-      {done ? <Text className="text-sm text-emerald-600">{done}</Text> : null}
+      {!onStickyFooter ? (
+        <CompleteFooter
+          onComplete={() => void runComplete()}
+          completing={complete.isPending}
+          completeDisabled={completeDisabled}
+          completeDisabledReason={completeDisabledReason}
+          error={error}
+          done={done}
+        />
+      ) : null}
 
       <FollowUpSheet
         open={followUpOpen}
@@ -301,7 +327,7 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "column",
     alignItems: "stretch",
-    gap: 20,
+    gap: 24,
   },
   stackTight: {
     width: "100%",
@@ -318,7 +344,7 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 16,
+    gap: 20,
   },
   notesCol: {
     flex: 1,

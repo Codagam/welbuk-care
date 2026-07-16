@@ -31,10 +31,12 @@ export function ConsultSectionCard({
       style={{ width: "100%", flexDirection: "column", gap: 12 }}
       className="w-full flex-col gap-3"
     >
-      <View className="gap-0.5 px-1">
-        <Text className="text-xl font-semibold text-neutral-900">{title}</Text>
+      <View className="gap-1 px-1">
+        <Text className="text-xl font-semibold tracking-tight text-neutral-900">
+          {title}
+        </Text>
         {subtitle ? (
-          <Text className="text-sm text-neutral-500">{subtitle}</Text>
+          <Text className="text-sm leading-5 text-neutral-500">{subtitle}</Text>
         ) : null}
       </View>
       {children}

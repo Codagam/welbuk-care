@@ -1,5 +1,11 @@
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -106,6 +112,7 @@ export default function ConsultScreen() {
     () => navItems[0]?.id ?? CONSULT_SECTION_IDS.consultation
   );
   const scrollingToRef = useRef<string | null>(null);
+  const [stickyFooter, setStickyFooter] = useState<ReactNode>(null);
 
   const onSectionLayout = useCallback((sectionId: string, y: number) => {
     sectionY.current[sectionId] = y;
@@ -200,7 +207,7 @@ export default function ConsultScreen() {
       <ConsultSectionCard
         id={CONSULT_SECTION_IDS.plan}
         title="Plan of care"
-        subtitle="Prescription, labs, notes, follow-up, and complete"
+        subtitle="Prescription, labs, notes, and follow-up"
         onLayoutY={onSectionLayout}
       >
         <PlanOfCareSection
@@ -212,6 +219,7 @@ export default function ConsultScreen() {
           patientPhone={header?.phone ?? patient?.phone ?? undefined}
           doctorId={consultDoctorId ?? user?.id}
           doctorName={user?.name ?? user?.email}
+          onStickyFooter={setStickyFooter}
         />
       </ConsultSectionCard>
     </View>
@@ -239,34 +247,42 @@ export default function ConsultScreen() {
             facilityId={facility?.id}
             defaultDoctorId={consultDoctorId ?? user?.id ?? ""}
           >
+            <View className="flex-1">
+              <ScrollView
+                ref={scrollRef}
+                className="flex-1"
+                keyboardShouldPersistTaps="handled"
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                contentContainerStyle={{
+                  paddingHorizontal: 16,
+                  paddingTop: 16,
+                  paddingBottom: 32,
+                }}
+              >
+                {content}
+              </ScrollView>
+              {stickyFooter}
+            </View>
+          </DentalConsultProvider>
+        ) : (
+          <View className="flex-1">
             <ScrollView
               ref={scrollRef}
+              className="flex-1"
               keyboardShouldPersistTaps="handled"
               onScroll={onScroll}
               scrollEventThrottle={16}
               contentContainerStyle={{
                 paddingHorizontal: 16,
                 paddingTop: 16,
-                paddingBottom: 112,
+                paddingBottom: 32,
               }}
             >
               {content}
             </ScrollView>
-          </DentalConsultProvider>
-        ) : (
-          <ScrollView
-            ref={scrollRef}
-            keyboardShouldPersistTaps="handled"
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-            contentContainerStyle={{
-              paddingHorizontal: 16,
-              paddingTop: 16,
-              paddingBottom: 112,
-            }}
-          >
-            {content}
-          </ScrollView>
+            {stickyFooter}
+          </View>
         )}
       </KeyboardAvoidingView>
     </Screen>
