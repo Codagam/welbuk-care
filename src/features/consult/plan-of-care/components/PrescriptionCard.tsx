@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { useCardFocusHighlight } from "@/features/consult/useCardFocusHighlight";
 import type { DrugCatalogItem } from "@/lib/api/endpoints/drugs";
 import { ApiError, describeError } from "@/lib/api/errors";
 import { Button, Segmented, TextField } from "@/ui";
@@ -68,8 +69,14 @@ export function PrescriptionCard({
   /** Wider table / toolbar layout for tablets */
   tabletLayout?: boolean;
 }) {
+  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
+
   return (
-    <View className="w-full gap-4 rounded-2xl border border-neutral-200 bg-white p-5">
+    <View
+      className={`w-full gap-4 rounded-2xl border bg-white p-5 ${
+        highlighted ? "border-brand" : "border-neutral-200"
+      }`}
+    >
       <View
         className={
           tabletLayout
@@ -244,6 +251,8 @@ export function PrescriptionCard({
         onAdd={onAdd}
         drugs={drugs}
         tabletLayout={tabletLayout}
+        onFieldFocus={onFocus}
+        onFieldBlur={onBlur}
       />
     </View>
   );
@@ -254,11 +263,15 @@ function AddMedicineForm({
   onAdd,
   drugs,
   tabletLayout = false,
+  onFieldFocus,
+  onFieldBlur,
 }: {
   existingNames: string[];
   onAdd: (item: Omit<PlanPrescription, "id"> & { id?: string }) => void;
   drugs: DrugCatalogItem[];
   tabletLayout?: boolean;
+  onFieldFocus?: () => void;
+  onFieldBlur?: () => void;
 }) {
   const [name, setName] = useState("");
   const [dose, setDose] = useState("1-0-1");
@@ -351,7 +364,11 @@ function AddMedicineForm({
         setDrugId(undefined);
         setShowHints(true);
       }}
-      onFocus={() => setShowHints(true)}
+      onFocus={() => {
+        setShowHints(true);
+        onFieldFocus?.();
+      }}
+      onBlur={onFieldBlur}
       onPressIn={() => setShowHints(true)}
       placeholder="Tap to pick medicine…"
     />
@@ -389,7 +406,11 @@ function AddMedicineForm({
                   setDrugId(undefined);
                   setShowHints(true);
                 }}
-                onFocus={() => setShowHints(true)}
+                onFocus={() => {
+                  setShowHints(true);
+                  onFieldFocus?.();
+                }}
+                onBlur={onFieldBlur}
                 onPressIn={() => setShowHints(true)}
                 placeholder="Tap to pick medicine…"
               />
@@ -400,6 +421,8 @@ function AddMedicineForm({
                 value={dose}
                 onChangeText={setDose}
                 placeholder="1-0-1"
+                onFocus={onFieldFocus}
+                onBlur={onFieldBlur}
               />
             </View>
             <View className="w-36 gap-1.5">
@@ -413,6 +436,8 @@ function AddMedicineForm({
                 onChangeText={setDuration}
                 keyboardType="number-pad"
                 placeholder="5"
+                onFocus={onFieldFocus}
+                onBlur={onFieldBlur}
               />
             </View>
             <View className="gap-1.5">
@@ -436,6 +461,8 @@ function AddMedicineForm({
               value={dose}
               onChangeText={setDose}
               placeholder="1-0-1"
+              onFocus={onFieldFocus}
+              onBlur={onFieldBlur}
             />
             <TextField
               containerClassName="flex-1"
@@ -444,6 +471,8 @@ function AddMedicineForm({
               onChangeText={setDuration}
               keyboardType="number-pad"
               placeholder="5"
+              onFocus={onFieldFocus}
+              onBlur={onFieldBlur}
             />
           </View>
 

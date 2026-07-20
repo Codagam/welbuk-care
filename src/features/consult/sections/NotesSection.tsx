@@ -5,6 +5,7 @@ import { Button, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { useDiagnosisSearch, useSaveSummary, useSummary } from "../hooks";
 import type { DiagnosisCode } from "../types";
+import { useCardFocusHighlight } from "../useCardFocusHighlight";
 
 type SoapKey = "subjective" | "objective" | "assessment" | "plan";
 
@@ -18,6 +19,7 @@ const SOAP: { key: SoapKey; label: string; placeholder: string }[] = [
 export function NotesSection({ consultationId }: { consultationId: string }) {
   const q = useSummary(consultationId);
   const save = useSaveSummary(consultationId);
+  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
   const [form, setForm] = useState<Record<SoapKey, string>>({
     subjective: "",
     objective: "",
@@ -69,7 +71,11 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
   };
 
   return (
-    <View className="gap-4 rounded-2xl border border-neutral-200 bg-white p-5">
+    <View
+      className={`gap-4 rounded-2xl border bg-white p-5 ${
+        highlighted ? "border-brand" : "border-neutral-200"
+      }`}
+    >
       <View className="flex-row items-center justify-between">
         <Text className="text-lg font-semibold text-neutral-900">
           Clinical notes (SOAP)
@@ -92,6 +98,8 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
           placeholder={f.placeholder}
           multiline
           style={{ minHeight: 72, textAlignVertical: "top" }}
+          onFocus={onFocus}
+          onBlur={onBlur}
         />
       ))}
 
@@ -122,6 +130,8 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
           onChangeText={setDxQuery}
           placeholder="Search ICD-10 code or term…"
           autoCapitalize="none"
+          onFocus={onFocus}
+          onBlur={onBlur}
         />
         {dxQuery.trim().length >= 2 ? (
           <View className="overflow-hidden rounded-xl border border-neutral-200">

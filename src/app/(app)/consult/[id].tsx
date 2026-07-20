@@ -1,12 +1,14 @@
 import { useLocalSearchParams } from "expo-router";
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -113,6 +115,20 @@ export default function ConsultScreen() {
   );
   const scrollingToRef = useRef<string | null>(null);
   const [stickyFooter, setStickyFooter] = useState<ReactNode>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const showEvt =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const onSectionLayout = useCallback((sectionId: string, y: number) => {
     sectionY.current[sectionId] = y;
@@ -236,9 +252,9 @@ export default function ConsultScreen() {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         className="flex-1"
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         {dental ? (
           <DentalConsultProvider
@@ -252,17 +268,19 @@ export default function ConsultScreen() {
                 ref={scrollRef}
                 className="flex-1"
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                automaticallyAdjustKeyboardInsets
                 onScroll={onScroll}
                 scrollEventThrottle={16}
                 contentContainerStyle={{
                   paddingHorizontal: 16,
                   paddingTop: 16,
-                  paddingBottom: 32,
+                  paddingBottom: keyboardOpen ? 40 : 32,
                 }}
               >
                 {content}
               </ScrollView>
-              {stickyFooter}
+              {!keyboardOpen ? stickyFooter : null}
             </View>
           </DentalConsultProvider>
         ) : (
@@ -271,17 +289,19 @@ export default function ConsultScreen() {
               ref={scrollRef}
               className="flex-1"
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              automaticallyAdjustKeyboardInsets
               onScroll={onScroll}
               scrollEventThrottle={16}
               contentContainerStyle={{
                 paddingHorizontal: 16,
                 paddingTop: 16,
-                paddingBottom: 32,
+                paddingBottom: keyboardOpen ? 40 : 32,
               }}
             >
               {content}
             </ScrollView>
-            {stickyFooter}
+            {!keyboardOpen ? stickyFooter : null}
           </View>
         )}
       </KeyboardAvoidingView>

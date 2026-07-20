@@ -13,6 +13,7 @@ import { Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { useConversation } from "../hooks";
 import type { ConversationMessage } from "../types";
+import { useCardFocusHighlight } from "../useCardFocusHighlight";
 
 /**
  * Web-parity Live Conversation: load messages + local mic recording flag.
@@ -26,6 +27,7 @@ export function LiveConversationPanel({
   const q = useConversation(consultationId);
   const [isRecording, setIsRecording] = useState(false);
   const [summaryText, setSummaryText] = useState("");
+  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
 
   const messages: ConversationMessage[] = q.data ?? [];
 
@@ -40,7 +42,11 @@ export function LiveConversationPanel({
   };
 
   return (
-    <View className="min-h-[300px] overflow-hidden rounded-lg border border-neutral-200 bg-white">
+    <View
+      className={`min-h-[300px] overflow-hidden rounded-lg border bg-white ${
+        highlighted ? "border-brand" : "border-neutral-200"
+      }`}
+    >
       <View className="flex-row items-center justify-between border-b border-neutral-200 bg-neutral-50 px-3 py-2">
         <View className="flex-row items-center gap-2">
           <Ionicons name="mic-outline" size={16} color="#6b7280" />
@@ -127,8 +133,12 @@ export function LiveConversationPanel({
               onChangeText={setSummaryText}
               placeholder="Conversation summary will appear here..."
               multiline
-              className="min-h-[96px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900"
+              className={`min-h-[96px] rounded-lg border bg-white px-3 py-2 text-sm text-neutral-900 ${
+                highlighted ? "border-brand" : "border-neutral-200"
+              }`}
               textAlignVertical="top"
+              onFocus={onFocus}
+              onBlur={onBlur}
             />
             <Button label="Summarize" onPress={handleSummarize} />
             <Pressable

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Text, TextInput, type TextInputProps, View } from "react-native";
 
 export interface TextFieldProps extends TextInputProps {
@@ -12,8 +13,18 @@ export function TextField({
   containerClassName = "",
   multiline,
   style,
+  onFocus,
+  onBlur,
   ...props
 }: TextFieldProps) {
+  const [focused, setFocused] = useState(false);
+
+  const borderClass = error
+    ? "border-red-400"
+    : focused
+      ? "border-brand"
+      : "border-neutral-300";
+
   return (
     <View className={`gap-1.5 ${containerClassName}`}>
       {label ? (
@@ -24,7 +35,7 @@ export function TextField({
         multiline={multiline}
         className={`rounded-xl border bg-white px-4 text-base text-neutral-900 ${
           multiline ? "py-3" : "h-12"
-        } ${error ? "border-red-400" : "border-neutral-300"}`}
+        } ${borderClass}`}
         style={[
           multiline
             ? { textAlignVertical: "top" }
@@ -37,6 +48,14 @@ export function TextField({
           style,
         ]}
         {...props}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
       />
       {error ? <Text className="text-xs text-red-500">{error}</Text> : null}
     </View>

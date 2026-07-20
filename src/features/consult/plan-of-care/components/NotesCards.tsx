@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 
 import { useSaveSummary } from "@/features/consult/hooks";
+import { useCardFocusHighlight } from "@/features/consult/useCardFocusHighlight";
 import { describeError } from "@/lib/api/errors";
 import { Button, TextField } from "@/ui";
 
@@ -9,17 +10,21 @@ function NotesShell({
   title,
   badge,
   fill,
+  highlighted,
   children,
 }: {
   title: string;
   badge?: string;
   fill?: boolean;
+  highlighted?: boolean;
   children: ReactNode;
 }) {
   return (
     <View
       style={fill ? { flex: 1 } : undefined}
-      className="w-full flex-col gap-3.5 rounded-2xl border border-neutral-200 bg-white p-5"
+      className={`w-full flex-col gap-3.5 rounded-2xl border bg-white p-5 ${
+        highlighted ? "border-brand" : "border-neutral-200"
+      }`}
     >
       <View className="flex-row items-center gap-2">
         <Text className="text-base font-semibold tracking-tight text-neutral-900">
@@ -49,6 +54,7 @@ export function DoctorNotesCard({
   fill?: boolean;
 }) {
   const save = useSaveSummary(consultationId);
+  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
   const [notes, setNotes] = useState(initialNotes ?? "");
   const [savedBaseline, setSavedBaseline] = useState(initialNotes ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +86,7 @@ export function DoctorNotesCard({
   };
 
   return (
-    <NotesShell title="Doctor Notes" fill={fill}>
+    <NotesShell title="Doctor Notes" fill={fill} highlighted={highlighted}>
       <TextField
         value={notes}
         onChangeText={setNotes}
@@ -89,6 +95,8 @@ export function DoctorNotesCard({
         numberOfLines={8}
         textAlignVertical="top"
         style={{ minHeight: fill ? 160 : 120 }}
+        onFocus={onFocus}
+        onBlur={onBlur}
       />
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {done ? <Text className="text-sm text-emerald-600">Saved.</Text> : null}
@@ -128,6 +136,7 @@ export function ConversationSummaryCard({
   fill?: boolean;
 }) {
   const save = useSaveSummary(consultationId);
+  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
   const [summary, setSummary] = useState(initialSummary ?? "");
   const [savedBaseline, setSavedBaseline] = useState(initialSummary ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +172,7 @@ export function ConversationSummaryCard({
       title="Conversation Summary"
       badge={isAIGenerated ? "AI" : undefined}
       fill={fill}
+      highlighted={highlighted}
     >
       <TextField
         value={summary}
@@ -172,6 +182,8 @@ export function ConversationSummaryCard({
         numberOfLines={8}
         textAlignVertical="top"
         style={{ minHeight: fill ? 160 : 120 }}
+        onFocus={onFocus}
+        onBlur={onBlur}
       />
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {done ? <Text className="text-sm text-emerald-600">Saved.</Text> : null}
