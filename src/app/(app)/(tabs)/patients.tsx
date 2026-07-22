@@ -8,7 +8,8 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { Button, Screen, TextField } from "@/ui";
+import { Screen, TextField } from "@/ui";
+// import { Button } from "@/ui"; // used by "+ New" when re-enabled
 import { describeError } from "@/lib/api/errors";
 import { usePatientSearch } from "@/features/patients/hooks";
 import type { Patient } from "@/features/patients/types";
@@ -32,11 +33,13 @@ export default function PatientsScreen() {
       <View className="gap-3 border-b border-neutral-200 bg-white px-6 pb-4 pt-6">
         <View className="flex-row items-center justify-between">
           <Text className="text-2xl font-bold text-neutral-900">Patients</Text>
+          {/* New patient hidden for now
           <Button
             label="+ New"
             size="md"
             onPress={() => router.push("/patients/new")}
           />
+          */}
         </View>
         <TextField
           placeholder="Search name, phone, ABHA…"

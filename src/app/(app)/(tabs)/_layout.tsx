@@ -1,5 +1,5 @@
-import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
 import { useTranslation } from "react-i18next";
 
 const BRAND = "#FD006A";
@@ -42,13 +42,15 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Care tab hidden for now — keep screen registered so the route still resolves. */}
       <Tabs.Screen
         name="care"
         options={{
-          title: t("nav.care"),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pulse-outline" color={color} size={size} />
-          ),
+          href: null,
+          // title: t("nav.care"),
+          // tabBarIcon: ({ color, size }) => (
+          //   <Ionicons name="pulse-outline" color={color} size={size} />
+          // ),
         }}
       />
       <Tabs.Screen

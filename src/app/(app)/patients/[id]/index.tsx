@@ -1,7 +1,9 @@
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+// import { useRouter } from "expo-router";
 
-import { Button, Screen, TopBar } from "@/ui";
+import { Screen, TopBar } from "@/ui";
+// import { Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { usePatient } from "@/features/patients/hooks";
 import {
@@ -11,7 +13,7 @@ import {
   initials,
   normalizeGender,
 } from "@/features/patients/utils";
-import { PatientCareActions } from "@/features/care/PatientCareActions";
+// import { PatientCareActions } from "@/features/care/PatientCareActions";
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -26,25 +28,26 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  // const router = useRouter();
   const q = usePatient(id);
 
   return (
     <Screen>
       <TopBar
         title="Patient"
-        right={
-          q.data ? (
-            <Button
-              label="Edit"
-              size="md"
-              variant="outline"
-              onPress={() =>
-                router.push({ pathname: "/patients/[id]/edit", params: { id } })
-              }
-            />
-          ) : undefined
-        }
+        // Edit patient hidden for now
+        // right={
+        //   q.data ? (
+        //     <Button
+        //       label="Edit"
+        //       size="md"
+        //       variant="outline"
+        //       onPress={() =>
+        //         router.push({ pathname: "/patients/[id]/edit", params: { id } })
+        //       }
+        //     />
+        //   ) : undefined
+        // }
       />
       {q.isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -103,10 +106,12 @@ export default function PatientDetailScreen() {
               </View>
             ) : null}
 
+            {/* Care section hidden for now
             <View className="gap-3 pt-2">
               <Text className="text-lg font-semibold text-neutral-900">Care</Text>
               <PatientCareActions patientId={q.data.id} />
             </View>
+            */}
           </View>
         </ScrollView>
       )}
