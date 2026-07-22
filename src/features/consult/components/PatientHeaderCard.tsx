@@ -24,7 +24,7 @@ type Props = {
 export function PatientHeaderCard({ header, loading, error }: Props) {
   if (loading) {
     return (
-      <View className="items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 px-4 py-6">
+      <View className="items-center justify-center rounded-2xl border border-neutral-200 px-4 py-6">
         <ActivityIndicator color="#FD006A" />
         <Text className="mt-2 text-xs text-neutral-500">Loading patient…</Text>
       </View>
@@ -43,7 +43,7 @@ export function PatientHeaderCard({ header, loading, error }: Props) {
 
   if (!header) {
     return (
-      <View className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+      <View className="rounded-2xl border border-neutral-200 px-4 py-4">
         <Text className="text-sm text-neutral-500">
           Patient details unavailable for this consultation.
         </Text>
@@ -55,7 +55,7 @@ export function PatientHeaderCard({ header, loading, error }: Props) {
   const showAge = age > 0;
 
   return (
-    <View className="gap-3 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3">
+    <View className="gap-3 rounded-2xl border border-neutral-200 px-4 py-3">
       <View className="flex-row items-start gap-3">
         <View className="mt-0.5 h-10 w-10 items-center justify-center rounded-full bg-brand">
           <Ionicons name="person" size={20} color="#fff" />
@@ -72,7 +72,7 @@ export function PatientHeaderCard({ header, loading, error }: Props) {
             {patientId != null ? (
               <View
                 style={{ flexShrink: 0 }}
-                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
+                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5"
               >
                 <Text numberOfLines={1} className="text-xs text-neutral-500">
                   Patient ID:
@@ -92,7 +92,7 @@ export function PatientHeaderCard({ header, loading, error }: Props) {
             {dobFormatted || showAge ? (
               <View
                 style={{ flexShrink: 0 }}
-                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
+                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5"
               >
                 <Text numberOfLines={1} className="text-xs text-neutral-500">
                   Date of Birth:
@@ -112,7 +112,7 @@ export function PatientHeaderCard({ header, loading, error }: Props) {
             {phone ? (
               <View
                 style={{ flexShrink: 0 }}
-                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
+                className="flex-row items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5"
               >
                 <Text numberOfLines={1} className="text-xs text-neutral-500">
                   Phone:

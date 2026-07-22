@@ -66,7 +66,7 @@ export function SectionChrome({
   return (
     <View
       className={`gap-3 p-3 ${
-        emptyBorder ? "border-l-4 border-l-brand" : "bg-brand-50"
+        emptyBorder ? "border-l-4 border-l-brand" : "border border-neutral-200"
       }${className ? ` ${className}` : ""}`}
     >
       {collapsible ? (

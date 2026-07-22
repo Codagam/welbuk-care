@@ -46,9 +46,11 @@ export function DentalDiagnosisPanel() {
   return (
     <View className="gap-6">
       <View className="gap-3 rounded-2xl border border-neutral-200 bg-white p-4">
-        <Text className="text-base font-semibold text-neutral-900">
-          Dental Chart
-        </Text>
+        <View className="rounded-lg bg-brand px-3 py-2">
+          <Text className="text-base font-semibold text-white">
+            Dental Chart
+          </Text>
+        </View>
         <TeethChart
           teethStates={dental.chartTeethStates}
           selectedTooth={dental.selectedTooth}
@@ -62,9 +64,9 @@ export function DentalDiagnosisPanel() {
       </View>
 
       <View className="gap-3">
-        <Text className="text-base font-semibold text-neutral-900">
-          Findings
-        </Text>
+        <View className="rounded-lg bg-brand px-3 py-2">
+          <Text className="text-base font-semibold text-white">Findings</Text>
+        </View>
         <FindingsTable
           entries={dental.entries}
           planItems={dental.planItems}
