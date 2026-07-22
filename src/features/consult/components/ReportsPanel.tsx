@@ -36,7 +36,7 @@ function AccordionBlock({
   title,
   icon,
   badge,
-  defaultOpen = true,
+  defaultOpen = false,
   children,
 }: {
   title: string;
@@ -47,11 +47,28 @@ function AccordionBlock({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <View className="overflow-hidden rounded-lg border border-neutral-200">
+    <View
+      className={`overflow-hidden rounded-lg border ${
+        open ? "border-neutral-200" : "border-dashed border-neutral-300"
+      }`}
+    >
       <Pressable
         onPress={() => setOpen((v) => !v)}
-        className="flex-row items-center gap-2 px-3 py-3 active:bg-neutral-50"
+        className={`flex-row items-center gap-2 px-3 py-3 active:bg-neutral-50 ${
+          open ? "bg-white" : "bg-neutral-50"
+        }`}
       >
+        <View
+          className={`h-6 w-6 items-center justify-center rounded-full ${
+            open ? "bg-neutral-200" : "bg-brand/15"
+          }`}
+        >
+          <Ionicons
+            name={open ? "chevron-down" : "chevron-forward"}
+            size={14}
+            color={open ? "#6b7280" : "#FD006A"}
+          />
+        </View>
         <Ionicons name={icon} size={16} color="#374151" />
         <Text className="flex-1 text-sm font-semibold text-neutral-900">
           {title}
@@ -61,11 +78,16 @@ function AccordionBlock({
             <Text className="text-xs text-neutral-700">{badge}</Text>
           </View>
         ) : null}
-        <Ionicons
-          name={open ? "chevron-up" : "chevron-down"}
-          size={16}
-          color="#9ca3af"
-        />
+        {open ? (
+          <Ionicons name="remove-outline" size={16} color="#9ca3af" />
+        ) : (
+          <View className="flex-row items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5">
+            <Ionicons name="add" size={12} color="#FD006A" />
+            <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand">
+              Closed
+            </Text>
+          </View>
+        )}
       </Pressable>
       {open ? <View className="px-3 pb-3">{children}</View> : null}
     </View>

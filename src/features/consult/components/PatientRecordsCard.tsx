@@ -69,11 +69,22 @@ export function PatientRecordsCard({
     history.length > 0 || meds.length > 0 || allergyItems.length > 0;
 
   if (!hasAny) {
-    return <SectionChrome title="Patient Records" emptyBorder />;
+    return (
+      <SectionChrome
+        title="Patient Records"
+        emptyBorder
+        collapsible
+        defaultOpen={false}
+      >
+        <Text className="text-xs italic text-neutral-500">
+          No patient records
+        </Text>
+      </SectionChrome>
+    );
   }
 
   return (
-    <SectionChrome title="Patient Records">
+    <SectionChrome title="Patient Records" collapsible defaultOpen={false}>
       <View className="divide-y divide-neutral-200 rounded-lg bg-white p-3">
         {history.length > 0 ? (
           <View className="flex-row items-start gap-2 py-2">
