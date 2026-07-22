@@ -36,7 +36,6 @@ export function PatientDetailsSection({
   const vitalsQ = useVitals(consultationId);
   const historyQ = usePatientHistory(patientId, consultationId);
   const aiEnableQ = useAiEnable();
-  console.log("aiEnableQ", aiEnableQ.data);
   const aiEnabled = aiEnableQ.data === true;
 
   const displayVitals = mergeDisplayVitals(

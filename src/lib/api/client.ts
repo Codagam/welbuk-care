@@ -111,12 +111,12 @@ export async function api<T = unknown>(req: ApiRequest): Promise<T> {
     if (err instanceof Error && err.name === "AbortError") throw err;
     const underlying =
       err instanceof Error ? err.message : typeof err === "string" ? err : "unknown";
-    console.log("[api] fetch FAILED (no HTTP response)", {
-      url,
-      method: req.method ?? "GET",
-      underlying,
-      err,
-    });
+    // console.log("[api] fetch FAILED (no HTTP response)", {
+    //   url,
+    //   method: req.method ?? "GET",
+    //   underlying,
+    //   err,
+    // });
     throw new ApiError(`Network request failed: ${underlying}`, {
       status: 0,
       code: "NETWORK",
@@ -128,12 +128,12 @@ export async function api<T = unknown>(req: ApiRequest): Promise<T> {
   const data = text ? safeJson(text) : null;
 
   if (!res.ok) {
-    console.log("[api] HTTP error", {
-      url,
-      method: req.method ?? "GET",
-      status: res.status,
-      body: data,
-    });
+    // console.log("[api] HTTP error", {
+    //  url,
+    //    method: req.method ?? "GET",
+    //   status: res.status,
+    //   body: data,
+    // });
     const message = extractMessage(data, res.status);
     const serverCode =
       data && typeof data === "object"

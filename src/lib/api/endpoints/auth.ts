@@ -38,17 +38,17 @@ export async function fetchMe(token?: string): Promise<MeResponse> {
     : await api<MeResponse>({ path: "/api/auth/me" });
 
   // Debug: where role / name / doctorId come from (remove once verified).
-  console.log("[auth] GET /api/auth/me response", JSON.stringify(me, null, 2));
-  console.log("[auth] /me key fields", {
-    name: me.user?.name,
-    displayName: me.user?.displayName,
-    role: me.user?.role,
-    globalRole: me.user?.globalRole,
-    roles: me.user?.roles,
-    roleLabels: me.user?.roleLabels,
-    doctorId: me.user?.doctorId,
-    // NOTE: there is no separate "doctorName" on /me — greeting uses user.name/displayName
-  });
+  // console.log("[auth] GET /api/auth/me response", JSON.stringify(me, null, 2));
+  // console.log("[auth] /me key fields", {
+  //   name: me.user?.name,
+  //   displayName: me.user?.displayName,
+  //   role: me.user?.role,
+  //   globalRole: me.user?.globalRole,
+  //   roles: me.user?.roles,
+  //   roleLabels: me.user?.roleLabels,
+  //   doctorId: me.user?.doctorId,
+  //   // NOTE: there is no separate "doctorName" on /me — greeting uses user.name/displayName
+  // });
 
   return me;
 }
@@ -67,13 +67,13 @@ export async function loginRequest(input: LoginInput): Promise<{
   });
 
   // Debug: login payload (no doctorId here — /me supplies it).
-  console.log("[auth] POST /api/auth/login response", JSON.stringify(data, null, 2));
-  console.log("[auth] login key fields", {
-    name: data.user?.name,
-    displayName: data.user?.displayName,
-    role: data.user?.role,
-    doctorId: data.user?.doctorId ?? "(not on login — need /me)",
-  });
+  // console.log("[auth] POST /api/auth/login response", JSON.stringify(data, null, 2));
+  // console.log("[auth] login key fields", {
+  //   name: data.user?.name,
+  //   displayName: data.user?.displayName,
+  //   role: data.user?.role,
+  //   doctorId: data.user?.doctorId ?? "(not on login — need /me)",
+  // });
 
   const token = data.authToken ?? data.token;
   if (!token) {
@@ -84,11 +84,11 @@ export async function loginRequest(input: LoginInput): Promise<{
   try {
     const me = await fetchMe(token);
     if (me.authenticated !== false && me.user) {
-      console.log("[auth] session user after /me", {
-        greetingName: me.user.displayName || me.user.name,
-        role: me.user.globalRole ?? me.user.role,
-        doctorId: me.user.doctorId,
-      });
+      // console.log("[auth] session user after /me", {
+      //   greetingName: me.user.displayName || me.user.name,
+      //   role: me.user.globalRole ?? me.user.role,
+      //   doctorId: me.user.doctorId,
+      // });
       return {
         token,
         user: me.user,
