@@ -1,22 +1,22 @@
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { describeError } from "@/lib/api/errors";
-import { PatientHeaderCard } from "../components/PatientHeaderCard";
 import { AppointmentIntakeCard } from "../components/AppointmentIntakeCard";
 import { LiveConversationPanel } from "../components/LiveConversationPanel";
+import { PatientHeaderCard } from "../components/PatientHeaderCard";
 import { PatientRecordsCard } from "../components/PatientRecordsCard";
 import { ReportsPanel } from "../components/ReportsPanel";
 import { VitalsCard } from "../components/VitalsCard";
-import { usePatientHistory, useVitals } from "../hooks";
+import type { ConsultAppointment } from "../consultPatient";
+import { useAiEnable, usePatientHistory, useVitals } from "../hooks";
+import type { PatientHeaderProps } from "../patientHeader";
 import type { DoctorNote, LabReportItem } from "../types";
 import { mergeDisplayVitals } from "../vitalsFormat";
-import type { PatientHeaderProps } from "../patientHeader";
-import type { ConsultAppointment } from "../consultPatient";
 
 /**
  * Vertical Patient Details stack matching Practice web modules:
- * Identity → Vitals → Appointment Intake → Patient Records →
- * Live Conversation (audio) → Reports.
+ * Identity → Vitals | Appointment Intake (half/half) → Patient Records →
+ * Live Conversation (audio, when ai_enable) → Reports.
  */
 export function PatientDetailsSection({
   consultationId,
@@ -35,6 +35,9 @@ export function PatientDetailsSection({
 }) {
   const vitalsQ = useVitals(consultationId);
   const historyQ = usePatientHistory(patientId, consultationId);
+  const aiEnableQ = useAiEnable();
+  console.log("aiEnableQ", aiEnableQ.data);
+  const aiEnabled = aiEnableQ.data === true;
 
   const displayVitals = mergeDisplayVitals(
     vitalsQ.data,
@@ -64,26 +67,32 @@ export function PatientDetailsSection({
         error={headerError}
       />
 
-      {vitalsQ.isLoading && !vitalsQ.data ? (
-        <View className="items-center py-6">
-          <ActivityIndicator color="#FD006A" />
+      <View className="flex-row items-stretch gap-3">
+        <View className="min-w-0 flex-1">
+          {vitalsQ.isLoading && !vitalsQ.data ? (
+            <View className="items-center py-6">
+              <ActivityIndicator color="#FD006A" />
+            </View>
+          ) : vitalsQ.isError && !vitalsQ.data ? (
+            <Text className="px-1 text-sm text-red-500">
+              {describeError(vitalsQ.error)}
+            </Text>
+          ) : (
+            <VitalsCard
+              consultationId={consultationId}
+              vitals={displayVitals}
+              onVitalsUpdate={() => void vitalsQ.refetch()}
+            />
+          )}
         </View>
-      ) : vitalsQ.isError && !vitalsQ.data ? (
-        <Text className="px-1 text-sm text-red-500">
-          {describeError(vitalsQ.error)}
-        </Text>
-      ) : (
-        <VitalsCard
-          consultationId={consultationId}
-          vitals={displayVitals}
-          onVitalsUpdate={() => void vitalsQ.refetch()}
-        />
-      )}
 
-      <AppointmentIntakeCard
-        symptoms={appointment?.symptoms}
-        reason={appointment?.reason}
-      />
+        <View className="min-w-0 flex-1">
+          <AppointmentIntakeCard
+            symptoms={appointment?.symptoms}
+            reason={appointment?.reason}
+          />
+        </View>
+      </View>
 
       {historyQ.isLoading && !historyQ.data ? (
         <View className="items-center py-6">
@@ -103,7 +112,9 @@ export function PatientDetailsSection({
         />
       )}
 
-      <LiveConversationPanel consultationId={consultationId} />
+      {aiEnabled ? (
+        <LiveConversationPanel consultationId={consultationId} />
+      ) : null}
 
       <ReportsPanel
         consultationId={consultationId}

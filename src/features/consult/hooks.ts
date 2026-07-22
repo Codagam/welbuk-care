@@ -24,6 +24,7 @@ import {
   createRecording,
   listRecordings,
 } from "@/lib/api/endpoints/recording";
+import { getSiteConfigEnabled } from "@/lib/api/endpoints/site-config";
 import { useFacilityId } from "@/lib/auth/store";
 import type { ConsultSummary, Vitals } from "./types";
 
@@ -162,6 +163,17 @@ export function useInvalidatePatientHistory(
     qc.invalidateQueries({
       queryKey: ["patient-history", patientId, facilityId, consultationId],
     });
+}
+
+// ---- Site config --------------------------------------------------------
+
+/** Public `ai_enable` flag; defaults to false when missing or on error. */
+export function useAiEnable() {
+  return useQuery({
+    queryKey: ["site-config", "ai_enable"],
+    queryFn: () => getSiteConfigEnabled("ai_enable"),
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 // ---- Conversation -------------------------------------------------------

@@ -61,7 +61,7 @@ export function VitalsCard({
   if (!hasAny) {
     return (
       <>
-        <SectionChrome title="Patient Vitals" emptyBorder>
+        <SectionChrome title="Patient Vitals" emptyBorder className="flex-1">
           <Pressable
             onPress={() => setEditOpen(true)}
             className="h-10 flex-row items-center justify-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 active:border-brand active:bg-brand-50"
@@ -85,6 +85,7 @@ export function VitalsCard({
     <>
       <SectionChrome
         title="Patient Vitals"
+        className="flex-1"
         right={
           <Pressable
             onPress={() => setEditOpen(true)}

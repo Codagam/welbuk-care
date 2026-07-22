@@ -27,7 +27,7 @@ export function AppointmentIntakeCard({
 
   if (!hasAny) {
     return (
-      <SectionChrome title="Appointment Intake" emptyBorder>
+      <SectionChrome title="Appointment Intake" emptyBorder className="flex-1">
         <View className="gap-2.5">
           <View className="flex-row items-center gap-2">
             <Ionicons name="warning-outline" size={16} color="#9ca3af" />
@@ -43,7 +43,7 @@ export function AppointmentIntakeCard({
   }
 
   return (
-    <SectionChrome title="Appointment Intake">
+    <SectionChrome title="Appointment Intake" className="flex-1">
       <View className="gap-2.5 rounded-lg bg-white p-3">
         <View className="flex-row items-start gap-2">
           <Ionicons
