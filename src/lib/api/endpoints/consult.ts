@@ -51,3 +51,17 @@ export function createConsultation(body: {
     body,
   });
 }
+
+/**
+ * Doctor signals front desk they are ready for the next patient.
+ * Does not select/open a consultation — notify only (POST /api/consult/ready-for-next).
+ */
+export function readyForNextPatient(facilityId: string): Promise<{
+  success: boolean;
+}> {
+  return api({
+    path: "/api/consult/ready-for-next",
+    method: "POST",
+    body: { facilityId },
+  });
+}

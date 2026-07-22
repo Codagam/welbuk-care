@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Pressable,
   Text,
   View,
 } from "react-native";
@@ -14,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { userDisplayName } from "@/lib/auth/roles";
-import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
+import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
 import { AppointmentCard } from "./AppointmentCard";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
@@ -22,6 +23,7 @@ import {
   useAppointmentList,
   useAppointmentListState,
   useOpenConsult,
+  useReadyForNext,
 } from "../hooks/useAppointmentList";
 import { canOpenAppointmentFromList } from "../lib/appointmentGates";
 import type { Appointment } from "../types";
@@ -36,6 +38,7 @@ export function AppointmentListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const facility = useActiveFacility();
+  const facilityId = useFacilityId();
   const user = useAuthUser();
   const [openingId, setOpeningId] = useState<string | null>(null);
 
@@ -53,6 +56,10 @@ export function AppointmentListScreen() {
 
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
+  const readyForNext = useReadyForNext();
+
+  /** Same gate as Practice consult list — linked doctor account only. */
+  const isDoctorLogin = Boolean(user?.doctorId);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,6 +78,19 @@ export function AppointmentListScreen() {
   const welcomeTitle = greetName
     ? `Welcome, ${doctorWelcomeName(greetName)}`
     : "Welcome";
+
+  const onReadyForNext = async () => {
+    if (!facilityId) {
+      Alert.alert("Select a facility", "Choose a facility before notifying reception.");
+      return;
+    }
+    try {
+      await readyForNext.mutateAsync();
+      Alert.alert("Front desk notified", "Reception has been told you are ready for the next patient.");
+    } catch (err) {
+      Alert.alert("Could not notify front desk", describeError(err));
+    }
+  };
 
   const onOpen = async (appt: Appointment) => {
     if (!canOpenAppointmentFromList(appt)) {
@@ -141,6 +161,33 @@ export function AppointmentListScreen() {
             ) : null}
           </View>
         </View>
+
+        {isDoctorLogin ? (
+          <View className="mt-4 gap-1.5">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Next Patient"
+              disabled={!facilityId || readyForNext.isPending}
+              onPress={() => void onReadyForNext()}
+              className={`flex-row items-center justify-center gap-2 self-start rounded-xl bg-white px-5 py-2.5 active:bg-white/90 ${
+                !facilityId || readyForNext.isPending ? "opacity-50" : ""
+              }`}
+            >
+              {readyForNext.isPending ? (
+                <ActivityIndicator color="#FD006A" size="small" />
+              ) : (
+                <Ionicons name="arrow-forward" size={16} color="#FD006A" />
+              )}
+              <Text className="text-sm font-semibold text-brand">
+                Next Patient
+              </Text>
+            </Pressable>
+            <Text className="max-w-sm text-xs leading-snug text-white/75">
+              Click Next when the current consultation is completed to inform
+              the reception
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <AppointmentSearchBar

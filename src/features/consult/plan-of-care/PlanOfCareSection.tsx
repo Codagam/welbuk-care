@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 
 import {
   useInvalidatePatientHistory,
@@ -88,6 +89,7 @@ export function PlanOfCareSection({
   /** Tablet / landscape: notes share a horizontal row */
   const tablet = width >= 700;
 
+  const router = useRouter();
   const facilityId = useFacilityId() ?? "";
   const user = useAuthUser();
   const resolvedDoctorId = doctorId || user?.id || "";
@@ -125,6 +127,18 @@ export function PlanOfCareSection({
     patientName ||
     (patientId ? `Patient ${patientId.slice(-6)}` : "Patient");
 
+  const goToQueueAfterComplete = (detail?: string | null) => {
+    const message = detail?.trim()
+      ? detail
+      : "The appointment has been completed.";
+    Alert.alert("Appointment completed", message, [
+      {
+        text: "OK",
+        onPress: () => router.replace("/queue"),
+      },
+    ]);
+  };
+
   const runComplete = async () => {
     setError(null);
     setDone(null);
@@ -158,11 +172,11 @@ export function PlanOfCareSection({
             .filter(Boolean),
           allergyOverrideAck: allergy.allergyOverrideAck,
         });
-        setDone(
-          res.consultationNumber
-            ? `Completed · ${res.consultationNumber}`
-            : "Visit completed."
-        );
+        const doneLabel = res.consultationNumber
+          ? `Completed · ${res.consultationNumber}`
+          : "Visit completed.";
+        setDone(doneLabel);
+        goToQueueAfterComplete(doneLabel);
       } catch (e) {
         setError(describeError(e));
       }

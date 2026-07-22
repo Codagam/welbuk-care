@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 
 import { searchAppointments } from "@/lib/api/endpoints/appointments";
-import { openConsultForAppointment } from "@/lib/api/endpoints/consult";
+import {
+  openConsultForAppointment,
+  readyForNextPatient,
+} from "@/lib/api/endpoints/consult";
 import { isDoctorHome } from "@/lib/auth/roles";
 import { useAuthUser, useFacilityId } from "@/lib/auth/store";
 import {
@@ -122,6 +125,19 @@ export function useOpenConsult() {
   return useMutation({
     mutationFn: (appointmentId: string) =>
       openConsultForAppointment(appointmentId),
+  });
+}
+
+/** Doctor → front-desk “ready for next” notify (does not open a consult). */
+export function useReadyForNext() {
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: () => {
+      if (!facilityId) {
+        throw new Error("Select a facility first");
+      }
+      return readyForNextPatient(facilityId);
+    },
   });
 }
 
