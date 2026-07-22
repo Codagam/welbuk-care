@@ -122,72 +122,81 @@ export function AppointmentListScreen() {
     q.isError &&
     /permission|access denied|appointment\.read/i.test(describeError(q.error));
 
+  const appointmentMeta =
+    totalCount > 0
+      ? `${totalCount} appointment${totalCount === 1 ? "" : "s"} today`
+      : "Today's schedule";
+
   return (
     <Screen edges={["left", "right", "bottom"]}>
       <View
-        className="bg-brand px-6 pb-5"
-        style={{ paddingTop: Math.max(insets.top, 12) + 12 }}
+        className="bg-brand"
+        style={{ paddingTop: Math.max(insets.top, 12) }}
       >
-        <View className="flex-row items-start justify-between gap-4">
-          <View className="min-w-0 flex-1 gap-1">
-            <Text
-              className="text-2xl font-bold text-brand-foreground"
-              numberOfLines={1}
-            >
-              {welcomeTitle}
-            </Text>
-            <Text className="text-sm text-white/90">
-              Here is your appointment list for today.
-            </Text>
-            {totalCount > 0 ? (
-              <Text className="text-xs text-white/75">
-                {totalCount} appointment{totalCount === 1 ? "" : "s"}
-              </Text>
-            ) : null}
-          </View>
-
-          <View className="max-w-[48%] shrink-0 items-end gap-2 pt-0.5">
-            <HeaderActions light />
+        {/* Utility row — facility + tools */}
+        <View className="flex-row items-center justify-between gap-3 px-5 pb-3 pt-2">
+          <View className="min-w-0 flex-1 flex-row items-center gap-2">
             {facility?.name ? (
-              <View className="flex-row items-center justify-end gap-2">
-                <Ionicons name="business-outline" size={18} color="#FFFFFF" />
+              <>
+                <Ionicons name="business-outline" size={16} color="rgba(255,255,255,0.85)" />
                 <Text
-                  className="shrink text-right text-sm font-medium text-brand-foreground"
-                  numberOfLines={2}
+                  className="min-w-0 flex-1 text-sm font-medium text-white/90"
+                  numberOfLines={1}
                 >
                   {facility.name}
                 </Text>
-              </View>
-            ) : null}
+              </>
+            ) : (
+              <Text className="text-sm text-white/70">No facility selected</Text>
+            )}
           </View>
+          <HeaderActions light />
         </View>
 
-        {isDoctorLogin ? (
-          <View className="mt-4 gap-1.5">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Next Patient"
-              disabled={!facilityId || readyForNext.isPending}
-              onPress={() => void onReadyForNext()}
-              className={`flex-row items-center justify-center gap-2 self-start rounded-xl bg-white px-5 py-2.5 active:bg-white/90 ${
-                !facilityId || readyForNext.isPending ? "opacity-50" : ""
-              }`}
+        <View className="mx-5 h-px bg-white/20" />
+
+        {/* Primary row — greeting + Next Patient */}
+        <View className="flex-row items-start justify-between gap-4 px-5 py-4">
+          <View className="min-w-0 flex-1 gap-1">
+            <Text
+              className="text-[22px] font-semibold leading-7 text-brand-foreground"
+              numberOfLines={2}
             >
-              {readyForNext.isPending ? (
-                <ActivityIndicator color="#FD006A" size="small" />
-              ) : (
-                <Ionicons name="arrow-forward" size={16} color="#FD006A" />
-              )}
-              <Text className="text-sm font-semibold text-brand">
-                Next Patient
-              </Text>
-            </Pressable>
-            <Text className="max-w-sm text-xs leading-snug text-white/75">
-              Click Next when the current consultation is completed to inform
-              the reception
+              {welcomeTitle}
+            </Text>
+            <Text className="text-sm text-white/80" numberOfLines={1}>
+              {appointmentMeta}
             </Text>
           </View>
-        ) : null}
+
+          {isDoctorLogin ? (
+            <View className="shrink-0 items-end gap-1.5 pt-0.5">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next Patient"
+                accessibilityHint="Notify reception you are ready for the next patient"
+                disabled={!facilityId || readyForNext.isPending}
+                onPress={() => void onReadyForNext()}
+                className={`h-10 min-w-[132px] flex-row items-center justify-center gap-2 rounded-lg bg-white px-4 shadow-sm active:bg-white/90 ${
+                  !facilityId || readyForNext.isPending ? "opacity-50" : ""
+                }`}
+              >
+                {readyForNext.isPending ? (
+                  <ActivityIndicator color="#FD006A" size="small" />
+                ) : null}
+                <Text className="text-sm font-semibold tracking-wide text-brand">
+                  Next Patient
+                </Text>
+              </Pressable>
+              <Text
+                className="text-right text-[11px] leading-4 text-white/65"
+                numberOfLines={1}
+              >
+                Notify reception when ready
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       <AppointmentSearchBar
