@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { Button, Segmented, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
+import { useDentalFlushOptional } from "@/features/dental/DentalConsultContext";
 import {
   useAddPrescription,
   useDeletePrescription,
@@ -25,6 +26,7 @@ export function PrescriptionsSection({
   const add = useAddPrescription(consultationId);
   const del = useDeletePrescription(consultationId);
   const finalize = useFinalizePrescription(consultationId);
+  const flushDental = useDentalFlushOptional();
 
   const [name, setName] = useState("");
   const [dose, setDose] = useState("1-0-1");
@@ -75,6 +77,13 @@ export function PrescriptionsSection({
       return;
     }
     try {
+      if (flushDental) {
+        const ok = await flushDental();
+        if (!ok) {
+          setError("Could not flush dental chart/plan before complete.");
+          return;
+        }
+      }
       const res = await finalize.mutateAsync({
         consultationId,
         appointmentId,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Switch, Text, View } from "react-native";
 
-import { Button, TextField } from "@/ui";
+import { Button, DateField, TextField } from "@/ui";
 import { Segmented } from "@/ui/Segmented";
 import { ApiError, describeError } from "@/lib/api/errors";
 import { useFacilityId } from "@/lib/auth/store";
@@ -169,13 +169,13 @@ export function PatientForm({ patient, onSaved }: Props) {
       </View>
 
       <View className="gap-1.5">
-        <TextField
+        <DateField
           label="Date of birth"
           value={dobInput}
-          onChangeText={setDobInput}
-          editable={!abhaLocked}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
+          onChange={setDobInput}
+          disabled={abhaLocked}
+          maximumDate={new Date().toISOString().slice(0, 10)}
+          placeholder="Select date of birth"
           error={dobError ?? undefined}
         />
         {age !== null ? (

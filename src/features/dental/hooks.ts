@@ -1,11 +1,20 @@
+/**
+ * Legacy React Query helpers — prefer `useDentalDiagnosis` / DentalConsultProvider.
+ * Kept for any callers that only need a raw GET.
+ */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getDental,
-  saveDentalExam,
-  saveDentalPlan,
+  patchDentalPlan,
+  putDentalFull,
 } from "@/lib/api/endpoints/dental";
-import type { TeethStates, TreatmentPlanItem } from "./types";
+import type { DentalTreatmentPlanRow, TeethStates } from "./types";
+import {
+  deriveTeethStates,
+  entriesToPostBody,
+  treatmentOrderFromEntries,
+} from "./utils";
 
 export function useDental(consultationId: string) {
   return useQuery({
@@ -22,16 +31,29 @@ export function useSaveDentalExam(consultationId: string) {
       teethStates: TeethStates;
       treatmentEntries?: unknown[];
       treatmentOrder?: string[];
-    }) => saveDentalExam(consultationId, payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["dental", consultationId] }),
+      treatmentPlanItems?: DentalTreatmentPlanRow[];
+    }) =>
+      putDentalFull({
+        consultationId,
+        teethStates: payload.teethStates,
+        treatmentOrder: payload.treatmentOrder ?? Object.keys(payload.teethStates),
+        treatmentEntries: payload.treatmentEntries ?? [],
+        treatmentPlanItems: payload.treatmentPlanItems ?? [],
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["dental", consultationId] }),
   });
 }
 
 export function useSaveDentalPlan(consultationId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (items: TreatmentPlanItem[]) =>
-      saveDentalPlan(consultationId, items),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["dental", consultationId] }),
+    mutationFn: (items: DentalTreatmentPlanRow[]) =>
+      patchDentalPlan(consultationId, items),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["dental", consultationId] }),
   });
 }
+
+export { deriveTeethStates, entriesToPostBody, treatmentOrderFromEntries };
+export { useDentalDiagnosis } from "./useDentalDiagnosis";

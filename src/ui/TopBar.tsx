@@ -11,7 +11,7 @@ export interface TopBarProps {
 
 export function TopBar({ title, subtitle, right, onBack }: TopBarProps) {
   const router = useRouter();
-  const back = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/home")));
+  const back = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/queue")));
   return (
     <View className="flex-row items-center gap-2 border-b border-neutral-200 bg-white px-3 py-3">
       <Pressable

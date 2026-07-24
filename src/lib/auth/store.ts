@@ -7,6 +7,7 @@ import { create } from "zustand";
 
 import { setTokenProvider, setUnauthorizedHandler } from "@/lib/api/client";
 import { fetchMe } from "@/lib/api/endpoints/auth";
+import { clearFacilityQrCache } from "@/features/header/facilityQrCache";
 import { authProvider } from "./practice-provider";
 import { activeFacilityStorage, sessionStorage } from "./secure-storage";
 import type { Facility, LoginInput, Session } from "./types";
@@ -38,15 +39,60 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       sessionStorage.get<Session>(),
       activeFacilityStorage.get(),
     ]);
-    if (session?.token) {
+    if (!session?.token) {
+      set({ session: null, activeFacilityId: null, status: "anon" });
+      return;
+    }
+
+    // Stay in "loading" until /me enriches doctorId — avoids a flash of
+    // facility-wide appointments for doctor sessions.
+    try {
+      // Temporarily expose the token so fetchMe can attach Bearer.
+      set({ session, activeFacilityId: activeFacilityId ?? null });
+      const me = await fetchMe();
+      if (me.authenticated === false || !me.user) {
+        await Promise.all([
+          sessionStorage.clear(),
+          activeFacilityStorage.clear(),
+        ]);
+        set({
+          session: null,
+          activeFacilityId: null,
+          status: "anon",
+          sessionExpired: true,
+        });
+        return;
+      }
+      const updated: Session = {
+        ...session,
+        user: me.user,
+        facilities: me.facilities ?? session.facilities,
+      };
+      let nextFacilityId = activeFacilityId ?? null;
+      if (
+        nextFacilityId &&
+        !updated.facilities.some((f) => f.id === nextFacilityId)
+      ) {
+        nextFacilityId =
+          updated.facilities.length === 1 ? updated.facilities[0].id : null;
+        if (nextFacilityId) await activeFacilityStorage.set(nextFacilityId);
+        else await activeFacilityStorage.clear();
+      }
+      await sessionStorage.set(updated);
+      set({
+        session: updated,
+        activeFacilityId: nextFacilityId,
+        status: "authed",
+        sessionExpired: false,
+      });
+    } catch {
+      // Offline /me failure: use cached session (may lack doctorId until next refresh).
       set({
         session,
         activeFacilityId: activeFacilityId ?? null,
         status: "authed",
         sessionExpired: false,
       });
-    } else {
-      set({ session: null, activeFacilityId: null, status: "anon" });
     }
   },
 
@@ -70,7 +116,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // best-effort
     }
-    await Promise.all([sessionStorage.clear(), activeFacilityStorage.clear()]);
+    await Promise.all([
+      sessionStorage.clear(),
+      activeFacilityStorage.clear(),
+      clearFacilityQrCache(),
+    ]);
     set({ session: null, activeFacilityId: null, status: "anon", sessionExpired: false });
   },
 
@@ -84,15 +134,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!session) return;
     try {
       const me = await fetchMe();
-      if (me.facilities) {
-        const updated: Session = {
-          ...session,
-          facilities: me.facilities,
-          user: me.user ?? session.user,
-        };
-        await sessionStorage.set(updated);
-        set({ session: updated });
-      }
+      if (me.authenticated === false || !me.user) return;
+      const updated: Session = {
+        ...session,
+        facilities: me.facilities ?? session.facilities,
+        user: me.user,
+      };
+      await sessionStorage.set(updated);
+      set({ session: updated });
     } catch {
       // non-fatal; keep the cached facility list
     }
@@ -112,6 +161,10 @@ export const useFacilityId = (): string | null =>
 
 export const useAuthUser = () => useAuthStore((s) => s.session?.user ?? null);
 
+/** Clinical Doctor.id for appointment scoping; null for staff/admins without a doctor link. */
+export const useDoctorId = (): string | null =>
+  useAuthStore((s) => s.session?.user?.doctorId ?? null);
+
 // ---- Wire the API client to the store (once, at module load) -------------
 
 setTokenProvider(() => authProvider.resolveToken(useAuthStore.getState().session));
@@ -120,6 +173,7 @@ setUnauthorizedHandler(() => {
   if (useAuthStore.getState().status === "anon") return;
   sessionStorage.clear().catch(() => {});
   activeFacilityStorage.clear().catch(() => {});
+  clearFacilityQrCache().catch(() => {});
   useAuthStore.setState({
     session: null,
     activeFacilityId: null,

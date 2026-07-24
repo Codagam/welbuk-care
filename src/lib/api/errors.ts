@@ -78,6 +78,10 @@ export function describeError(err: unknown): string {
       case "PATIENT_MANAGE_REQUIRED":
         return "Date of birth can only be changed by a user with the Patient Manager role.";
       case "NETWORK":
+        // Prefer concrete fetch/native message when present (e.g. "Network request failed: …").
+        if (err.message && err.message !== "Network request failed") {
+          return err.message;
+        }
         return "No connection. Check your network and try again.";
       default:
         return err.message || "Something went wrong.";

@@ -21,6 +21,11 @@ export function setTokenProvider(fn: TokenProvider): void {
   tokenProvider = fn;
 }
 
+/** Resolve the current bearer token (for Image/proxy headers outside `api()`). */
+export async function getAuthToken(): Promise<string | null> {
+  return tokenProvider();
+}
+
 export function setUnauthorizedHandler(fn: (() => void) | null): void {
   unauthorizedHandler = fn;
 }
@@ -104,13 +109,31 @@ export async function api<T = unknown>(req: ApiRequest): Promise<T> {
     });
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") throw err;
-    throw new ApiError("Network request failed", { status: 0, code: "NETWORK" });
+    const underlying =
+      err instanceof Error ? err.message : typeof err === "string" ? err : "unknown";
+    // console.log("[api] fetch FAILED (no HTTP response)", {
+    //   url,
+    //   method: req.method ?? "GET",
+    //   underlying,
+    //   err,
+    // });
+    throw new ApiError(`Network request failed: ${underlying}`, {
+      status: 0,
+      code: "NETWORK",
+      data: { url, underlying, err: String(err) },
+    });
   }
 
   const text = await res.text();
   const data = text ? safeJson(text) : null;
 
   if (!res.ok) {
+    // console.log("[api] HTTP error", {
+    //  url,
+    //    method: req.method ?? "GET",
+    //   status: res.status,
+    //   body: data,
+    // });
     const message = extractMessage(data, res.status);
     const serverCode =
       data && typeof data === "object"
