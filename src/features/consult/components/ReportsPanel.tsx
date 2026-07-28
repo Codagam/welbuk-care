@@ -214,12 +214,12 @@ export function ReportsPanel({
             </View>
             <Button
               label="Upload"
-              variant="outline"
+              variant="primary"
               size="md"
               className="shrink-0"
               onPress={() => setUploadOpen(true)}
               disabled={!consultationId}
-              icon={<Ionicons name="add" size={16} color="#111827" />}
+              icon={<Ionicons name="add" size={16} color="#fff" />}
             />
           </View>
 
