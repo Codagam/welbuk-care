@@ -19,6 +19,7 @@ export type ConsultAppointment = {
   id?: string;
   reason?: string | null;
   symptoms?: string[] | string | null;
+  appointmentType?: string | null;
   followUpSourceConsultationId?: string | null;
   isFollowUp?: boolean;
 };

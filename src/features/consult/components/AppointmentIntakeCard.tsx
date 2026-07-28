@@ -17,6 +17,27 @@ function normalizeSymptoms(symptoms?: string[] | string | null): string[] {
   return t ? [t] : [];
 }
 
+function isWalkInToken(value?: string | null): boolean {
+  if (!value) return false;
+  const n = value.trim().toLowerCase().replace(/[\s_-]+/g, "");
+  return n === "walkin" || n.includes("walkin");
+}
+
+/** Walk-in may arrive as appointmentType, reason, or a symptoms token. */
+export function isWalkInAppointment({
+  symptoms,
+  reason,
+  appointmentType,
+}: {
+  symptoms?: string[] | string | null;
+  reason?: string | null;
+  appointmentType?: string | null;
+}): boolean {
+  if (isWalkInToken(appointmentType)) return true;
+  if (isWalkInToken(reason)) return true;
+  return normalizeSymptoms(symptoms).some((s) => isWalkInToken(s));
+}
+
 function DetailRow({
   icon,
   label,
@@ -125,6 +146,7 @@ function PatientDetailsBlock({
 export function AppointmentIntakeCard({
   symptoms,
   reason,
+  appointmentType,
   header,
   headerLoading,
   headerError,
@@ -132,14 +154,18 @@ export function AppointmentIntakeCard({
 }: {
   symptoms?: string[] | string | null;
   reason?: string | null;
+  appointmentType?: string | null;
   header?: PatientHeaderProps | null;
   headerLoading?: boolean;
   headerError?: unknown;
   /** Skip SectionChrome / nested box — parent provides the unified card. */
   embedded?: boolean;
 }) {
-  const normalizedSymptoms = normalizeSymptoms(symptoms);
-  const normalizedReason = reason?.trim() ?? "";
+  const walkIn = isWalkInAppointment({ symptoms, reason, appointmentType });
+  const normalizedSymptoms = normalizeSymptoms(symptoms).filter(
+    (s) => !isWalkInToken(s)
+  );
+  const normalizedReason = isWalkInToken(reason) ? "" : reason?.trim() ?? "";
   const hasAny = normalizedSymptoms.length > 0 || !!normalizedReason;
 
   const intakeBody = (
@@ -185,9 +211,18 @@ export function AppointmentIntakeCard({
     return (
       <View className="gap-2.5 px-3.5 py-2.5">
         <View className="gap-1.5">
-          <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
-            Patient Details
-          </Text>
+          <View className="flex-row items-center justify-between gap-2">
+            <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+              Patient Details
+            </Text>
+            {walkIn ? (
+              <View className="rounded-md bg-brand px-2.5 py-1">
+                <Text className="text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Walk-in
+                </Text>
+              </View>
+            ) : null}
+          </View>
           <PatientDetailsBlock
             header={header}
             loading={headerLoading}
@@ -195,14 +230,18 @@ export function AppointmentIntakeCard({
           />
         </View>
 
-        <View className="h-px bg-neutral-100" />
+        {!walkIn ? (
+          <>
+            <View className="h-px bg-neutral-100" />
 
-        <View className="gap-1.5">
-          <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
-            Appointment Details
-          </Text>
-          {intakeBody}
-        </View>
+            <View className="gap-1.5">
+              <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+                Appointment Details
+              </Text>
+              {intakeBody}
+            </View>
+          </>
+        ) : null}
       </View>
     );
   }

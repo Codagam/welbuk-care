@@ -86,6 +86,7 @@ export function PatientDetailsSection({
             <AppointmentIntakeCard
               symptoms={appointment?.symptoms}
               reason={appointment?.reason}
+              appointmentType={appointment?.appointmentType}
               header={header}
               headerLoading={headerLoading}
               headerError={headerError}
