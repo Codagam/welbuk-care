@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,68 +30,6 @@ import {
 import type { DoctorNote, LabReportItem } from "../types";
 import { ConsultUploadDialog } from "./ConsultUploadDialog";
 import { SectionChrome } from "./SectionChrome";
-
-function AccordionBlock({
-  title,
-  icon,
-  badge,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  badge?: number;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <View
-      className={`overflow-hidden rounded-lg border ${
-        open ? "border-neutral-200" : "border-dashed border-neutral-300"
-      }`}
-    >
-      <Pressable
-        onPress={() => setOpen((v) => !v)}
-        className={`flex-row items-center gap-2 px-3 py-3 active:bg-neutral-50 ${
-          open ? "bg-white" : "bg-neutral-50"
-        }`}
-      >
-        <View
-          className={`h-6 w-6 items-center justify-center rounded-full ${
-            open ? "bg-neutral-200" : "bg-brand/15"
-          }`}
-        >
-          <Ionicons
-            name={open ? "chevron-down" : "chevron-forward"}
-            size={14}
-            color={open ? "#6b7280" : "#FD006A"}
-          />
-        </View>
-        <Ionicons name={icon} size={16} color="#374151" />
-        <Text className="flex-1 text-sm font-semibold text-neutral-900">
-          {title}
-        </Text>
-        {badge != null && badge > 0 ? (
-          <View className="rounded-full bg-neutral-100 px-1.5 py-0.5">
-            <Text className="text-xs text-neutral-700">{badge}</Text>
-          </View>
-        ) : null}
-        {open ? (
-          <Ionicons name="remove-outline" size={16} color="#9ca3af" />
-        ) : (
-          <View className="flex-row items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5">
-            <Ionicons name="add" size={12} color="#FD006A" />
-            <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand">
-              Closed
-            </Text>
-          </View>
-        )}
-      </Pressable>
-      {open ? <View className="px-3 pb-3">{children}</View> : null}
-    </View>
-  );
-}
 
 export function ReportsPanel({
   consultationId,
@@ -257,7 +194,7 @@ export function ReportsPanel({
   return (
     <View className="gap-3">
       <SectionChrome title="Reports">
-        <View className="gap-2 rounded-lg border border-neutral-200 bg-white p-3">
+        <View className="gap-2.5">
           <View className="flex-row items-center justify-between gap-2">
             <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
               <Ionicons name="folder-outline" size={16} color="#FD006A" />
@@ -295,7 +232,7 @@ export function ReportsPanel({
                     setPreviewIndex(index);
                     setPreviewOpen(true);
                   }}
-                  className="h-9 w-9 items-center justify-center overflow-hidden rounded-md border border-brand/30 bg-neutral-100"
+                  className="h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-brand/10"
                 >
                   {isReportAttachmentPdf(url) ? (
                     <Ionicons
@@ -314,7 +251,7 @@ export function ReportsPanel({
                     setPreviewIndex(5);
                     setPreviewOpen(true);
                   }}
-                  className="h-9 w-9 items-center justify-center rounded-md border border-brand/30 bg-neutral-100"
+                  className="h-9 w-9 items-center justify-center rounded-md bg-brand/10"
                 >
                   <Text className="text-xs font-medium text-brand">
                     +{attachedUrls.length - 5}
@@ -326,30 +263,34 @@ export function ReportsPanel({
         </View>
       </SectionChrome>
 
-      <AccordionBlock
+      <SectionChrome
         title="Lab Reports"
         icon="document-text-outline"
         badge={labReports.length}
+        collapsible
+        defaultOpen={false}
       >
         {labReports.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
             No lab reports yet. Use Upload above and choose Lab report.
           </Text>
         ) : (
-          <View className="gap-2">
-            <Text className="mb-1 text-xs text-neutral-500">
+          <View className="gap-0">
+            <Text className="mb-2 text-xs text-neutral-500">
               Patient history from all facilities.
             </Text>
             {labReports.map((item, idx) => (
               <View
                 key={item.id ?? idx}
-                className="rounded-lg border border-cyan-200 bg-white p-2"
+                className={`py-2.5 ${
+                  idx < labReports.length - 1
+                    ? "border-b border-neutral-100"
+                    : ""
+                }`}
               >
                 <View className="mb-1 flex-row items-start justify-between gap-2">
                   <View className="min-w-0 flex-1 gap-0.5">
-                    <Text className="text-xs text-neutral-500">
-                      {item.date}
-                    </Text>
+                    <Text className="text-xs text-neutral-500">{item.date}</Text>
                     <Text className="text-[10px] text-neutral-500">
                       {labReportSourceLabel(item.source)}
                       {item.referralType ? ` · ${item.referralType}` : ""}
@@ -372,7 +313,7 @@ export function ReportsPanel({
                       <Pressable
                         onPress={() => handleDeleteLab(item)}
                         disabled={deleteLab.isPending}
-                        className="h-7 w-7 items-center justify-center rounded-md border border-neutral-200"
+                        className="h-7 w-7 items-center justify-center rounded-md"
                         accessibilityLabel="Delete report"
                       >
                         <Ionicons
@@ -399,36 +340,44 @@ export function ReportsPanel({
             ))}
           </View>
         )}
-      </AccordionBlock>
+      </SectionChrome>
 
-      <AccordionBlock
+      <SectionChrome
         title="Previous Notes"
         icon="calendar-outline"
         badge={doctorNotes.length}
+        collapsible
+        defaultOpen={false}
       >
         {doctorNotes.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
             No previous notes
           </Text>
         ) : (
-          <View className="gap-2">
+          <View className="gap-0">
             {doctorNotes.map((item, idx) => (
               <View
                 key={idx}
-                className="rounded-lg border border-amber-200 bg-white p-2"
+                className={`py-2.5 ${
+                  idx < doctorNotes.length - 1
+                    ? "border-b border-neutral-100"
+                    : ""
+                }`}
               >
-                <View className="mb-1 flex-row items-start justify-between">
+                <View className="mb-1 flex-row items-start justify-between gap-2">
                   <Text className="text-xs text-neutral-500">{item.date}</Text>
                   <Text className="text-xs font-medium text-neutral-700">
                     {item.doctor}
                   </Text>
                 </View>
-                <Text className="text-xs text-neutral-500">{item.note}</Text>
+                <Text className="text-xs leading-5 text-neutral-700">
+                  {item.note}
+                </Text>
               </View>
             ))}
           </View>
         )}
-      </AccordionBlock>
+      </SectionChrome>
 
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {summaryQ.isLoading || deleteLab.isPending ? (
