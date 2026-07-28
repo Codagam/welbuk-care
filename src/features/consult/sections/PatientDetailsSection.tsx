@@ -8,6 +8,7 @@ import {
 
 import { describeError } from "@/lib/api/errors";
 import { AppointmentIntakeCard } from "../components/AppointmentIntakeCard";
+import { DocumentsCard } from "../components/DocumentsCard";
 import { LiveConversationPanel } from "../components/LiveConversationPanel";
 import { PatientRecordsCard } from "../components/PatientRecordsCard";
 import { ReportsPanel } from "../components/ReportsPanel";
@@ -153,6 +154,8 @@ export function PatientDetailsSection({
         doctorNotes={doctorNotes}
         onRefresh={refreshHistory}
       />
+
+      {patientId ? <DocumentsCard patientId={patientId} /> : null}
     </View>
   );
 }

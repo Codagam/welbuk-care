@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,12 +11,10 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import * as WebBrowser from "expo-web-browser";
 
 import { Button } from "@/ui";
-import { getAuthToken } from "@/lib/api/client";
 import { describeError } from "@/lib/api/errors";
-import { fileProxyUrl } from "@/lib/api/endpoints/recording";
+import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import { useFacilityId } from "@/lib/auth/store";
 import { useDeleteLabReport, useSummary } from "../hooks";
 import {
@@ -30,6 +28,8 @@ import {
 import type { DoctorNote, LabReportItem } from "../types";
 import { ConsultUploadDialog } from "./ConsultUploadDialog";
 import { SectionChrome } from "./SectionChrome";
+
+type LocalFile = { storageUrl: string; localUri: string };
 
 export function ReportsPanel({
   consultationId,
@@ -53,11 +53,14 @@ export function ReportsPanel({
   const [uploadOpen, setUploadOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
-  const [viewUrls, setViewUrls] = useState<string[]>([]);
+  const [viewFiles, setViewFiles] = useState<LocalFile[]>([]);
   const [viewNote, setViewNote] = useState<string | null>(null);
-  const [authHeader, setAuthHeader] = useState<string | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLocalUri, setPreviewLocalUri] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewReload, setPreviewReload] = useState(0);
 
   const attachedUrls = useMemo(() => {
     const urls = summaryQ.data?.reportAttachmentUrls ?? [];
@@ -75,44 +78,6 @@ export function ReportsPanel({
     onRefresh?.();
   };
 
-  const openProxy = async (url: string) => {
-    const token = await getAuthToken();
-    const proxy = fileProxyUrl(url);
-    if (isImageUrl(url)) {
-      setAuthHeader(token ? `Bearer ${token}` : null);
-      setViewUrls([url]);
-      setViewNote(null);
-      setViewOpen(true);
-      return;
-    }
-    // PDFs / other: open in system browser (proxy needs auth via cookie on web only).
-    // Prefer fetching blob isn't available; open proxy URL — Bearer not supported by Linking.
-    // Download via authenticated fetch then open local file would be ideal; for now open proxy
-    // and also try WebBrowser (token query not supported). Use WebBrowser with headers unavailable.
-    try {
-      if (!token) {
-        await Linking.openURL(proxy);
-        return;
-      }
-      const res = await fetch(proxy, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to load file");
-      // Fall back to opening proxy (may 401 without cookie) — show note content instead if text.
-      const contentType = res.headers.get("content-type") ?? "";
-      if (contentType.includes("image")) {
-        setAuthHeader(`Bearer ${token}`);
-        setViewUrls([url]);
-        setViewNote(null);
-        setViewOpen(true);
-        return;
-      }
-      await WebBrowser.openBrowserAsync(proxy);
-    } catch (e) {
-      setError(describeError(e));
-    }
-  };
-
   const openLabReport = async (item: LabReportItem) => {
     const payload = item.reportPayload;
     const urls = labReportFileUrls(payload);
@@ -121,12 +86,52 @@ export function ReportsPanel({
       payload?.radiologyReport?.trim() ||
       null;
     if (urls.length === 0 && !note) return;
-    const token = await getAuthToken();
-    setAuthHeader(token ? `Bearer ${token}` : null);
-    setViewUrls(urls);
+
+    setError(null);
     setViewNote(note);
+    setViewFiles([]);
     setViewOpen(true);
+    setViewLoading(true);
+    try {
+      const locals: LocalFile[] = [];
+      for (const url of urls) {
+        const { localUri } = await fetchProxiedFileToCache(url);
+        locals.push({ storageUrl: url, localUri });
+      }
+      setViewFiles(locals);
+    } catch (e) {
+      setError(describeError(e));
+      if (!note) setViewOpen(false);
+    } finally {
+      setViewLoading(false);
+    }
   };
+
+  // Load visit-file preview with Bearer auth into a local cache URI.
+  useEffect(() => {
+    if (!previewOpen || !currentUrl) {
+      setPreviewLocalUri(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewLocalUri(null);
+    setError(null);
+    void (async () => {
+      try {
+        const { localUri } = await fetchProxiedFileToCache(currentUrl);
+        if (!cancelled) setPreviewLocalUri(localUri);
+      } catch (e) {
+        if (!cancelled) setError(describeError(e));
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [previewOpen, currentUrl, previewReload]);
+
 
   const confirmDelete = (opts: {
     title: string;
@@ -199,7 +204,7 @@ export function ReportsPanel({
             <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
               <Ionicons name="folder-outline" size={16} color="#FD006A" />
               <Text className="text-sm font-semibold text-neutral-900">
-                Documents
+                Visit files
               </Text>
               {attachedUrls.length > 0 ? (
                 <Text className="text-xs font-medium text-brand">
@@ -448,10 +453,28 @@ export function ReportsPanel({
             ) : null}
           </View>
           <View className="flex-1 items-center justify-center p-4">
-            {currentUrl ? (
+            {previewLoading ? (
+              <ActivityIndicator color="#FD006A" />
+            ) : previewLocalUri && currentUrl && isImageUrl(currentUrl) ? (
+              <Image
+                source={{ uri: previewLocalUri }}
+                style={{ width: "100%", height: 420, borderRadius: 8 }}
+                resizeMode="contain"
+              />
+            ) : previewLocalUri && currentUrl ? (
               <Button
-                label="Open file"
-                onPress={() => void openProxy(currentUrl)}
+                label={
+                  isReportAttachmentPdf(currentUrl)
+                    ? "Open PDF"
+                    : "Open file"
+                }
+                onPress={() => void Linking.openURL(previewLocalUri)}
+              />
+            ) : currentUrl ? (
+              <Button
+                label="Retry"
+                variant="outline"
+                onPress={() => setPreviewReload((n) => n + 1)}
               />
             ) : null}
           </View>
@@ -475,21 +498,23 @@ export function ReportsPanel({
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+            {viewLoading ? (
+              <View className="items-center py-10">
+                <ActivityIndicator color="#FD006A" />
+                <Text className="mt-2 text-xs text-neutral-500">
+                  Loading file…
+                </Text>
+              </View>
+            ) : null}
             {viewNote ? (
               <Text className="text-sm text-neutral-700">{viewNote}</Text>
             ) : null}
-            {viewUrls.map((url) => {
-              const proxy = fileProxyUrl(url);
-              if (isImageUrl(url)) {
+            {viewFiles.map((file) => {
+              if (isImageUrl(file.storageUrl)) {
                 return (
                   <Image
-                    key={url}
-                    source={{
-                      uri: proxy,
-                      headers: authHeader
-                        ? { Authorization: authHeader }
-                        : undefined,
-                    }}
+                    key={file.storageUrl}
+                    source={{ uri: file.localUri }}
                     style={{ width: "100%", height: 320, borderRadius: 8 }}
                     resizeMode="contain"
                   />
@@ -497,12 +522,14 @@ export function ReportsPanel({
               }
               return (
                 <Button
-                  key={url}
+                  key={file.storageUrl}
                   label={
-                    isReportAttachmentPdf(url) ? "Open PDF" : "Open attachment"
+                    isReportAttachmentPdf(file.storageUrl)
+                      ? "Open PDF"
+                      : "Open attachment"
                   }
                   variant="outline"
-                  onPress={() => void openProxy(url)}
+                  onPress={() => void Linking.openURL(file.localUri)}
                 />
               );
             })}

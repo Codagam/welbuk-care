@@ -21,6 +21,10 @@ import {
   searchDiagnosisCodes,
 } from "@/lib/api/endpoints/consult-data";
 import {
+  listPatientDocuments,
+  uploadPatientDocument,
+} from "@/lib/api/endpoints/documents";
+import {
   createRecording,
   listRecordings,
 } from "@/lib/api/endpoints/recording";
@@ -228,6 +232,33 @@ export function usePatchReportAttachments(
           queryKey: ["patient-history", patientId, facilityId, consultationId],
         });
       }
+    },
+  });
+}
+
+// ---- Patient documents --------------------------------------------------
+
+export function usePatientDocuments(patientId: string | undefined) {
+  return useQuery({
+    queryKey: ["patient-documents", patientId],
+    enabled: !!patientId,
+    queryFn: () => listPatientDocuments(patientId!, { page: 1, pageSize: 20 }),
+  });
+}
+
+export function useUploadPatientDocument(patientId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: {
+      uri: string;
+      fileName: string;
+      mimeType: string;
+    }) => {
+      if (!patientId) throw new Error("patientId is required");
+      return uploadPatientDocument({ ...file, patientId });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patient-documents", patientId] });
     },
   });
 }
