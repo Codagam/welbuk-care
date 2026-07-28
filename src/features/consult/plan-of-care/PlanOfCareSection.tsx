@@ -257,7 +257,11 @@ export function PlanOfCareSection({
 
       {/* 2. Labs — full width, never shares a row with notes */}
       <View style={styles.block}>
-        <LabsCard labReports={labReports} onRefer={() => setReferOpen(true)} />
+        <LabsCard
+          labReports={labReports}
+          patientName={patientName || patientLine}
+          onRefer={() => setReferOpen(true)}
+        />
       </View>
 
       {/* 3. Doctor Notes + Conversation Summary */}
