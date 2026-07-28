@@ -107,7 +107,7 @@ export function ReferSheet({
     >
       <View className="flex-1 bg-white">
         <View className="flex-row items-center justify-between border-b border-neutral-200 px-5 py-4">
-          <Text className="text-lg font-semibold text-neutral-900">
+          <Text className="text-lg font-semibold text-brand">
             Refer patient
           </Text>
           <Pressable onPress={onClose} className="p-2">
@@ -127,7 +127,7 @@ export function ReferSheet({
           </Text>
 
           <View className="gap-1.5">
-            <Text className="text-sm font-medium text-neutral-700">Type</Text>
+            <Text className="text-sm font-medium text-brand">Type</Text>
             <Segmented
               options={[...REFERRAL_TYPES]}
               value={referralType}
@@ -136,7 +136,7 @@ export function ReferSheet({
           </View>
 
           <View className="gap-1.5">
-            <Text className="text-sm font-medium text-neutral-700">
+            <Text className="text-sm font-medium text-brand">
               Priority
             </Text>
             <Segmented
@@ -148,6 +148,7 @@ export function ReferSheet({
 
           <TextField
             label="Tests (comma-separated)"
+            labelClassName="text-brand"
             value={tests}
             onChangeText={setTests}
             placeholder="CBC, LFT…"
@@ -155,6 +156,7 @@ export function ReferSheet({
 
           <TextField
             label="To facility ID"
+            labelClassName="text-brand"
             value={toFacilityId}
             onChangeText={setToFacilityId}
             placeholder="Defaults to current facility"
@@ -162,6 +164,7 @@ export function ReferSheet({
 
           <TextField
             label="Notes"
+            labelClassName="text-brand"
             value={notes}
             onChangeText={setNotes}
             placeholder="Optional"

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { Button, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
+import { Button, TextField } from "@/ui";
 import { useDiagnosisSearch, useSaveSummary, useSummary } from "../hooks";
 import type { DiagnosisCode } from "../types";
 import { useCardFocusHighlight } from "../useCardFocusHighlight";
@@ -77,7 +77,7 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
       }`}
     >
       <View className="flex-row items-center justify-between">
-        <Text className="text-lg font-semibold text-neutral-900">
+        <Text className="text-lg font-semibold text-brand">
           Clinical notes (SOAP)
         </Text>
         {q.data?.isAIGenerated ? (
@@ -93,6 +93,7 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
         <TextField
           key={f.key}
           label={f.label}
+          labelClassName="text-brand"
           value={form[f.key]}
           onChangeText={(v) => set(f.key, v)}
           placeholder={f.placeholder}
@@ -104,7 +105,7 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
       ))}
 
       <View className="gap-2">
-        <Text className="text-sm font-medium text-neutral-700">
+        <Text className="text-sm font-medium text-brand">
           Diagnosis (ICD-10)
         </Text>
         {codes.length ? (

@@ -85,7 +85,7 @@ export function PrescriptionCard({
         }
       >
         <View className="gap-0.5">
-          <Text className="text-lg font-semibold text-neutral-900">
+          <Text className="text-lg font-semibold text-brand">
             Prescription
           </Text>
           <Text className="text-xs text-neutral-500">
@@ -154,16 +154,16 @@ export function PrescriptionCard({
       <View className="overflow-hidden rounded-xl border border-neutral-200">
         {tabletLayout ? (
           <View className="flex-row border-b border-neutral-200 bg-neutral-50 px-3 py-2.5">
-            <Text className="flex-[2.2] text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <Text className="flex-[2.2] text-xs font-semibold uppercase tracking-wide text-brand">
               Medicine
             </Text>
-            <Text className="flex-[1.1] text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <Text className="flex-[1.1] text-xs font-semibold uppercase tracking-wide text-brand">
               Dose
             </Text>
-            <Text className="w-14 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <Text className="w-14 text-xs font-semibold uppercase tracking-wide text-brand">
               Food
             </Text>
-            <Text className="w-14 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            <Text className="w-14 text-xs font-semibold uppercase tracking-wide text-brand">
               Days
             </Text>
             <View className="w-9" />
@@ -358,6 +358,7 @@ function AddMedicineForm({
   const medicineField = (
     <TextField
       label="Medicine"
+      labelClassName="text-brand"
       value={name}
       onChangeText={(v) => {
         setName(v);
@@ -388,7 +389,7 @@ function AddMedicineForm({
 
   return (
     <View className="gap-3 rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-4">
-      <Text className="text-sm font-semibold text-neutral-800">
+      <Text className="text-sm font-semibold text-brand">
         Add medicine
       </Text>
 
@@ -396,7 +397,7 @@ function AddMedicineForm({
         <View className="gap-1">
           <View className="flex-row items-end gap-3">
             <View className="min-w-0 flex-[2] gap-1.5">
-              <Text className="text-sm font-medium text-neutral-700">
+              <Text className="text-sm font-medium text-brand">
                 Medicine
               </Text>
               <TextField
@@ -416,7 +417,7 @@ function AddMedicineForm({
               />
             </View>
             <View className="w-28 gap-1.5">
-              <Text className="text-sm font-medium text-neutral-700">Dose</Text>
+              <Text className="text-sm font-medium text-brand">Dose</Text>
               <TextField
                 value={dose}
                 onChangeText={setDose}
@@ -426,11 +427,11 @@ function AddMedicineForm({
               />
             </View>
             <View className="w-36 gap-1.5">
-              <Text className="text-sm font-medium text-neutral-700">Food</Text>
+              <Text className="text-sm font-medium text-brand">Food</Text>
               <Segmented options={TIMING} value={timing} onChange={setTiming} />
             </View>
             <View className="w-20 gap-1.5">
-              <Text className="text-sm font-medium text-neutral-700">Days</Text>
+              <Text className="text-sm font-medium text-brand">Days</Text>
               <TextField
                 value={duration}
                 onChangeText={setDuration}
@@ -458,6 +459,7 @@ function AddMedicineForm({
             <TextField
               containerClassName="flex-1"
               label="Dose (M-A-N)"
+              labelClassName="text-brand"
               value={dose}
               onChangeText={setDose}
               placeholder="1-0-1"
@@ -467,6 +469,7 @@ function AddMedicineForm({
             <TextField
               containerClassName="flex-1"
               label="Duration (days)"
+              labelClassName="text-brand"
               value={duration}
               onChangeText={setDuration}
               keyboardType="number-pad"
@@ -477,7 +480,7 @@ function AddMedicineForm({
           </View>
 
           <View className="gap-1.5">
-            <Text className="text-sm font-medium text-neutral-700">Food</Text>
+            <Text className="text-sm font-medium text-brand">Food</Text>
             <Segmented options={TIMING} value={timing} onChange={setTiming} />
           </View>
 
@@ -612,13 +615,13 @@ function TemplateBar({
           setTemplateName(selected);
           setNameOpen(true);
         }}
-        className={`h-12 justify-center rounded-xl border px-3 ${
+        className={`h-12 justify-center rounded-xl px-3 ${
           disabled
-            ? "border-neutral-200 opacity-40"
-            : "border-neutral-300 bg-white"
+            ? "bg-brand opacity-40"
+            : "bg-brand active:bg-brand-600"
         }`}
       >
-        <Text className="text-sm font-semibold text-neutral-900">
+        <Text className="text-sm font-semibold text-white">
           Save template
         </Text>
       </Pressable>
@@ -630,13 +633,13 @@ function TemplateBar({
             setTemplateName(selected);
             setNameOpen(true);
           }}
-          className={`h-12 justify-center rounded-xl border px-3 ${
+          className={`h-12 justify-center rounded-xl px-3 ${
             disabled
-              ? "border-neutral-200 opacity-40"
-              : "border-neutral-300 bg-white"
+              ? "bg-brand opacity-40"
+              : "bg-brand active:bg-brand-600"
           }`}
         >
-          <Text className="text-sm font-semibold text-neutral-900">Update</Text>
+          <Text className="text-sm font-semibold text-white">Update</Text>
         </Pressable>
       ) : null}
       {!compact && hasAttachments ? (
@@ -706,7 +709,7 @@ function TemplateBar({
               <View className="flex-1">
                 <Button
                   label="Cancel"
-                  variant="outline"
+                  variant="primary"
                   size="md"
                   onPress={() => setNameOpen(false)}
                 />
@@ -789,7 +792,7 @@ function AttachBar({
     <View className={compact ? "flex-row flex-wrap items-center gap-2" : "gap-2"}>
       <Button
         label="Attach"
-        variant="outline"
+        variant="primary"
         size="md"
         onPress={onPick}
         loading={upload.isPending || patch.isPending}
