@@ -19,7 +19,7 @@ export function CompleteBar({
     <View className="gap-2.5 rounded-2xl border border-neutral-200 bg-white px-4 py-3.5">
       <View className="flex-row items-center justify-between gap-3">
         <View className="min-w-0 flex-1 pr-2">
-          <Text className="text-base font-semibold text-neutral-900">
+          <Text className="text-base font-semibold text-brand">
             Follow-up
           </Text>
           <Text className="mt-0.5 text-sm text-neutral-500">
@@ -33,14 +33,14 @@ export function CompleteBar({
           onPress={onFollowUp}
           accessibilityRole="button"
           accessibilityLabel="Follow-up"
-          className="relative min-h-[48px] min-w-[120px] items-center justify-center rounded-xl border border-neutral-300 bg-neutral-50 px-5 py-3 active:bg-neutral-100"
+          className="relative min-h-[48px] min-w-[120px] items-center justify-center rounded-xl bg-brand px-5 py-3 active:bg-brand-600"
         >
-          <Text className="text-base font-semibold text-neutral-900">
+          <Text className="text-base font-semibold text-white">
             Follow-up
           </Text>
           {booked ? (
-            <View className="absolute -right-1.5 -top-1.5 h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1">
-              <Text className="text-[10px] font-bold text-white">1</Text>
+            <View className="absolute -right-1.5 -top-1.5 h-5 min-w-5 items-center justify-center rounded-full bg-white px-1">
+              <Text className="text-[10px] font-bold text-brand">1</Text>
             </View>
           ) : null}
         </Pressable>

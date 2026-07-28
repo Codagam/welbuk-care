@@ -3,10 +3,12 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-/** Web-parity section title with horizontal rules. */
+/** Clean section card — title left, optional chevron / actions right. */
 export function SectionChrome({
   title,
   right,
+  icon,
+  badge,
   emptyBorder = false,
   className,
   collapsible = false,
@@ -15,7 +17,9 @@ export function SectionChrome({
 }: {
   title: string;
   right?: ReactNode;
-  /** Left accent border when section is empty (web pattern). */
+  icon?: keyof typeof Ionicons.glyphMap;
+  badge?: number;
+  /** Kept for API compat; no longer draws a left accent border. */
   emptyBorder?: boolean;
   className?: string;
   /** When true, title row toggles children; starts from `defaultOpen`. */
@@ -25,49 +29,37 @@ export function SectionChrome({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const showChildren = !collapsible || open;
+  void emptyBorder;
 
-  const header = (
-    <>
-      {collapsible ? (
-        <View
-          className={`h-6 w-6 items-center justify-center rounded-full ${
-            open ? "bg-neutral-200" : "bg-brand/15"
-          }`}
-        >
-          <Ionicons
-            name={open ? "chevron-down" : "chevron-forward"}
-            size={14}
-            color={open ? "#6b7280" : "#FD006A"}
-          />
-        </View>
-      ) : null}
-      <View className="h-px flex-1 bg-neutral-200" />
-      <Text className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+  const titleEl = (
+    <View className="min-w-0 flex-1 flex-row items-center gap-2">
+      {icon ? <Ionicons name={icon} size={16} color="#FD006A" /> : null}
+      <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
         {title}
       </Text>
-      <View className="h-px flex-1 bg-neutral-200" />
-      {collapsible ? (
-        open ? (
-          <Ionicons name="remove-outline" size={16} color="#9ca3af" />
-        ) : (
-          <View className="flex-row items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5">
-            <Ionicons name="add" size={12} color="#FD006A" />
-            <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand">
-              Closed
-            </Text>
-          </View>
-        )
-      ) : (
-        right
-      )}
-    </>
+      {badge != null && badge > 0 ? (
+        <View className="rounded-full bg-brand/10 px-2 py-0.5">
+          <Text className="text-[10px] font-semibold text-brand">{badge}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const trailing = collapsible ? (
+    <Ionicons
+      name={open ? "chevron-up" : "chevron-down"}
+      size={18}
+      color="#FD006A"
+    />
+  ) : (
+    right
   );
 
   return (
     <View
-      className={`gap-3 p-3 ${
-        emptyBorder ? "border-l-4 border-l-brand" : "border border-neutral-200"
-      }${className ? ` ${className}` : ""}`}
+      className={`overflow-hidden rounded-2xl border border-neutral-200 bg-white${
+        className ? ` ${className}` : ""
+      }`}
     >
       {collapsible ? (
         <Pressable
@@ -76,14 +68,22 @@ export function SectionChrome({
           accessibilityLabel={
             open ? `Collapse ${title}` : `Expand ${title}`
           }
-          className="flex-row items-center gap-2 active:opacity-70"
+          className="flex-row items-center justify-between gap-3 px-3.5 py-3 active:bg-neutral-50"
         >
-          {header}
+          {titleEl}
+          {trailing}
         </Pressable>
       ) : (
-        <View className="flex-row items-center gap-2">{header}</View>
+        <View className="flex-row items-center justify-between gap-3 px-3.5 py-3">
+          {titleEl}
+          {trailing}
+        </View>
       )}
-      {showChildren ? children : null}
+      {showChildren ? (
+        <View className="border-t border-neutral-100 px-3.5 pb-3.5 pt-2.5">
+          {children}
+        </View>
+      ) : null}
     </View>
   );
 }

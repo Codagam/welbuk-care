@@ -27,7 +27,7 @@ function NotesShell({
       }`}
     >
       <View className="flex-row items-center gap-2">
-        <Text className="text-base font-semibold tracking-tight text-neutral-900">
+        <Text className="text-base font-semibold tracking-tight text-brand">
           {title}
         </Text>
         {badge ? (
@@ -114,7 +114,7 @@ export function DoctorNotesCard({
           <Button
             label="Cancel"
             size="md"
-            variant="outline"
+            variant="primary"
             onPress={onCancel}
             disabled={!dirty || save.isPending}
           />
@@ -201,7 +201,7 @@ export function ConversationSummaryCard({
           <Button
             label="Cancel"
             size="md"
-            variant="outline"
+            variant="primary"
             onPress={onCancel}
             disabled={!dirty || save.isPending}
           />

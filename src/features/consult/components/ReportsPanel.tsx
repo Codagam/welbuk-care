@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,12 +11,10 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import * as WebBrowser from "expo-web-browser";
 
 import { Button } from "@/ui";
-import { getAuthToken } from "@/lib/api/client";
 import { describeError } from "@/lib/api/errors";
-import { fileProxyUrl } from "@/lib/api/endpoints/recording";
+import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import { useFacilityId } from "@/lib/auth/store";
 import { useDeleteLabReport, useSummary } from "../hooks";
 import {
@@ -32,67 +29,7 @@ import type { DoctorNote, LabReportItem } from "../types";
 import { ConsultUploadDialog } from "./ConsultUploadDialog";
 import { SectionChrome } from "./SectionChrome";
 
-function AccordionBlock({
-  title,
-  icon,
-  badge,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  badge?: number;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <View
-      className={`overflow-hidden rounded-lg border ${
-        open ? "border-neutral-200" : "border-dashed border-neutral-300"
-      }`}
-    >
-      <Pressable
-        onPress={() => setOpen((v) => !v)}
-        className={`flex-row items-center gap-2 px-3 py-3 active:bg-neutral-50 ${
-          open ? "bg-white" : "bg-neutral-50"
-        }`}
-      >
-        <View
-          className={`h-6 w-6 items-center justify-center rounded-full ${
-            open ? "bg-neutral-200" : "bg-brand/15"
-          }`}
-        >
-          <Ionicons
-            name={open ? "chevron-down" : "chevron-forward"}
-            size={14}
-            color={open ? "#6b7280" : "#FD006A"}
-          />
-        </View>
-        <Ionicons name={icon} size={16} color="#374151" />
-        <Text className="flex-1 text-sm font-semibold text-neutral-900">
-          {title}
-        </Text>
-        {badge != null && badge > 0 ? (
-          <View className="rounded-full bg-neutral-100 px-1.5 py-0.5">
-            <Text className="text-xs text-neutral-700">{badge}</Text>
-          </View>
-        ) : null}
-        {open ? (
-          <Ionicons name="remove-outline" size={16} color="#9ca3af" />
-        ) : (
-          <View className="flex-row items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5">
-            <Ionicons name="add" size={12} color="#FD006A" />
-            <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand">
-              Closed
-            </Text>
-          </View>
-        )}
-      </Pressable>
-      {open ? <View className="px-3 pb-3">{children}</View> : null}
-    </View>
-  );
-}
+type LocalFile = { storageUrl: string; localUri: string };
 
 export function ReportsPanel({
   consultationId,
@@ -116,11 +53,14 @@ export function ReportsPanel({
   const [uploadOpen, setUploadOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
-  const [viewUrls, setViewUrls] = useState<string[]>([]);
+  const [viewFiles, setViewFiles] = useState<LocalFile[]>([]);
   const [viewNote, setViewNote] = useState<string | null>(null);
-  const [authHeader, setAuthHeader] = useState<string | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLocalUri, setPreviewLocalUri] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewReload, setPreviewReload] = useState(0);
 
   const attachedUrls = useMemo(() => {
     const urls = summaryQ.data?.reportAttachmentUrls ?? [];
@@ -138,44 +78,6 @@ export function ReportsPanel({
     onRefresh?.();
   };
 
-  const openProxy = async (url: string) => {
-    const token = await getAuthToken();
-    const proxy = fileProxyUrl(url);
-    if (isImageUrl(url)) {
-      setAuthHeader(token ? `Bearer ${token}` : null);
-      setViewUrls([url]);
-      setViewNote(null);
-      setViewOpen(true);
-      return;
-    }
-    // PDFs / other: open in system browser (proxy needs auth via cookie on web only).
-    // Prefer fetching blob isn't available; open proxy URL — Bearer not supported by Linking.
-    // Download via authenticated fetch then open local file would be ideal; for now open proxy
-    // and also try WebBrowser (token query not supported). Use WebBrowser with headers unavailable.
-    try {
-      if (!token) {
-        await Linking.openURL(proxy);
-        return;
-      }
-      const res = await fetch(proxy, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to load file");
-      // Fall back to opening proxy (may 401 without cookie) — show note content instead if text.
-      const contentType = res.headers.get("content-type") ?? "";
-      if (contentType.includes("image")) {
-        setAuthHeader(`Bearer ${token}`);
-        setViewUrls([url]);
-        setViewNote(null);
-        setViewOpen(true);
-        return;
-      }
-      await WebBrowser.openBrowserAsync(proxy);
-    } catch (e) {
-      setError(describeError(e));
-    }
-  };
-
   const openLabReport = async (item: LabReportItem) => {
     const payload = item.reportPayload;
     const urls = labReportFileUrls(payload);
@@ -184,12 +86,52 @@ export function ReportsPanel({
       payload?.radiologyReport?.trim() ||
       null;
     if (urls.length === 0 && !note) return;
-    const token = await getAuthToken();
-    setAuthHeader(token ? `Bearer ${token}` : null);
-    setViewUrls(urls);
+
+    setError(null);
     setViewNote(note);
+    setViewFiles([]);
     setViewOpen(true);
+    setViewLoading(true);
+    try {
+      const locals: LocalFile[] = [];
+      for (const url of urls) {
+        const { localUri } = await fetchProxiedFileToCache(url);
+        locals.push({ storageUrl: url, localUri });
+      }
+      setViewFiles(locals);
+    } catch (e) {
+      setError(describeError(e));
+      if (!note) setViewOpen(false);
+    } finally {
+      setViewLoading(false);
+    }
   };
+
+  // Load visit-file preview with Bearer auth into a local cache URI.
+  useEffect(() => {
+    if (!previewOpen || !currentUrl) {
+      setPreviewLocalUri(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewLocalUri(null);
+    setError(null);
+    void (async () => {
+      try {
+        const { localUri } = await fetchProxiedFileToCache(currentUrl);
+        if (!cancelled) setPreviewLocalUri(localUri);
+      } catch (e) {
+        if (!cancelled) setError(describeError(e));
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [previewOpen, currentUrl, previewReload]);
+
 
   const confirmDelete = (opts: {
     title: string;
@@ -257,12 +199,12 @@ export function ReportsPanel({
   return (
     <View className="gap-3">
       <SectionChrome title="Reports">
-        <View className="gap-2 rounded-lg border border-neutral-200 bg-white p-3">
+        <View className="gap-2.5">
           <View className="flex-row items-center justify-between gap-2">
             <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
               <Ionicons name="folder-outline" size={16} color="#FD006A" />
               <Text className="text-sm font-semibold text-neutral-900">
-                Documents
+                Visit files
               </Text>
               {attachedUrls.length > 0 ? (
                 <Text className="text-xs font-medium text-brand">
@@ -277,12 +219,12 @@ export function ReportsPanel({
             </View>
             <Button
               label="Upload"
-              variant="outline"
+              variant="primary"
               size="md"
               className="shrink-0"
               onPress={() => setUploadOpen(true)}
               disabled={!consultationId}
-              icon={<Ionicons name="add" size={16} color="#111827" />}
+              icon={<Ionicons name="add" size={16} color="#fff" />}
             />
           </View>
 
@@ -295,7 +237,7 @@ export function ReportsPanel({
                     setPreviewIndex(index);
                     setPreviewOpen(true);
                   }}
-                  className="h-9 w-9 items-center justify-center overflow-hidden rounded-md border border-brand/30 bg-neutral-100"
+                  className="h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-brand/10"
                 >
                   {isReportAttachmentPdf(url) ? (
                     <Ionicons
@@ -314,7 +256,7 @@ export function ReportsPanel({
                     setPreviewIndex(5);
                     setPreviewOpen(true);
                   }}
-                  className="h-9 w-9 items-center justify-center rounded-md border border-brand/30 bg-neutral-100"
+                  className="h-9 w-9 items-center justify-center rounded-md bg-brand/10"
                 >
                   <Text className="text-xs font-medium text-brand">
                     +{attachedUrls.length - 5}
@@ -326,30 +268,34 @@ export function ReportsPanel({
         </View>
       </SectionChrome>
 
-      <AccordionBlock
+      <SectionChrome
         title="Lab Reports"
         icon="document-text-outline"
         badge={labReports.length}
+        collapsible
+        defaultOpen={false}
       >
         {labReports.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
             No lab reports yet. Use Upload above and choose Lab report.
           </Text>
         ) : (
-          <View className="gap-2">
-            <Text className="mb-1 text-xs text-neutral-500">
+          <View className="gap-0">
+            <Text className="mb-2 text-xs text-neutral-500">
               Patient history from all facilities.
             </Text>
             {labReports.map((item, idx) => (
               <View
                 key={item.id ?? idx}
-                className="rounded-lg border border-cyan-200 bg-white p-2"
+                className={`py-2.5 ${
+                  idx < labReports.length - 1
+                    ? "border-b border-neutral-100"
+                    : ""
+                }`}
               >
                 <View className="mb-1 flex-row items-start justify-between gap-2">
                   <View className="min-w-0 flex-1 gap-0.5">
-                    <Text className="text-xs text-neutral-500">
-                      {item.date}
-                    </Text>
+                    <Text className="text-xs text-neutral-500">{item.date}</Text>
                     <Text className="text-[10px] text-neutral-500">
                       {labReportSourceLabel(item.source)}
                       {item.referralType ? ` · ${item.referralType}` : ""}
@@ -372,7 +318,7 @@ export function ReportsPanel({
                       <Pressable
                         onPress={() => handleDeleteLab(item)}
                         disabled={deleteLab.isPending}
-                        className="h-7 w-7 items-center justify-center rounded-md border border-neutral-200"
+                        className="h-7 w-7 items-center justify-center rounded-md"
                         accessibilityLabel="Delete report"
                       >
                         <Ionicons
@@ -399,36 +345,44 @@ export function ReportsPanel({
             ))}
           </View>
         )}
-      </AccordionBlock>
+      </SectionChrome>
 
-      <AccordionBlock
+      <SectionChrome
         title="Previous Notes"
         icon="calendar-outline"
         badge={doctorNotes.length}
+        collapsible
+        defaultOpen={false}
       >
         {doctorNotes.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
             No previous notes
           </Text>
         ) : (
-          <View className="gap-2">
+          <View className="gap-0">
             {doctorNotes.map((item, idx) => (
               <View
                 key={idx}
-                className="rounded-lg border border-amber-200 bg-white p-2"
+                className={`py-2.5 ${
+                  idx < doctorNotes.length - 1
+                    ? "border-b border-neutral-100"
+                    : ""
+                }`}
               >
-                <View className="mb-1 flex-row items-start justify-between">
+                <View className="mb-1 flex-row items-start justify-between gap-2">
                   <Text className="text-xs text-neutral-500">{item.date}</Text>
                   <Text className="text-xs font-medium text-neutral-700">
                     {item.doctor}
                   </Text>
                 </View>
-                <Text className="text-xs text-neutral-500">{item.note}</Text>
+                <Text className="text-xs leading-5 text-neutral-700">
+                  {item.note}
+                </Text>
               </View>
             ))}
           </View>
         )}
-      </AccordionBlock>
+      </SectionChrome>
 
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {summaryQ.isLoading || deleteLab.isPending ? (
@@ -499,10 +453,28 @@ export function ReportsPanel({
             ) : null}
           </View>
           <View className="flex-1 items-center justify-center p-4">
-            {currentUrl ? (
+            {previewLoading ? (
+              <ActivityIndicator color="#FD006A" />
+            ) : previewLocalUri && currentUrl && isImageUrl(currentUrl) ? (
+              <Image
+                source={{ uri: previewLocalUri }}
+                style={{ width: "100%", height: 420, borderRadius: 8 }}
+                resizeMode="contain"
+              />
+            ) : previewLocalUri && currentUrl ? (
               <Button
-                label="Open file"
-                onPress={() => void openProxy(currentUrl)}
+                label={
+                  isReportAttachmentPdf(currentUrl)
+                    ? "Open PDF"
+                    : "Open file"
+                }
+                onPress={() => void Linking.openURL(previewLocalUri)}
+              />
+            ) : currentUrl ? (
+              <Button
+                label="Retry"
+                variant="outline"
+                onPress={() => setPreviewReload((n) => n + 1)}
               />
             ) : null}
           </View>
@@ -526,21 +498,23 @@ export function ReportsPanel({
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+            {viewLoading ? (
+              <View className="items-center py-10">
+                <ActivityIndicator color="#FD006A" />
+                <Text className="mt-2 text-xs text-neutral-500">
+                  Loading file…
+                </Text>
+              </View>
+            ) : null}
             {viewNote ? (
               <Text className="text-sm text-neutral-700">{viewNote}</Text>
             ) : null}
-            {viewUrls.map((url) => {
-              const proxy = fileProxyUrl(url);
-              if (isImageUrl(url)) {
+            {viewFiles.map((file) => {
+              if (isImageUrl(file.storageUrl)) {
                 return (
                   <Image
-                    key={url}
-                    source={{
-                      uri: proxy,
-                      headers: authHeader
-                        ? { Authorization: authHeader }
-                        : undefined,
-                    }}
+                    key={file.storageUrl}
+                    source={{ uri: file.localUri }}
                     style={{ width: "100%", height: 320, borderRadius: 8 }}
                     resizeMode="contain"
                   />
@@ -548,12 +522,14 @@ export function ReportsPanel({
               }
               return (
                 <Button
-                  key={url}
+                  key={file.storageUrl}
                   label={
-                    isReportAttachmentPdf(url) ? "Open PDF" : "Open attachment"
+                    isReportAttachmentPdf(file.storageUrl)
+                      ? "Open PDF"
+                      : "Open attachment"
                   }
                   variant="outline"
-                  onPress={() => void openProxy(url)}
+                  onPress={() => void Linking.openURL(file.localUri)}
                 />
               );
             })}

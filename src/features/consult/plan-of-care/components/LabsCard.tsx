@@ -16,7 +16,7 @@ export function LabsCard({
     >
       <View className="flex-row items-center justify-between gap-3">
         <View className="min-w-0 flex-1 gap-0.5">
-          <Text className="text-lg font-semibold tracking-tight text-neutral-900">
+          <Text className="text-lg font-semibold tracking-tight text-brand">
             Labs
           </Text>
           <Text className="text-sm text-neutral-500">

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -36,6 +37,28 @@ function asNamedList(
       return null;
     })
     .filter(Boolean) as { name: string; extra?: string }[];
+}
+
+function RecordGroup({
+  icon,
+  label,
+  children,
+  isLast,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  children: ReactNode;
+  isLast?: boolean;
+}) {
+  return (
+    <View className={isLast ? "gap-1.5" : "gap-1.5 pb-3"}>
+      <View className="flex-row items-center gap-1.5">
+        <Ionicons name={icon} size={14} color="#FD006A" />
+        <Text className="text-xs font-medium text-neutral-500">{label}</Text>
+      </View>
+      {children}
+    </View>
+  );
 }
 
 export function PatientRecordsCard({
@@ -83,109 +106,89 @@ export function PatientRecordsCard({
     );
   }
 
+  const groups = [
+    history.length > 0,
+    meds.length > 0,
+    allergyItems.length > 0,
+  ].filter(Boolean).length;
+
+  let shown = 0;
+
   return (
     <SectionChrome title="Patient Records" collapsible defaultOpen={false}>
-      <View className="divide-y divide-neutral-200 rounded-lg bg-white p-3">
+      <View className="gap-0">
         {history.length > 0 ? (
-          <View className="flex-row items-start gap-2 py-2">
-            <Ionicons
-              name="pulse-outline"
-              size={16}
-              color="#9ca3af"
-              style={{ marginTop: 2 }}
-            />
-            <View className="min-w-0 flex-1">
-              <Text className="mb-1 text-base text-neutral-500">
-                Medical History
-              </Text>
-              <View className="gap-1 pl-4">
-                {history.map((item, idx) => (
-                  <Text key={idx} className="text-sm text-neutral-900">
-                    <Text className="font-semibold">{item.name}</Text>
-                    {item.extra ? (
-                      <Text className="text-neutral-500">
-                        {" "}
-                        (Since {item.extra})
-                      </Text>
-                    ) : null}
-                  </Text>
-                ))}
-              </View>
+          <RecordGroup
+            icon="pulse-outline"
+            label="Medical History"
+            isLast={++shown === groups}
+          >
+            <View className="gap-1 pl-5">
+              {history.map((item, idx) => (
+                <Text key={idx} className="text-sm text-neutral-900">
+                  <Text className="font-semibold">{item.name}</Text>
+                  {item.extra ? (
+                    <Text className="text-neutral-500">
+                      {" "}
+                      (Since {item.extra})
+                    </Text>
+                  ) : null}
+                </Text>
+              ))}
             </View>
-          </View>
+          </RecordGroup>
         ) : null}
 
         {meds.length > 0 ? (
-          <View className="flex-row items-start gap-2 border-t border-neutral-200 py-2">
-            <Ionicons
-              name="medkit-outline"
-              size={16}
-              color="#9ca3af"
-              style={{ marginTop: 2 }}
-            />
-            <View className="min-w-0 flex-1">
-              <Text className="mb-1 text-base text-neutral-500">
-                Current Medications
-              </Text>
-              <View className="gap-1 pl-4">
-                {meds.map((item, idx) => (
-                  <Text key={idx} className="text-sm text-neutral-900">
-                    <Text className="font-semibold">{item.name}</Text>
-                    {item.extra ? (
-                      <Text className="text-neutral-500">
-                        {" "}
-                        ({item.extra})
-                      </Text>
-                    ) : null}
-                  </Text>
-                ))}
-              </View>
+          <RecordGroup
+            icon="medkit-outline"
+            label="Current Medications"
+            isLast={++shown === groups}
+          >
+            <View className="gap-1 pl-5">
+              {meds.map((item, idx) => (
+                <Text key={idx} className="text-sm text-neutral-900">
+                  <Text className="font-semibold">{item.name}</Text>
+                  {item.extra ? (
+                    <Text className="text-neutral-500"> ({item.extra})</Text>
+                  ) : null}
+                </Text>
+              ))}
             </View>
-          </View>
+          </RecordGroup>
         ) : null}
 
         {allergyItems.length > 0 ? (
-          <View className="flex-row items-start gap-2 border-t border-neutral-200 py-2">
-            <Ionicons
-              name="warning-outline"
-              size={16}
-              color="#9ca3af"
-              style={{ marginTop: 2 }}
-            />
-            <View className="min-w-0 flex-1">
-              <Text className="mb-1 text-base text-neutral-500">Allergies</Text>
-              <View className="flex-row flex-wrap items-center gap-x-3 gap-y-2 pl-4">
-                {allergyItems.map((item, idx) => {
-                  const high =
-                    item.severity === "High" ||
-                    item.severity === "CRITICAL" ||
-                    item.severity === "critical";
-                  return (
+          <RecordGroup
+            icon="warning-outline"
+            label="Allergies"
+            isLast={++shown === groups}
+          >
+            <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1.5 pl-5">
+              {allergyItems.map((item, idx) => {
+                const high =
+                  item.severity === "High" ||
+                  item.severity === "CRITICAL" ||
+                  item.severity === "critical";
+                return (
+                  <View key={idx} className="flex-row items-center gap-1">
                     <View
-                      key={idx}
-                      className="flex-row items-center gap-1"
+                      className={`rounded-full px-2 py-0.5 ${
+                        high ? "bg-red-600" : "bg-amber-500"
+                      }`}
                     >
-                      <View
-                        className={`rounded-full px-2 py-0.5 ${
-                          high ? "bg-red-600" : "bg-amber-500"
-                        }`}
-                      >
-                        <Text className="text-sm font-medium text-white">
-                          {item.name}
-                        </Text>
-                      </View>
-                      <Text className="text-xs text-neutral-500">
-                        ({item.severity})
+                      <Text className="text-xs font-medium text-white">
+                        {item.name}
                       </Text>
-                      {idx !== allergyItems.length - 1 ? (
-                        <Text className="ml-2 text-neutral-400">|</Text>
-                      ) : null}
                     </View>
-                  );
-                })}
-              </View>
+                    <Text className="text-[10px] text-neutral-500">
+                      ({item.severity})
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
-          </View>
+          </RecordGroup>
         ) : null}
       </View>
     </SectionChrome>
