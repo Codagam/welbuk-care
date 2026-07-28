@@ -14,6 +14,29 @@ type VitalsValues = {
   bloodSugar?: string;
 };
 
+const VITAL_ROWS: {
+  key: keyof VitalsValues;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  valueClassName?: string;
+}[] = [
+  {
+    key: "temperature",
+    icon: "thermometer-outline",
+    label: "Temperature",
+  },
+  {
+    key: "bloodPressure",
+    icon: "heart-outline",
+    label: "Blood Pressure",
+    valueClassName: "text-amber-600",
+  },
+  { key: "height", icon: "resize-outline", label: "Height" },
+  { key: "weight", icon: "barbell-outline", label: "Weight" },
+  { key: "spO2", icon: "cloudy-outline", label: "SpO₂" },
+  { key: "bloodSugar", icon: "water-outline", label: "Sugar" },
+];
+
 function VitalRow({
   icon,
   label,
@@ -25,16 +48,48 @@ function VitalRow({
   value: string;
   valueClassName?: string;
 }) {
+  const empty = !value || value === "—";
   return (
-    <View className="flex-row items-center gap-2">
-      <Ionicons name={icon} size={16} color="#9ca3af" />
-      <Text className="text-sm text-neutral-500">{label}</Text>
+    <View className="flex-row items-center gap-2 py-0.5">
+      <Ionicons name={icon} size={15} color="#FD006A" />
+      <Text className="text-xs text-neutral-500">{label}</Text>
       <Text
-        className={`ml-auto text-sm font-semibold ${valueClassName}`}
+        className={`ml-auto text-xs font-semibold ${
+          empty ? "text-neutral-400" : valueClassName
+        }`}
         numberOfLines={1}
       >
-        {value}
+        {value || "—"}
       </Text>
+    </View>
+  );
+}
+
+function VitalsHeader({
+  onEdit,
+  compact,
+}: {
+  onEdit: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <View className="mb-1.5 flex-row items-center justify-between">
+      <Text
+        className={`font-semibold uppercase tracking-wider text-brand ${
+          compact ? "text-[10px]" : "text-xs"
+        }`}
+      >
+        Patient Vitals
+      </Text>
+      <Pressable
+        onPress={onEdit}
+        hitSlop={8}
+        className="rounded-md p-1 active:bg-brand/10"
+        accessibilityRole="button"
+        accessibilityLabel="Edit vitals"
+      >
+        <Ionicons name="create-outline" size={14} color="#FD006A" />
+      </Pressable>
     </View>
   );
 }
@@ -43,10 +98,13 @@ export function VitalsCard({
   consultationId,
   vitals,
   onVitalsUpdate,
+  embedded = false,
 }: {
   consultationId: string;
   vitals: VitalsValues;
   onVitalsUpdate?: () => void;
+  /** Skip SectionChrome / nested box — parent provides the unified card. */
+  embedded?: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
@@ -58,25 +116,65 @@ export function VitalsCard({
     !!vitals.spO2 ||
     !!vitals.bloodSugar;
 
+  const openEdit = () => setEditOpen(true);
+
+  const rows = (
+    <View className="gap-1">
+      {VITAL_ROWS.map((row) => {
+        const raw = vitals[row.key];
+        if (!embedded && !raw) return null;
+        return (
+          <VitalRow
+            key={row.key}
+            icon={row.icon}
+            label={row.label}
+            value={raw ?? "—"}
+            valueClassName={row.valueClassName}
+          />
+        );
+      })}
+    </View>
+  );
+
+  const emptyAdd = (
+    <Pressable
+      onPress={openEdit}
+      className="h-9 flex-row items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 active:border-brand active:bg-brand-50"
+    >
+      <Ionicons name="add" size={16} color="#FD006A" />
+      <Text className="text-xs font-medium text-brand">Add Vitals</Text>
+    </Pressable>
+  );
+
+  const sheet = (
+    <VitalsEditSheet
+      open={editOpen}
+      onClose={() => setEditOpen(false)}
+      consultationId={consultationId}
+      initialVitals={vitals}
+      onSaved={onVitalsUpdate}
+    />
+  );
+
+  if (embedded) {
+    return (
+      <>
+        <View className="px-3.5 py-2.5">
+          <VitalsHeader onEdit={openEdit} compact />
+          {hasAny ? rows : emptyAdd}
+        </View>
+        {sheet}
+      </>
+    );
+  }
+
   if (!hasAny) {
     return (
       <>
         <SectionChrome title="Patient Vitals" emptyBorder className="flex-1">
-          <Pressable
-            onPress={() => setEditOpen(true)}
-            className="h-10 flex-row items-center justify-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 active:border-brand active:bg-brand-50"
-          >
-            <Ionicons name="add" size={18} color="#FD006A" />
-            <Text className="text-sm font-medium text-brand">Add Vitals</Text>
-          </Pressable>
+          {emptyAdd}
         </SectionChrome>
-        <VitalsEditSheet
-          open={editOpen}
-          onClose={() => setEditOpen(false)}
-          consultationId={consultationId}
-          initialVitals={vitals}
-          onSaved={onVitalsUpdate}
-        />
+        {sheet}
       </>
     );
   }
@@ -88,63 +186,17 @@ export function VitalsCard({
         className="flex-1"
         right={
           <Pressable
-            onPress={() => setEditOpen(true)}
+            onPress={openEdit}
             hitSlop={8}
             className="rounded-md p-1.5 active:bg-white/60"
           >
-            <Ionicons name="create-outline" size={14} color="#6b7280" />
+            <Ionicons name="create-outline" size={14} color="#FD006A" />
           </Pressable>
         }
       >
-        <View className="gap-2.5 rounded-lg bg-white p-3">
-          {vitals.temperature ? (
-            <VitalRow
-              icon="thermometer-outline"
-              label="Temp:"
-              value={vitals.temperature}
-            />
-          ) : null}
-          {vitals.height ? (
-            <VitalRow
-              icon="resize-outline"
-              label="Height:"
-              value={vitals.height}
-            />
-          ) : null}
-          {vitals.weight ? (
-            <VitalRow
-              icon="barbell-outline"
-              label="Weight:"
-              value={vitals.weight}
-            />
-          ) : null}
-          {vitals.bloodPressure ? (
-            <VitalRow
-              icon="heart-outline"
-              label="BP:"
-              value={vitals.bloodPressure}
-              valueClassName="text-amber-600"
-            />
-          ) : null}
-          {vitals.spO2 ? (
-            <VitalRow icon="cloudy-outline" label="SpO₂:" value={vitals.spO2} />
-          ) : null}
-          {vitals.bloodSugar ? (
-            <VitalRow
-              icon="water-outline"
-              label="Sugar:"
-              value={vitals.bloodSugar}
-            />
-          ) : null}
-        </View>
+        <View className="gap-2 rounded-lg bg-white p-3">{rows}</View>
       </SectionChrome>
-      <VitalsEditSheet
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        consultationId={consultationId}
-        initialVitals={vitals}
-        onSaved={onVitalsUpdate}
-      />
+      {sheet}
     </>
   );
 }

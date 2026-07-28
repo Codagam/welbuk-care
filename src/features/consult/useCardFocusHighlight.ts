@@ -1,10 +1,8 @@
 import { useCallback, useRef, useState } from "react";
-import type {
-  NativeSyntheticEvent,
-  TextInputFocusEventData,
-} from "react-native";
+import type { TextInputProps } from "react-native";
 
-type FocusEvent = NativeSyntheticEvent<TextInputFocusEventData>;
+type FocusHandler = NonNullable<TextInputProps["onFocus"]>;
+type BlurHandler = NonNullable<TextInputProps["onBlur"]>;
 
 /**
  * Tracks focus across multiple fields in one card so the outer border
@@ -14,12 +12,12 @@ export function useCardFocusHighlight() {
   const depth = useRef(0);
   const [highlighted, setHighlighted] = useState(false);
 
-  const onFocus = useCallback((_e?: FocusEvent) => {
+  const onFocus = useCallback<FocusHandler>(() => {
     depth.current += 1;
     setHighlighted(true);
   }, []);
 
-  const onBlur = useCallback((_e?: FocusEvent) => {
+  const onBlur = useCallback<BlurHandler>(() => {
     depth.current = Math.max(0, depth.current - 1);
     queueMicrotask(() => {
       if (depth.current === 0) setHighlighted(false);

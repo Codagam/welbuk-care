@@ -182,7 +182,7 @@ export function FollowUpSheet({
     >
       <View className="flex-1 bg-white px-5 pt-4">
         <View className="mb-4 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold text-neutral-900">
+          <Text className="text-lg font-semibold text-brand">
             {editingId ? "Edit follow-up" : "Book follow-up"}
           </Text>
           <Pressable onPress={onClose} className="p-2">

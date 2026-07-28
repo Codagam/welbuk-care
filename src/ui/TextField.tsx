@@ -5,12 +5,14 @@ export interface TextFieldProps extends TextInputProps {
   label?: string;
   error?: string;
   containerClassName?: string;
+  labelClassName?: string;
 }
 
 export function TextField({
   label,
   error,
   containerClassName = "",
+  labelClassName = "text-neutral-700",
   multiline,
   style,
   onFocus,
@@ -28,7 +30,7 @@ export function TextField({
   return (
     <View className={`gap-1.5 ${containerClassName}`}>
       {label ? (
-        <Text className="text-sm font-medium text-neutral-700">{label}</Text>
+        <Text className={`text-sm font-medium ${labelClassName}`}>{label}</Text>
       ) : null}
       <TextInput
         placeholderTextColor="#9ca3af"
