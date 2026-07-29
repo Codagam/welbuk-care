@@ -8,8 +8,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { Screen, TextField } from "@/ui";
-// import { Button } from "@/ui"; // used by "+ New" when re-enabled
+import { Button, Screen, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { usePatientSearch } from "@/features/patients/hooks";
 import type { Patient } from "@/features/patients/types";
@@ -20,6 +19,11 @@ import {
   normalizeGender,
 } from "@/features/patients/utils";
 
+function routeId(patient: Patient): string {
+  // Prefer display patientId (web parity); Mongo id still works with crud GET.
+  return String(patient.patientId ?? patient.id);
+}
+
 export default function PatientsScreen() {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -27,19 +31,20 @@ export default function PatientsScreen() {
 
   const patients = q.data?.pages.flatMap((p) => p.patients) ?? [];
   const total = q.data?.pages[0]?.totalCount ?? 0;
+  const permissionDenied =
+    q.isError &&
+    /permission|access denied|patient\.read/i.test(describeError(q.error));
 
   return (
     <Screen>
       <View className="gap-3 border-b border-neutral-200 bg-white px-6 pb-4 pt-6">
-        <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center justify-between gap-3">
           <Text className="text-2xl font-bold text-neutral-900">Patients</Text>
-          {/* New patient hidden for now
           <Button
             label="+ New"
             size="md"
             onPress={() => router.push("/patients/new")}
           />
-          */}
         </View>
         <TextField
           placeholder="Search name, phone, ABHA…"
@@ -62,7 +67,9 @@ export default function PatientsScreen() {
       ) : q.isError ? (
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-sm text-red-500">
-            {describeError(q.error)}
+            {permissionDenied
+              ? "You do not have permission to view patients."
+              : describeError(q.error)}
           </Text>
         </View>
       ) : (
@@ -76,7 +83,7 @@ export default function PatientsScreen() {
               onPress={() =>
                 router.push({
                   pathname: "/patients/[id]",
-                  params: { id: item.id },
+                  params: { id: routeId(item) },
                 })
               }
             />
@@ -112,6 +119,7 @@ function PatientRow({
 }) {
   const age = calcAge(patient.dob);
   const meta = [
+    `#${patient.patientId}`,
     normalizeGender(patient.gender),
     age != null ? `${age}y` : null,
     patient.phone,
