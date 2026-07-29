@@ -27,11 +27,14 @@ function NotesShell({
       }`}
     >
       <View className="flex-row items-center gap-2">
-        <Text className="text-base font-semibold tracking-tight text-brand">
+        <Text
+          className="min-w-0 shrink text-base font-semibold tracking-tight text-brand"
+          numberOfLines={1}
+        >
           {title}
         </Text>
         {badge ? (
-          <View className="rounded-md bg-brand-50 px-2 py-0.5">
+          <View className="shrink-0 rounded-md bg-brand-50 px-2 py-0.5">
             <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand">
               {badge}
             </Text>

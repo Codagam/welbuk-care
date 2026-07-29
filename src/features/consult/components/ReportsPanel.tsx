@@ -204,18 +204,27 @@ export function ReportsPanel({
       <SectionChrome title="Reports">
         <View className="gap-2.5">
           <View className="flex-row items-center justify-between gap-2">
-            <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
+            <View className="min-w-0 flex-1 flex-row items-center gap-2">
               <Ionicons name="folder-outline" size={16} color="#FD006A" />
-              <Text className="text-sm font-semibold text-neutral-900">
+              <Text
+                className="shrink text-sm font-semibold text-neutral-900"
+                numberOfLines={1}
+              >
                 Visit files
               </Text>
               {attachedUrls.length > 0 ? (
-                <Text className="text-xs font-medium text-brand">
+                <Text
+                  className="shrink-0 text-xs font-medium text-brand"
+                  numberOfLines={1}
+                >
                   {attachedUrls.length} visit file
                   {attachedUrls.length !== 1 ? "s" : ""}
                 </Text>
               ) : (
-                <Text className="text-xs text-neutral-500">
+                <Text
+                  className="min-w-0 shrink text-xs text-neutral-500"
+                  numberOfLines={1}
+                >
                   No visit files yet
                 </Text>
               )}
