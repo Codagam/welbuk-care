@@ -117,7 +117,9 @@ export default function PatientDetailScreen() {
         >
           <View className="mx-auto w-full max-w-3xl gap-4 p-6 pb-10">
             <PatientHeaderCard patient={q.data} />
-            {mongoId ? <AppointmentsCard mongoPatientId={mongoId} /> : null}
+            {mongoId ? (
+              <AppointmentsCard mongoPatientId={mongoId} routePatientId={routeId} />
+            ) : null}
             <MedicalHistoryCard
               patientId={routeId || mongoId!}
               onEdit={() => setQuestionnaireOpen(true)}

@@ -1,8 +1,23 @@
-import { ActivityIndicator, Text, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Alert, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { describeError } from "@/lib/api/errors";
 import { SectionChrome } from "@/features/consult/components/SectionChrome";
+import { openConsultForAppointment } from "@/lib/api/endpoints/consult";
+import { Button } from "@/ui";
 import { usePatientAppointments } from "../hooks";
+
+function formatTimeLabel(value?: string | null): string {
+  if (!value?.trim()) return "";
+  const raw = value.trim();
+  if (/^\d{1,2}:\d{2}(\s*[AaPp][Mm])?$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${String(h).padStart(2, "0")}:${m}`;
+}
 
 function formatWhen(row: {
   appointmentDate?: string;
@@ -17,17 +32,47 @@ function formatWhen(row: {
           year: "numeric",
         })
       : "—";
-  const time = row.startTime?.trim() || "";
+  const time = formatTimeLabel(row.startTime);
   return time ? `${date} · ${time}` : date;
 }
 
 export function AppointmentsCard({
   mongoPatientId,
+  routePatientId,
 }: {
   mongoPatientId: string;
+  routePatientId: string;
 }) {
+  const router = useRouter();
   const q = usePatientAppointments(mongoPatientId);
   const rows = q.data ?? [];
+  const [openingId, setOpeningId] = useState<string | null>(null);
+
+  const openReport = async (row: {
+    id?: string;
+    appointmentDate?: string;
+    startTime?: string;
+  }) => {
+    if (!row.id) return;
+    setOpeningId(row.id);
+    try {
+      const consult = await openConsultForAppointment(row.id);
+      router.push({
+        pathname: "/patients/[id]/report",
+        params: {
+          id: routePatientId,
+          consultationId: consult.id,
+          appointmentId: row.id,
+          appointmentDate: row.appointmentDate ?? "",
+          appointmentTime: row.startTime ?? "",
+        },
+      });
+    } catch (e) {
+      Alert.alert("Could not open report", describeError(e));
+    } finally {
+      setOpeningId(null);
+    }
+  };
 
   return (
     <SectionChrome
@@ -66,10 +111,21 @@ export function AppointmentsCard({
                   <Text className="text-[10px] text-neutral-500">Follow-up</Text>
                 ) : null}
               </View>
-              <View className="rounded-full border border-neutral-200 px-2 py-0.5">
-                <Text className="text-[10px] font-medium text-neutral-600">
-                  {String(row.status ?? "—")}
-                </Text>
+              <View className="flex-row items-center gap-2">
+                <View className="rounded-full border border-neutral-200 px-2 py-0.5">
+                  <Text className="text-[10px] font-medium text-neutral-600">
+                    {String(row.status ?? "—")}
+                  </Text>
+                </View>
+                {String(row.status ?? "").toUpperCase() === "COMPLETED" ? (
+                  <Button
+                    label="View report"
+                    size="md"
+                    variant="outline"
+                    loading={openingId === row.id}
+                    onPress={() => void openReport(row)}
+                  />
+                ) : null}
               </View>
             </View>
           ))}
