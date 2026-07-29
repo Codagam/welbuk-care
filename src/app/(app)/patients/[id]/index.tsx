@@ -60,7 +60,7 @@ export default function PatientDetailScreen() {
               <Button
                 label="Edit"
                 size="md"
-                variant="outline"
+                variant="primary"
                 onPress={() =>
                   router.push({
                     pathname: "/patients/[id]/edit",
@@ -114,11 +114,28 @@ export default function PatientDetailScreen() {
               tintColor="#FD006A"
             />
           }
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 16,
+            paddingBottom: 32,
+          }}
         >
-          <View className="mx-auto w-full max-w-3xl gap-4 p-6 pb-10">
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 1152,
+              alignSelf: "center",
+              flexDirection: "column",
+              gap: 12,
+            }}
+            className="mx-auto w-full max-w-6xl flex-col gap-3"
+          >
             <PatientHeaderCard patient={q.data} />
             {mongoId ? (
-              <AppointmentsCard mongoPatientId={mongoId} routePatientId={routeId} />
+              <AppointmentsCard
+                mongoPatientId={mongoId}
+                routePatientId={routeId}
+              />
             ) : null}
             <MedicalHistoryCard
               patientId={routeId || mongoId!}

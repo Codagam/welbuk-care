@@ -12,26 +12,29 @@ import {
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
-    <View className="w-1/2 gap-0.5 py-2 pr-4">
-      <Text className="text-xs uppercase tracking-wide text-neutral-400">
+    <View className="w-1/2 gap-0.5 py-1.5 pr-3">
+      <Text className="text-[11px] uppercase tracking-wide text-neutral-400">
         {label}
       </Text>
-      <Text className="text-base text-neutral-900">{value || "—"}</Text>
+      <Text className="text-sm text-neutral-900">{value || "—"}</Text>
     </View>
   );
 }
 
 export function PatientHeaderCard({ patient }: { patient: Patient }) {
   return (
-    <View className="gap-4">
-      <View className="flex-row items-center gap-4">
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-brand-50">
-          <Text className="text-xl font-bold text-brand-700">
+    <View className="gap-3">
+      <View className="flex-row items-center gap-3">
+        <View className="h-12 w-12 items-center justify-center rounded-full bg-brand-50">
+          <Text className="text-base font-bold text-brand-700">
             {initials(patient)}
           </Text>
         </View>
-        <View className="flex-1">
-          <Text className="text-2xl font-bold text-neutral-900">
+        <View className="min-w-0 flex-1">
+          <Text
+            className="text-xl font-semibold tracking-tight text-neutral-900"
+            numberOfLines={1}
+          >
             {fullName(patient)}
           </Text>
           <Text className="text-sm text-neutral-500">

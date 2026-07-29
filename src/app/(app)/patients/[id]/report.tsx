@@ -190,7 +190,18 @@ export default function PatientAppointmentReportScreen() {
         </View>
       ) : (
         <ScrollView>
-          <View className="mx-auto w-full max-w-5xl gap-4 p-6 pb-12">
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 1152,
+              alignSelf: "center",
+              paddingHorizontal: 16,
+              paddingTop: 16,
+              paddingBottom: 32,
+              gap: 12,
+            }}
+            className="mx-auto w-full max-w-6xl gap-3 px-4 pb-8 pt-4"
+          >
             <View className="rounded-2xl border border-neutral-200 bg-white p-5">
               <View className="flex-row items-start justify-between gap-4 border-b border-neutral-200 pb-3">
                 <View className="min-w-0 flex-1">
@@ -336,12 +347,12 @@ export default function PatientAppointmentReportScreen() {
 
             <Button
               label="Download PDF"
-              variant="outline"
+              variant="primary"
               loading={downloading}
               onPress={() => void onDownloadPdf()}
               icon={
                 downloading ? undefined : (
-                  <Ionicons name="download-outline" size={18} color="#171717" />
+                  <Ionicons name="download-outline" size={18} color="#fff" />
                 )
               }
             />

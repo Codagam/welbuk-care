@@ -72,7 +72,7 @@ export function MedicalHistoryCard({
       right={
         <Button
           label={lines.length ? "Edit" : "Add"}
-          variant="outline"
+          variant="primary"
           size="md"
           className="shrink-0"
           onPress={onEdit}

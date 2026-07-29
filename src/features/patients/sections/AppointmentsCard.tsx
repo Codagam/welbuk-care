@@ -121,7 +121,7 @@ export function AppointmentsCard({
                   <Button
                     label="View report"
                     size="md"
-                    variant="outline"
+                    variant="primary"
                     loading={openingId === row.id}
                     onPress={() => void openReport(row)}
                   />

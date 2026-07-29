@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { Button, Screen, TextField } from "@/ui";
+import { Screen, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { usePatientSearch } from "@/features/patients/hooks";
 import type { Patient } from "@/features/patients/types";
@@ -37,15 +37,10 @@ export default function PatientsScreen() {
 
   return (
     <Screen>
-      <View className="gap-3 border-b border-neutral-200 bg-white px-6 pb-4 pt-6">
-        <View className="flex-row items-center justify-between gap-3">
-          <Text className="text-2xl font-bold text-neutral-900">Patients</Text>
-          <Button
-            label="+ New"
-            size="md"
-            onPress={() => router.push("/patients/new")}
-          />
-        </View>
+      <View className="gap-2 border-b border-neutral-200 bg-white px-4 pb-3 pt-4">
+        <Text className="text-xl font-semibold tracking-tight text-neutral-900">
+          Patients
+        </Text>
         <TextField
           placeholder="Search name, phone, ABHA…"
           value={search}
@@ -65,7 +60,7 @@ export default function PatientsScreen() {
           <ActivityIndicator color="#FD006A" />
         </View>
       ) : q.isError ? (
-        <View className="flex-1 items-center justify-center px-6">
+        <View className="flex-1 items-center justify-center px-4">
           <Text className="text-center text-sm text-red-500">
             {permissionDenied
               ? "You do not have permission to view patients."
@@ -76,7 +71,12 @@ export default function PatientsScreen() {
         <FlatList
           data={patients}
           keyExtractor={(p) => p.id}
-          contentContainerStyle={{ padding: 16, gap: 8 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 24,
+            gap: 8,
+          }}
           renderItem={({ item }) => (
             <PatientRow
               patient={item}
