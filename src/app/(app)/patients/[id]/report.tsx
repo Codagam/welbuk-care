@@ -1,7 +1,19 @@
-import { useMemo } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system/legacy";
 
+import {
+  buildConsultationReportPdf,
+  uint8ToBase64,
+} from "@/features/patients/buildConsultationReportPdf";
 import { usePatient } from "@/features/patients/hooks";
 import {
   useConsultation,
@@ -9,8 +21,9 @@ import {
   useSummary,
 } from "@/features/consult/hooks";
 import { describeError } from "@/lib/api/errors";
+import { shareLocalFileOrAlert } from "@/lib/api/shareLocalFile";
 import { useActiveFacility } from "@/lib/auth/store";
-import { Screen, TopBar } from "@/ui";
+import { Button, Screen, TopBar } from "@/ui";
 
 function formatDateLabel(value?: string | null): string {
   if (!value) return "—";
@@ -23,11 +36,10 @@ function formatDateLabel(value?: string | null): string {
   });
 }
 
-/** Readable hours:minutes (e.g. 15:05 or 3:05 PM from ISO / raw time). */
+/** Readable hours:minutes (e.g. 15:05 from ISO / raw time). */
 function formatTimeLabel(value?: string | null): string {
   if (!value?.trim()) return "";
   const raw = value.trim();
-  // Already looks like H:MM or HH:MM (optional AM/PM)
   if (/^\d{1,2}:\d{2}(\s*[AaPp][Mm])?$/.test(raw)) {
     return raw;
   }
@@ -50,6 +62,13 @@ function formatPatientAge(dob?: string | null): string {
   return years >= 0 ? `${years} yrs` : "—";
 }
 
+function foodTimingLabel(value?: string | null): string | null {
+  if (!value) return null;
+  if (value === "AF") return "After Food";
+  if (value === "BF") return "Before Food";
+  return value;
+}
+
 export default function PatientAppointmentReportScreen() {
   const {
     id,
@@ -68,10 +87,15 @@ export default function PatientAppointmentReportScreen() {
   const summaryQ = useSummary(consultationId);
   const rxQ = usePrescriptions(consultationId);
   const activeFacility = useActiveFacility();
+  const [downloading, setDownloading] = useState(false);
 
   const loading =
-    patientQ.isLoading || consultQ.isLoading || summaryQ.isLoading || rxQ.isLoading;
-  const firstError = patientQ.error || consultQ.error || summaryQ.error || rxQ.error;
+    patientQ.isLoading ||
+    consultQ.isLoading ||
+    summaryQ.isLoading ||
+    rxQ.isLoading;
+  const firstError =
+    patientQ.error || consultQ.error || summaryQ.error || rxQ.error;
 
   const patientName = useMemo(() => {
     const p = patientQ.data;
@@ -92,7 +116,8 @@ export default function PatientAppointmentReportScreen() {
     formatPatientAge(patientQ.data?.dob) ?? "—"
   }`;
   const doctorLabel = consultQ.data?.doctor?.name?.trim() || "Doctor";
-  const notes = summaryQ.data?.doctorNotes?.trim() || "No doctor notes available.";
+  const notes =
+    summaryQ.data?.doctorNotes?.trim() || "No doctor notes available.";
   const diagnosis = (() => {
     const codes = summaryQ.data?.diagnosisCodes ?? [];
     if (Array.isArray(codes) && codes.length > 0) {
@@ -105,6 +130,50 @@ export default function PatientAppointmentReportScreen() {
     consultDateLabel === "—"
       ? timeLabel || "—"
       : `${consultDateLabel}${timeLabel ? `, ${timeLabel}` : ""}`;
+
+  const facilityName = activeFacility?.name || "Facility";
+  const facilityAddress =
+    activeFacility?.address?.trim() || "Address not available";
+
+  const onDownloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const bytes = await buildConsultationReportPdf({
+        facilityName,
+        facilityAddress,
+        dateTimeLabel,
+        consultLabel: String(consultLabel),
+        patientName,
+        patientMeta,
+        doctorLabel,
+        diagnosis,
+        notes,
+        prescriptionRows,
+      });
+
+      const safeName = `prescription-${String(consultLabel)
+        .replace(/[^\w.-]+/g, "-")
+        .replace(/^-|-$/g, "") || "report"}.pdf`;
+
+      const dir = FileSystem.cacheDirectory;
+      if (!dir) {
+        throw new Error("Could not access cache directory for PDF download.");
+      }
+      const dest = `${dir}${safeName}`;
+      await FileSystem.writeAsStringAsync(dest, uint8ToBase64(bytes), {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      await shareLocalFileOrAlert(dest, {
+        fileName: safeName,
+        dialogTitle: "Download PDF",
+      });
+    } catch (e) {
+      Alert.alert("Download failed", describeError(e));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <Screen>
@@ -126,10 +195,10 @@ export default function PatientAppointmentReportScreen() {
               <View className="flex-row items-start justify-between gap-4 border-b border-neutral-200 pb-3">
                 <View className="min-w-0 flex-1">
                   <Text className="text-[30px] font-bold text-neutral-900">
-                    {activeFacility?.name || "Facility"}
+                    {facilityName}
                   </Text>
                   <Text className="mt-1 text-sm text-neutral-500">
-                    {activeFacility?.address?.trim() || "Address not available"}
+                    {facilityAddress}
                   </Text>
                 </View>
                 <View className="items-end">
@@ -149,7 +218,9 @@ export default function PatientAppointmentReportScreen() {
                     <Text className="mt-1 text-lg font-semibold text-neutral-900">
                       {patientName}
                     </Text>
-                    <Text className="text-sm text-neutral-600">ID: {patientMeta}</Text>
+                    <Text className="text-sm text-neutral-600">
+                      ID: {patientMeta}
+                    </Text>
                   </View>
                   <View className="items-end">
                     <Text className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -158,7 +229,9 @@ export default function PatientAppointmentReportScreen() {
                     <Text className="mt-1 text-base font-semibold text-neutral-900">
                       {doctorLabel}
                     </Text>
-                    <Text className="text-sm text-neutral-500">General Medicine</Text>
+                    <Text className="text-sm text-neutral-500">
+                      General Medicine
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -174,7 +247,9 @@ export default function PatientAppointmentReportScreen() {
                   <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
                     Doctor Notes
                   </Text>
-                  <Text className="text-base leading-6 text-neutral-800">{notes}</Text>
+                  <Text className="text-base leading-6 text-neutral-800">
+                    {notes}
+                  </Text>
                 </View>
               </View>
 
@@ -214,13 +289,7 @@ export default function PatientAppointmentReportScreen() {
                       <Text className="flex-[1.3] text-base text-neutral-700">
                         {[
                           line.dosePattern,
-                          line.foodTiming
-                            ? line.foodTiming === "AF"
-                              ? "After Food"
-                              : line.foodTiming === "BF"
-                                ? "Before Food"
-                                : line.foodTiming
-                            : null,
+                          foodTimingLabel(line.foodTiming),
                         ]
                           .filter(Boolean)
                           .join(" · ") || "—"}
@@ -260,6 +329,22 @@ export default function PatientAppointmentReportScreen() {
                 </View>
               </View>
             </View>
+
+            <Text className="text-center text-xs tracking-wide text-neutral-400">
+              Powered by Welbuk
+            </Text>
+
+            <Button
+              label="Download PDF"
+              variant="outline"
+              loading={downloading}
+              onPress={() => void onDownloadPdf()}
+              icon={
+                downloading ? undefined : (
+                  <Ionicons name="download-outline" size={18} color="#171717" />
+                )
+              }
+            />
           </View>
         </ScrollView>
       )}
