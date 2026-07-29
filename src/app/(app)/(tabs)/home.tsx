@@ -23,34 +23,38 @@ function MenuRow({
   subtitle,
   onPress,
   destructive,
+  last,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   subtitle?: string;
   onPress: () => void;
   destructive?: boolean;
+  last?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="flex-row items-center gap-3 px-4 py-3.5 active:bg-neutral-50"
+      className={`flex-row items-center gap-3 px-3.5 py-3.5 active:bg-neutral-50 ${
+        last ? "" : "border-b border-neutral-100"
+      }`}
     >
       <View
         className={`h-10 w-10 items-center justify-center rounded-full ${
-          destructive ? "bg-red-50" : "bg-neutral-100"
+          destructive ? "bg-red-50" : "bg-brand/10"
         }`}
       >
         <Ionicons
           name={icon}
           size={20}
-          color={destructive ? "#dc2626" : "#374151"}
+          color={destructive ? "#dc2626" : "#FD006A"}
         />
       </View>
       <View className="min-w-0 flex-1">
         <Text
-          className={`text-base font-medium ${
+          className={`text-sm font-semibold ${
             destructive ? "text-red-600" : "text-neutral-900"
           }`}
         >
@@ -62,7 +66,11 @@ function MenuRow({
           </Text>
         ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={destructive ? "#fca5a5" : "#d1d5db"}
+      />
     </Pressable>
   );
 }
@@ -81,21 +89,37 @@ export default function MoreScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-        <View className="mx-auto w-full max-w-3xl gap-5 p-5">
-          <View className="gap-1">
+      <ScrollView
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 16,
+          paddingBottom: 32,
+        }}
+      >
+        <View
+          style={{
+            width: "100%",
+            maxWidth: 1152,
+            alignSelf: "center",
+            gap: 12,
+          }}
+          className="mx-auto w-full max-w-6xl gap-3"
+        >
+          <View className="gap-0.5">
             <Text className="text-sm text-neutral-500">
               {greetName
                 ? `${timeOfDayGreeting()}, ${greetName}`
                 : "Signed in"}
             </Text>
-            <Text className="text-2xl font-bold text-neutral-900">More</Text>
+            <Text className="text-xl font-semibold tracking-tight text-neutral-900">
+              More
+            </Text>
           </View>
 
           <View className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
-            <View className="flex-row items-center gap-3 px-4 py-4">
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-brand/10">
-                <Text className="text-lg font-bold text-brand">
+            <View className="flex-row items-center gap-3 px-3.5 py-3.5">
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-brand/10">
+                <Text className="text-base font-bold text-brand">
                   {initialsFromName(greetName || "U")}
                 </Text>
               </View>
@@ -107,15 +131,12 @@ export default function MoreScreen() {
                   {greetName || "Account"}
                 </Text>
                 {user?.email ? (
-                  <Text
-                    className="text-sm text-neutral-500"
-                    numberOfLines={1}
-                  >
+                  <Text className="text-sm text-neutral-500" numberOfLines={1}>
                     {user.email}
                   </Text>
                 ) : null}
                 {roleLabel ? (
-                  <Text className="text-xs font-medium uppercase tracking-wide text-brand">
+                  <Text className="text-[11px] font-medium uppercase tracking-wide text-brand">
                     {String(roleLabel).replace(/_/g, " ")}
                   </Text>
                 ) : null}
@@ -124,17 +145,17 @@ export default function MoreScreen() {
 
             {facility ? (
               <>
-                <View className="mx-4 h-px bg-neutral-100" />
-                <View className="flex-row items-start gap-3 px-4 py-3.5">
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-neutral-100">
+                <View className="mx-3.5 h-px bg-neutral-100" />
+                <View className="flex-row items-start gap-3 px-3.5 py-3.5">
+                  <View className="h-10 w-10 items-center justify-center rounded-full bg-brand/10">
                     <Ionicons
                       name="business-outline"
                       size={20}
-                      color="#374151"
+                      color="#FD006A"
                     />
                   </View>
                   <View className="min-w-0 flex-1 gap-0.5">
-                    <Text className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                       Active facility
                     </Text>
                     <Text
@@ -159,13 +180,13 @@ export default function MoreScreen() {
               icon="swap-horizontal-outline"
               label="Switch facility"
               subtitle={facility?.name}
-              onPress={() => router.replace("/select-facility")}
+              onPress={() => router.push("/select-facility")}
             />
-            <View className="mx-4 h-px bg-neutral-100" />
             <MenuRow
               icon="log-out-outline"
               label="Sign out"
               destructive
+              last
               onPress={() => signOut()}
             />
           </View>
