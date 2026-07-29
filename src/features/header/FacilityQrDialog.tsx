@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Modal,
   Pressable,
   Text,
   View,
@@ -12,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { describeError } from "@/lib/api/errors";
 import { hasFacilityQrImage } from "@/lib/api/endpoints/facility-qr";
 import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 
 import {
   regenerateFacilityQr,
@@ -95,7 +94,7 @@ export function FacilityQrDialog({
   }, [open, load]);
 
   return (
-    <Modal
+    <AppModal
       visible={open}
       transparent
       animationType="fade"
@@ -205,6 +204,6 @@ export function FacilityQrDialog({
           )}
         </Pressable>
       </Pressable>
-    </Modal>
+    </AppModal>
   );
 }

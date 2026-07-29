@@ -7,6 +7,11 @@
     "icon": "./assets/images/icon.png",
     "scheme": "welbukcare",
     "userInterfaceStyle": "light",
+    "androidStatusBar": {
+      "backgroundColor": "#FD006A",
+      "barStyle": "light-content",
+      "translucent": true
+    },
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false
@@ -26,6 +31,7 @@
       ],
       "package": "com.codagam_gobi.welbukcare"
     },
+
     "web": {
       "output": "static",
       "favicon": "./assets/images/icon.png"
@@ -45,7 +51,13 @@
       "expo-localization",
       "@react-native-community/datetimepicker",
       "expo-image",
-      "expo-status-bar",
+      [
+        "expo-status-bar",
+        {
+          "style": "light",
+          "hidden": false
+        }
+      ],
       "expo-web-browser"
     ],
     "experiments": {

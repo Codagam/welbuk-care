@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -10,7 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import type { PatientDocumentItem } from "@/lib/api/endpoints/documents";
 import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
@@ -200,7 +199,7 @@ export function DocumentsCard({ patientId }: { patientId: string }) {
         onSuccess={() => void docsQ.refetch()}
       />
 
-      <Modal
+      <AppModal
         visible={viewOpen}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -249,7 +248,7 @@ export function DocumentsCard({ patientId }: { patientId: string }) {
             ) : null}
           </ScrollView>
         </ModalSafeArea>
-      </Modal>
+      </AppModal>
     </View>
   );
 }

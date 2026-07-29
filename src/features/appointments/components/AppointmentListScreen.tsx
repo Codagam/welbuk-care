@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -7,10 +7,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import { setStatusBarStyle } from "expo-status-bar";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
@@ -36,7 +34,6 @@ function doctorWelcomeName(name: string): string {
 
 export function AppointmentListScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const facility = useActiveFacility();
   const facilityId = useFacilityId();
   const user = useAuthUser();
@@ -60,13 +57,6 @@ export function AppointmentListScreen() {
 
   /** Same gate as Practice consult list — linked doctor account only. */
   const isDoctorLogin = Boolean(user?.doctorId);
-
-  useFocusEffect(
-    useCallback(() => {
-      setStatusBarStyle("light");
-      return () => setStatusBarStyle("dark");
-    }, [])
-  );
 
   const appointments = useMemo(
     () => q.data?.pages.flatMap((p) => p.data ?? []) ?? [],
@@ -129,10 +119,7 @@ export function AppointmentListScreen() {
 
   return (
     <Screen edges={["left", "right", "bottom"]}>
-      <View
-        className="bg-brand"
-        style={{ paddingTop: Math.max(insets.top, 12) }}
-      >
+      <View className="bg-brand pt-3">
         {/* Utility row — facility + tools */}
         <View className="flex-row items-center justify-between gap-3 px-5 pb-3 pt-2">
           <View className="min-w-0 flex-1 flex-row items-center gap-2">

@@ -1,3 +1,11 @@
+export { AppModal } from "./AppModal";
+export type { AppModalProps } from "./AppModal";
+export {
+  AppStatusBar,
+  STATUS_BAR_BRAND,
+  StatusBarBrandFill,
+} from "./AppStatusBar";
+export type { AppStatusBarProps } from "./AppStatusBar";
 export { Button } from "./Button";
 export type { ButtonProps } from "./Button";
 export { DateField } from "./DateField";

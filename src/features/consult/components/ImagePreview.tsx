@@ -1,19 +1,16 @@
 import { useState, type ReactNode } from "react";
 import {
   Image,
-  Modal,
-  Platform,
   Pressable,
-  StatusBar,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 
 import { shareLocalFileOrAlert } from "@/lib/api/shareLocalFile";
+import { AppModal } from "@/ui";
 
 /** Download + Full view actions shown after opening a file with the eye icon. */
 export function FileViewerActions({
@@ -124,19 +121,14 @@ export function FullScreenImageModal({
   const { width, height } = useWindowDimensions();
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="fade"
       presentationStyle="fullScreen"
-      statusBarTranslucent
       onRequestClose={onClose}
+      statusBarBackgroundColor="#000"
+      androidSafeArea={false}
     >
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="#000"
-        translucent={false}
-      />
-      <ExpoStatusBar style="light" />
       <View className="flex-1 bg-black">
         <View
           className="absolute left-0 right-0 z-10 flex-row items-center gap-2 px-3"
@@ -190,11 +182,12 @@ export function FullScreenImageModal({
           />
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 
-/** Safe-area wrapper for Android full-screen Modals (pageSheet is iOS-only). */
+/** Safe-area wrapper for Android full-screen Modals (pageSheet is iOS-only).
+ * Top/bottom insets are handled by `AppModal` — this only applies the background. */
 export function ModalSafeArea({
   children,
   className = "bg-white",
@@ -202,19 +195,5 @@ export function ModalSafeArea({
   children: ReactNode;
   className?: string;
 }) {
-  const insets = useSafeAreaInsets();
-  // pageSheet on iOS already clears the status bar; Android Modal is full-screen.
-  const padTop = Platform.OS === "android" ? insets.top : 0;
-  const padBottom = Platform.OS === "android" ? insets.bottom : 0;
-  return (
-    <View
-      className={`flex-1 ${className}`}
-      style={{
-        paddingTop: padTop,
-        paddingBottom: padBottom,
-      }}
-    >
-      {children}
-    </View>
-  );
+  return <View className={`flex-1 ${className}`}>{children}</View>;
 }

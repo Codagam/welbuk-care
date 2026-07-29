@@ -2,7 +2,6 @@ import * as DocumentPicker from "expo-document-picker";
 import { useMemo, useState } from "react";
 import {
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -12,7 +11,7 @@ import {
 import { useCardFocusHighlight } from "@/features/consult/useCardFocusHighlight";
 import type { DrugCatalogItem } from "@/lib/api/endpoints/drugs";
 import { ApiError, describeError } from "@/lib/api/errors";
-import { Button, Segmented, TextField } from "@/ui";
+import { AppModal, Button, Segmented, TextField } from "@/ui";
 
 import { formatAllergyMatchSummaryLine } from "../allergy";
 import {
@@ -648,7 +647,7 @@ function TemplateBar({
         </Text>
       ) : null}
 
-      <Modal
+      <AppModal
         visible={pickerOpen}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -683,9 +682,9 @@ function TemplateBar({
             ))}
           </ScrollView>
         </View>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         visible={nameOpen}
         animationType="fade"
         transparent
@@ -725,7 +724,7 @@ function TemplateBar({
             </View>
           </View>
         </View>
-      </Modal>
+      </AppModal>
     </View>
   );
 }

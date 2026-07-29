@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-    Modal,
     Pressable,
     ScrollView,
     Text,
     View,
 } from "react-native";
 
-import { Button, DateField, Segmented, TextField, TimeField } from "@/ui";
+import { AppModal, Button, DateField, Segmented, TextField, TimeField } from "@/ui";
 import { formatConditionLabel } from "../problems";
 import type {
     DentalTreatmentPlanRow,
@@ -344,7 +343,7 @@ export function PlanEditorSheet({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
@@ -637,6 +636,6 @@ export function PlanEditorSheet({
           <Button label="Cancel" variant="outline" onPress={onClose} />
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }

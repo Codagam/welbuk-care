@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -9,7 +8,7 @@ import {
     View,
 } from "react-native";
 
-import { Button, DateField, TextField, TimeField } from "@/ui";
+import { AppModal, Button, DateField, TextField, TimeField } from "@/ui";
 import { getProblemLabel } from "../problems";
 import { ALL_FDI_IDS } from "../teeth";
 import type {
@@ -516,7 +515,7 @@ export function FindingsSheet({
     );
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
@@ -850,7 +849,7 @@ export function FindingsSheet({
       </View>
 
       {/* Suggested treatment dropdown — outside tap closes; re-tap toggles off */}
-      <Modal
+      <AppModal
         visible={!!treatmentPickerOpenFor}
         transparent
         animationType="fade"
@@ -1002,10 +1001,10 @@ export function FindingsSheet({
             </View>
           ) : null}
         </View>
-      </Modal>
+      </AppModal>
 
       {/* Clone tooth picker */}
-      <Modal
+      <AppModal
         visible={clonePickerOpen}
         transparent
         animationType="fade"
@@ -1069,8 +1068,8 @@ export function FindingsSheet({
             </View>
           </Pressable>
         </Pressable>
-      </Modal>
-    </Modal>
+      </AppModal>
+    </AppModal>
   );
 }
 

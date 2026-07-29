@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -10,7 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import type { LabReportItem } from "@/features/consult/types";
@@ -148,7 +147,7 @@ export function LabsCard({
 
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
 
-      <Modal
+      <AppModal
         visible={viewOpen}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -213,7 +212,7 @@ export function LabsCard({
             })}
           </ScrollView>
         </ModalSafeArea>
-      </Modal>
+      </AppModal>
     </View>
   );
 }

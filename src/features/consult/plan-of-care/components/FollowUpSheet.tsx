@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { Button, DateField } from "@/ui";
+import { AppModal, Button, DateField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import {
   createFacilityAppointment,
@@ -174,7 +174,7 @@ export function FollowUpSheet({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={open}
       animationType="slide"
       presentationStyle="pageSheet"
@@ -221,6 +221,6 @@ export function FollowUpSheet({
           />
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }

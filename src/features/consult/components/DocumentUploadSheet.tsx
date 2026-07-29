@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   Text,
   View,
@@ -10,7 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import {
   PATIENT_DOCUMENT_MAX_BYTES,
@@ -139,7 +138,7 @@ export function DocumentUploadSheet({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={open}
       animationType="slide"
       presentationStyle="pageSheet"
@@ -232,6 +231,6 @@ export function DocumentUploadSheet({
           ) : null}
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }

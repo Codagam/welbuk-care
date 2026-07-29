@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -11,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import { useFacilityId } from "@/lib/auth/store";
@@ -402,7 +401,7 @@ export function ReportsPanel({
       />
 
       {/* Visit file preview */}
-      <Modal
+      <AppModal
         visible={previewOpen}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -503,10 +502,10 @@ export function ReportsPanel({
             ) : null}
           </ScrollView>
         </ModalSafeArea>
-      </Modal>
+      </AppModal>
 
       {/* Lab / content view */}
-      <Modal
+      <AppModal
         visible={viewOpen}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -570,7 +569,7 @@ export function ReportsPanel({
             })}
           </ScrollView>
         </ModalSafeArea>
-      </Modal>
+      </AppModal>
     </View>
   );
 }

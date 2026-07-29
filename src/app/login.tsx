@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import { Redirect, useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button, Screen, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
@@ -18,7 +17,6 @@ const AUTH_HEADER_ICON = require("@/assets/images/auth-header-icon.png");
 
 export default function LoginScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const status = useAuthStore((s) => s.status);
   const activeFacilityId = useAuthStore((s) => s.activeFacilityId);
   const signIn = useAuthStore((s) => s.signIn);
@@ -63,10 +61,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           bounces={false}
         >
-          <View
-            className="items-center bg-brand px-6 pb-10"
-            style={{ paddingTop: Math.max(insets.top, 24) + 12 }}
-          >
+          <View className="items-center bg-brand px-6 pb-10 pt-9">
             <Image
               source={AUTH_HEADER_ICON}
               style={{ width: 112, height: 112 }}
