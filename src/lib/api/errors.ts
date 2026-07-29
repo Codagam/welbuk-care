@@ -65,7 +65,44 @@ export function mapErrorCode(
   return "HTTP";
 }
 
-/** Human-facing message for a caught error, safe to show in a toast. */
+const FRIENDLY_NETWORK =
+  "No connection. Check your network and try again.";
+const FRIENDLY_GENERIC = "Something went wrong. Please try again.";
+
+/** Raw native / JVM / Node messages that must never reach the UI. */
+const TECHNICAL_MESSAGE =
+  /\b(java\.|javax\.|kotlin\.|dalvik\.|android\.|okhttp|retrofit|volley)\b/i;
+
+const TECHNICAL_NETWORK =
+  /network request failed|failed to connect|unable to resolve host|unknownhost|sockettimeout|connectexception|sslhandshake|cleartext|econnrefused|enotfound|etimedout|econnreset|enetunreach|connection (refused|reset|timed out)|timed?\s*out|no address associated|name not resolved|xmlhttprequest/i;
+
+function looksTechnical(message: string): boolean {
+  const m = message.trim();
+  if (!m) return true;
+  if (TECHNICAL_MESSAGE.test(m)) return true;
+  if (TECHNICAL_NETWORK.test(m)) return true;
+  // Stack-ish: "at com.foo.Bar" / multiline exception dumps
+  if (/\bat\s+[\w.$]+\(/.test(m) || (m.includes("\n") && /Exception|Error:/.test(m))) {
+    return true;
+  }
+  // Extremely long dumps are never meant for end users
+  if (m.length > 280) return true;
+  return false;
+}
+
+function friendlyFromMessage(
+  message: string | undefined,
+  fallback: string
+): string {
+  const m = (message ?? "").trim();
+  if (!m || looksTechnical(m)) return fallback;
+  return m;
+}
+
+/**
+ * Human-facing message for a caught error, safe to show in UI / alerts.
+ * Never surfaces native/JVM stack fragments (e.g. `java.util…`).
+ */
 export function describeError(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.code) {
@@ -78,15 +115,26 @@ export function describeError(err: unknown): string {
       case "PATIENT_MANAGE_REQUIRED":
         return "Date of birth can only be changed by a user with the Patient Manager role.";
       case "NETWORK":
-        // Prefer concrete fetch/native message when present (e.g. "Network request failed: …").
-        if (err.message && err.message !== "Network request failed") {
-          return err.message;
-        }
-        return "No connection. Check your network and try again.";
+        return FRIENDLY_NETWORK;
+      case "NOT_FOUND":
+        return friendlyFromMessage(err.message, "We couldn't find what you requested.");
+      case "FORBIDDEN":
+        return friendlyFromMessage(
+          err.message,
+          "You don't have permission to do that."
+        );
+      case "VALIDATION":
+      case "CONFLICT":
+      case "HTTP":
       default:
-        return err.message || "Something went wrong.";
+        return friendlyFromMessage(err.message, FRIENDLY_GENERIC);
     }
   }
-  if (err instanceof Error) return err.message;
-  return "Something went wrong.";
+  if (err instanceof Error) {
+    return friendlyFromMessage(err.message, FRIENDLY_GENERIC);
+  }
+  if (typeof err === "string") {
+    return friendlyFromMessage(err, FRIENDLY_GENERIC);
+  }
+  return FRIENDLY_GENERIC;
 }

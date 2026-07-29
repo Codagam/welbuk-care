@@ -15,6 +15,7 @@ import {
   postDentalFindings,
   putDentalFull,
 } from "@/lib/api/endpoints/dental";
+import { describeError } from "@/lib/api/errors";
 import { PROBLEM_TYPES } from "./problems";
 import type {
   BillingSync,
@@ -141,7 +142,7 @@ export function useDentalDiagnosis({
       }
       setEntries(parsed);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load dental data");
+      setError(describeError(e));
     } finally {
       setLoading(false);
     }
@@ -241,7 +242,7 @@ export function useDentalDiagnosis({
         setFindingsOpen(false);
         return true;
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to save findings");
+        setError(describeError(e));
         return false;
       } finally {
         setSaving(false);
@@ -299,7 +300,7 @@ export function useDentalDiagnosis({
         setStatusMsg("Tooth cleared.");
         return true;
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to clear tooth");
+        setError(describeError(e));
         return false;
       } finally {
         setSaving(false);
@@ -361,7 +362,7 @@ export function useDentalDiagnosis({
         setStatusMsg(null);
         return res.billingSync ?? null;
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to save plan");
+        setError(describeError(e));
         return null;
       } finally {
         setSaving(false);

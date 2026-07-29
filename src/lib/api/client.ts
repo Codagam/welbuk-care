@@ -111,13 +111,8 @@ export async function api<T = unknown>(req: ApiRequest): Promise<T> {
     if (err instanceof Error && err.name === "AbortError") throw err;
     const underlying =
       err instanceof Error ? err.message : typeof err === "string" ? err : "unknown";
-    // console.log("[api] fetch FAILED (no HTTP response)", {
-    //   url,
-    //   method: req.method ?? "GET",
-    //   underlying,
-    //   err,
-    // });
-    throw new ApiError(`Network request failed: ${underlying}`, {
+    // Keep raw native detail in `data` for logs — never in the user-facing message.
+    throw new ApiError("No connection. Check your network and try again.", {
       status: 0,
       code: "NETWORK",
       data: { url, underlying, err: String(err) },
