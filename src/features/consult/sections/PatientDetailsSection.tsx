@@ -31,6 +31,8 @@ export function PatientDetailsSection({
   headerLoading,
   headerError,
   appointment,
+  /** When false, hide records / conversation / reports; vitals + identity stay. */
+  showExtended = true,
 }: {
   consultationId: string;
   patientId?: string;
@@ -38,6 +40,7 @@ export function PatientDetailsSection({
   headerLoading?: boolean;
   headerError?: unknown;
   appointment?: ConsultAppointment | null;
+  showExtended?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const sideBySide = width >= 700;
@@ -124,38 +127,42 @@ export function PatientDetailsSection({
         </View>
       </View>
 
-      {historyQ.isLoading && !historyQ.data ? (
-        <View className="items-center py-6">
-          <ActivityIndicator color="#FD006A" />
-        </View>
-      ) : historyQ.isError && !historyQ.data ? (
-        <View className="rounded-lg border border-neutral-200 bg-white p-4">
-          <Text className="text-sm text-red-500">
-            {describeError(historyQ.error)}
-          </Text>
-        </View>
-      ) : (
-        <PatientRecordsCard
-          medicalHistory={medicalHistory}
-          medications={medications}
-          allergies={allergies}
-        />
-      )}
+      {showExtended ? (
+        <>
+          {historyQ.isLoading && !historyQ.data ? (
+            <View className="items-center py-6">
+              <ActivityIndicator color="#FD006A" />
+            </View>
+          ) : historyQ.isError && !historyQ.data ? (
+            <View className="rounded-lg border border-neutral-200 bg-white p-4">
+              <Text className="text-sm text-red-500">
+                {describeError(historyQ.error)}
+              </Text>
+            </View>
+          ) : (
+            <PatientRecordsCard
+              medicalHistory={medicalHistory}
+              medications={medications}
+              allergies={allergies}
+            />
+          )}
 
-      {aiEnabled ? (
-        <LiveConversationPanel consultationId={consultationId} />
+          {aiEnabled ? (
+            <LiveConversationPanel consultationId={consultationId} />
+          ) : null}
+
+          <ReportsPanel
+            consultationId={consultationId}
+            patientId={patientId}
+            patientName={header?.name}
+            labReports={labReports}
+            doctorNotes={doctorNotes}
+            onRefresh={refreshHistory}
+          />
+
+          {patientId ? <DocumentsCard patientId={patientId} /> : null}
+        </>
       ) : null}
-
-      <ReportsPanel
-        consultationId={consultationId}
-        patientId={patientId}
-        patientName={header?.name}
-        labReports={labReports}
-        doctorNotes={doctorNotes}
-        onRefresh={refreshHistory}
-      />
-
-      {patientId ? <DocumentsCard patientId={patientId} /> : null}
     </View>
   );
 }

@@ -285,7 +285,7 @@ export function ReportsPanel({
         icon="document-text-outline"
         badge={labReports.length}
         collapsible
-        defaultOpen={false}
+        defaultOpen
       >
         {labReports.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
@@ -362,7 +362,7 @@ export function ReportsPanel({
         icon="calendar-outline"
         badge={doctorNotes.length}
         collapsible
-        defaultOpen={false}
+        defaultOpen
       >
         {doctorNotes.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">

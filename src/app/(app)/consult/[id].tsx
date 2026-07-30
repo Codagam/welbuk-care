@@ -180,14 +180,17 @@ export default function ConsultScreen() {
         subtitle="Identity, vitals, intake, records, conversation, and reports"
         onLayoutY={onSectionLayout}
       >
-        <PatientDetailsSection
-          consultationId={id}
-          patientId={resolvedPatientId}
-          header={header}
-          headerLoading={headerLoading}
-          headerError={headerError ? headerErr : null}
-          appointment={appointment}
-        />
+        {(open) => (
+          <PatientDetailsSection
+            consultationId={id}
+            patientId={resolvedPatientId}
+            header={header}
+            headerLoading={headerLoading}
+            headerError={headerError ? headerErr : null}
+            appointment={appointment}
+            showExtended={open}
+          />
+        )}
       </ConsultSectionCard>
 
       {dental ? (

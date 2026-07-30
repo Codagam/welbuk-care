@@ -52,9 +52,14 @@ function VitalRow({
   return (
     <View className="flex-row items-center gap-2 py-0.5">
       <Ionicons name={icon} size={15} color="#FD006A" />
-      <Text className="text-xs text-neutral-500">{label}</Text>
       <Text
-        className={`ml-auto text-xs font-semibold ${
+        className="min-w-0 flex-1 text-xs text-neutral-500"
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+      <Text
+        className={`shrink-0 text-xs font-semibold ${
           empty ? "text-neutral-400" : valueClassName
         }`}
         numberOfLines={1}
@@ -78,6 +83,7 @@ function VitalsHeader({
         className={`font-semibold uppercase tracking-wider text-brand ${
           compact ? "text-[10px]" : "text-xs"
         }`}
+        numberOfLines={1}
       >
         Patient Vitals
       </Text>
@@ -139,10 +145,15 @@ export function VitalsCard({
   const emptyAdd = (
     <Pressable
       onPress={openEdit}
-      className="h-9 flex-row items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 active:border-brand active:bg-brand-50"
+      className="h-9 flex-row items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 px-2 active:border-brand active:bg-brand-50"
     >
       <Ionicons name="add" size={16} color="#FD006A" />
-      <Text className="text-xs font-medium text-brand">Add Vitals</Text>
+      <Text
+        className="shrink text-xs font-medium text-brand"
+        numberOfLines={1}
+      >
+        Add Vitals
+      </Text>
     </Pressable>
   );
 
