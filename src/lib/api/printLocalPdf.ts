@@ -1,17 +1,53 @@
-import { Platform, Share } from "react-native";
+import { Platform } from "react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
-import * as FileSystem from "expo-file-system/legacy";
 
 type ExpoPrintModule = {
   print: (options: { uri: string }) => Promise<void>;
 };
 
+type ExpoSharingModule = {
+  shareAsync: (
+    url: string,
+    options?: {
+      mimeType?: string;
+      dialogTitle?: string;
+      UTI?: string;
+    }
+  ) => Promise<void>;
+};
+
+const SHARE_OPTS = {
+  mimeType: "application/pdf",
+  dialogTitle: "Print PDF",
+  UTI: "com.adobe.pdf",
+} as const;
+
+async function sharePdfForPrint(uri: string): Promise<void> {
+  const ExpoSharing =
+    requireOptionalNativeModule<ExpoSharingModule>("ExpoSharing");
+
+  if (!ExpoSharing?.shareAsync) {
+    throw new Error(
+      "File sharing is unavailable. Rebuild the development client so expo-sharing is linked, then choose wePrint from the share sheet."
+    );
+  }
+
+  await ExpoSharing.shareAsync(uri, { ...SHARE_OPTS });
+}
+
 /**
- * Opens the native print dialog for a local PDF when ExpoPrint is linked.
- * Falls back to the system share sheet if the current development client
- * was built before expo-print was installed (rebuild required for native print).
+ * Print a local PDF.
+ * - Android: share the PDF so apps like wePrint / Seznik can open and print it
+ *   (Seznik does not register as an Android Print Service, so the system
+ *   print dialog will never list that printer).
+ * - iOS: use the native print dialog when ExpoPrint is linked; otherwise share.
  */
 export async function printLocalPdf(uri: string): Promise<void> {
+  if (Platform.OS === "android") {
+    await sharePdfForPrint(uri);
+    return;
+  }
+
   const ExpoPrint =
     requireOptionalNativeModule<ExpoPrintModule>("ExpoPrint");
 
@@ -20,21 +56,5 @@ export async function printLocalPdf(uri: string): Promise<void> {
     return;
   }
 
-  // Dev client without ExpoPrint — share sheet (Print on iOS; PDF apps on Android).
-  let shareUri = uri;
-  if (Platform.OS === "android" && FileSystem.getContentUriAsync) {
-    try {
-      shareUri = await FileSystem.getContentUriAsync(uri);
-    } catch {
-      /* use file uri */
-    }
-  }
-
-  await Share.share({
-    url: shareUri,
-    title: "Print PDF",
-    ...(Platform.OS === "android"
-      ? { message: "Open the PDF, then choose Print." }
-      : {}),
-  });
+  await sharePdfForPrint(uri);
 }
