@@ -8,12 +8,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import * as FileSystem from "expo-file-system/legacy";
 
-import {
-  buildConsultationReportPdf,
-  uint8ToBase64,
-} from "@/features/patients/buildConsultationReportPdf";
+import { writeConsultationReportPdfToCache } from "@/features/patients/buildConsultationReportPdf";
 import { usePatient } from "@/features/patients/hooks";
 import {
   useConsultation,
@@ -21,6 +17,7 @@ import {
   useSummary,
 } from "@/features/consult/hooks";
 import { describeError } from "@/lib/api/errors";
+import { printLocalPdf } from "@/lib/api/printLocalPdf";
 import { shareLocalFileOrAlert } from "@/lib/api/shareLocalFile";
 import { useActiveFacility } from "@/lib/auth/store";
 import { Button, Screen, TopBar } from "@/ui";
@@ -69,6 +66,16 @@ function foodTimingLabel(value?: string | null): string | null {
   return value;
 }
 
+function isPrintCanceled(error: unknown): boolean {
+  const message = describeError(error).toLowerCase();
+  return (
+    message.includes("cancel") ||
+    message.includes("cancelled") ||
+    message.includes("canceled") ||
+    message.includes("dismiss")
+  );
+}
+
 export default function PatientAppointmentReportScreen() {
   const {
     id,
@@ -88,6 +95,7 @@ export default function PatientAppointmentReportScreen() {
   const rxQ = usePrescriptions(consultationId);
   const activeFacility = useActiveFacility();
   const [downloading, setDownloading] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   const loading =
     patientQ.isLoading ||
@@ -135,43 +143,49 @@ export default function PatientAppointmentReportScreen() {
   const facilityAddress =
     activeFacility?.address?.trim() || "Address not available";
 
+  const reportPdfInput = {
+    facilityName,
+    facilityAddress,
+    dateTimeLabel,
+    consultLabel: String(consultLabel),
+    patientName,
+    patientMeta,
+    doctorLabel,
+    diagnosis,
+    notes,
+    prescriptionRows,
+  };
+
+  const busy = downloading || printing;
+
   const onDownloadPdf = async () => {
+    if (busy) return;
     setDownloading(true);
     try {
-      const bytes = await buildConsultationReportPdf({
-        facilityName,
-        facilityAddress,
-        dateTimeLabel,
-        consultLabel: String(consultLabel),
-        patientName,
-        patientMeta,
-        doctorLabel,
-        diagnosis,
-        notes,
-        prescriptionRows,
-      });
-
-      const safeName = `prescription-${String(consultLabel)
-        .replace(/[^\w.-]+/g, "-")
-        .replace(/^-|-$/g, "") || "report"}.pdf`;
-
-      const dir = FileSystem.cacheDirectory;
-      if (!dir) {
-        throw new Error("Could not access cache directory for PDF download.");
-      }
-      const dest = `${dir}${safeName}`;
-      await FileSystem.writeAsStringAsync(dest, uint8ToBase64(bytes), {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      await shareLocalFileOrAlert(dest, {
-        fileName: safeName,
+      const { uri, fileName } =
+        await writeConsultationReportPdfToCache(reportPdfInput);
+      await shareLocalFileOrAlert(uri, {
+        fileName,
         dialogTitle: "Download PDF",
       });
     } catch (e) {
       Alert.alert("Download failed", describeError(e));
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const onPrintPdf = async () => {
+    if (busy) return;
+    setPrinting(true);
+    try {
+      const { uri } = await writeConsultationReportPdfToCache(reportPdfInput);
+      await printLocalPdf(uri);
+    } catch (e) {
+      if (isPrintCanceled(e)) return;
+      Alert.alert("Print failed", describeError(e));
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -349,10 +363,23 @@ export default function PatientAppointmentReportScreen() {
               label="Download PDF"
               variant="primary"
               loading={downloading}
+              disabled={busy}
               onPress={() => void onDownloadPdf()}
               icon={
                 downloading ? undefined : (
                   <Ionicons name="download-outline" size={18} color="#fff" />
+                )
+              }
+            />
+            <Button
+              label="Print PDF"
+              variant="outline"
+              loading={printing}
+              disabled={busy}
+              onPress={() => void onPrintPdf()}
+              icon={
+                printing ? undefined : (
+                  <Ionicons name="print-outline" size={18} color="#111827" />
                 )
               }
             />

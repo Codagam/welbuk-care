@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system/legacy";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
 export type ReportPdfRxLine = {
@@ -284,4 +285,32 @@ export function uint8ToBase64(bytes: Uint8Array): string {
   }
   // btoa available in RN Hermes / web
   return globalThis.btoa(binary);
+}
+
+export type CachedConsultationReportPdf = {
+  uri: string;
+  fileName: string;
+};
+
+/** Build the consultation report PDF and write it to the app cache directory. */
+export async function writeConsultationReportPdfToCache(
+  input: ConsultationReportPdfInput
+): Promise<CachedConsultationReportPdf> {
+  const bytes = await buildConsultationReportPdf(input);
+
+  const fileName = `prescription-${String(input.consultLabel)
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/^-|-$/g, "") || "report"}.pdf`;
+
+  const dir = FileSystem.cacheDirectory;
+  if (!dir) {
+    throw new Error("Could not access cache directory for PDF.");
+  }
+
+  const uri = `${dir}${fileName}`;
+  await FileSystem.writeAsStringAsync(uri, uint8ToBase64(bytes), {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return { uri, fileName };
 }
