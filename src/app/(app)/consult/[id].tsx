@@ -31,6 +31,7 @@ import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
 import { EyeSection } from "@/features/eye/sections/EyeSection";
 import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
+import { NotificationQueue } from "@/features/notifications/NotificationQueue";
 import { Screen, TopBar } from "@/ui";
 
 const SCROLL_MARGIN = 12;
@@ -243,7 +244,13 @@ export default function ConsultScreen() {
 
   return (
     <Screen>
-      <TopBar title={headerName} subtitle="Consultation" />
+      <TopBar
+        variant="brand"
+        backLabel="Back"
+        titleCentered
+        title={`Consulting for ${headerName}`}
+        right={<NotificationQueue light />}
+      />
 
       <SectionNavigator
         sections={navItems}
