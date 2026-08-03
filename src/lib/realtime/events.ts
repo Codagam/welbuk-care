@@ -62,6 +62,39 @@ function normalizeDoctorName(name: string): string {
 }
 
 /**
+ * Clinical / care-flow events a doctor-home user may toast on.
+ * Mirrors Practice `DOCTOR_CLINICAL_EVENTS` (+ live call ACK/RESOLVED).
+ * Excludes payment / QR / check-in / onboard / DOCTOR_READY_FOR_NEXT.
+ */
+function isDoctorClinicalEvent(event: string): boolean {
+  if (event.startsWith("APPOINTMENT")) return true;
+  if (event.startsWith("LAB_")) return true;
+  if (event.startsWith("REFERRAL_")) return true;
+  if (event === "PRESCRIPTION_ISSUED") return true;
+  if (event === "PATIENT_ASSIGNED") return true;
+  if (event.startsWith("PATIENT_CALL")) return true;
+  return false;
+}
+
+function payloadTargetsUser(
+  payload: Record<string, unknown>,
+  userId: string | null
+): boolean {
+  if (!userId) return false;
+  const keys = [
+    "targetUserId",
+    "assignedToUserId",
+    "staffUserId",
+    "doctorUserId",
+  ] as const;
+  for (const key of keys) {
+    const v = str(payload[key]);
+    if (v && v === userId) return true;
+  }
+  return false;
+}
+
+/**
  * Doctor login: only events clearly for this doctor.
  * Staff/admin: facility-wide (same as Practice web).
  */
@@ -80,13 +113,7 @@ export function isEventRelevantToViewer(args: {
     return true;
   }
 
-  // Doctor-facing Care events only
-  const doctorEvents =
-    event.startsWith("APPOINTMENT") ||
-    event.startsWith("PATIENT_CALL") ||
-    event === "PATIENT_ASSIGNED";
-
-  if (!doctorEvents) return false;
+  if (!isDoctorClinicalEvent(event)) return false;
 
   const payloadDoctorId = str(payload.doctorId);
   const payloadDoctorUserId = str(payload.doctorUserId);
@@ -107,15 +134,12 @@ export function isEventRelevantToViewer(args: {
     if (a && b && (a === b || a.includes(b) || b.includes(a))) return true;
   }
 
-  // PATIENT_CALL / ASSIGNED are usually user-targeted; no doctor fields → allow
+  // Care coordination: only when clearly user-targeted — never facility-broadcast noise
   if (event.startsWith("PATIENT_CALL") || event === "PATIENT_ASSIGNED") {
-    return true;
+    return payloadTargetsUser(payload, userId);
   }
 
   // No way to attribute to this doctor → drop (avoid other doctors' noise)
-  if (payloadDoctorId || payloadDoctorUserId || payloadDoctorName) {
-    return false;
-  }
   return false;
 }
 

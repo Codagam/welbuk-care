@@ -19,13 +19,22 @@ export type NotificationsListResult = {
   total: number;
 };
 
-/** GET /api/notifications?facilityId= */
+export type NotificationListOpts = {
+  /** Doctor-home: clinical events scoped to this doctor (Practice tray parity). */
+  doctorScope?: boolean;
+};
+
+/** GET /api/notifications?facilityId=&doctorScope=1 */
 export async function listNotifications(
-  facilityId: string
+  facilityId: string,
+  opts?: NotificationListOpts
 ): Promise<NotificationsListResult> {
   const res = await api<NotificationsListResult>({
     path: "/api/notifications",
-    query: { facilityId },
+    query: {
+      facilityId,
+      ...(opts?.doctorScope ? { doctorScope: "1" } : {}),
+    },
   });
   return {
     notifications: res.notifications ?? [],
@@ -46,13 +55,17 @@ export function markNotificationRead(
   });
 }
 
-/** PATCH /api/notifications/read-all?facilityId= */
+/** PATCH /api/notifications/read-all?facilityId=&doctorScope=1 */
 export function markAllNotificationsRead(
-  facilityId: string
+  facilityId: string,
+  opts?: NotificationListOpts
 ): Promise<{ success?: boolean; updated?: number }> {
   return api<{ success?: boolean; updated?: number }>({
     path: "/api/notifications/read-all",
     method: "PATCH",
-    query: { facilityId },
+    query: {
+      facilityId,
+      ...(opts?.doctorScope ? { doctorScope: "1" } : {}),
+    },
   });
 }

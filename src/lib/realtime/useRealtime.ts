@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { notificationsQueryKey } from "@/features/notifications/hooks";
 import { isDoctorHome, userDisplayName } from "@/lib/auth/roles";
 import {
   useAuthUser,
@@ -18,7 +19,7 @@ import { useRealtimeToastStore } from "./toastStore";
 
 /**
  * Live facility WebSocket: toast + TanStack invalidation.
- * Doctor logins only surface/react to their own appointment/vitals/call events.
+ * Doctor logins only surface/react to their own clinical + targeted care events.
  * Mounted once in the authenticated shell — no push required while app is open.
  */
 export function useRealtime() {
@@ -39,9 +40,9 @@ export function useRealtime() {
       const payload = unwrapRealtimePayload(raw);
 
       // Tray unread badge stays live for all facility WS traffic (API still
-      // scopes rows to this user). Do this before doctor-only toast filtering.
+      // scopes rows via doctorScope). Do this before doctor-only toast filtering.
       void qc.invalidateQueries({
-        queryKey: ["notifications", facilityId],
+        queryKey: notificationsQueryKey(facilityId, isDoctorLogin),
       });
 
       if (
@@ -93,3 +94,4 @@ export function useRealtime() {
     userName,
   ]);
 }
+
