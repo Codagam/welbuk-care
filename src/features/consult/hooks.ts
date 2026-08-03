@@ -83,12 +83,14 @@ export function useSaveSummary(id: string) {
   });
 }
 
-export function useDiagnosisSearch(q: string) {
+/** Load ICD-10 codes when the field is open; empty `q` returns the default list. */
+export function useDiagnosisSearch(q: string, open = false) {
   return useQuery({
     queryKey: ["diagnosis-codes", q.trim()],
-    enabled: q.trim().length >= 2,
+    enabled: open,
     queryFn: ({ signal }) => searchDiagnosisCodes(q.trim(), signal),
     staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
   });
 }
 

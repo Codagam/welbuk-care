@@ -28,7 +28,8 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
   });
   const [codes, setCodes] = useState<DiagnosisCode[]>([]);
   const [dxQuery, setDxQuery] = useState("");
-  const dx = useDiagnosisSearch(dxQuery);
+  const [dxOpen, setDxOpen] = useState(false);
+  const dx = useDiagnosisSearch(dxQuery, dxOpen);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -131,15 +132,26 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
           onChangeText={setDxQuery}
           placeholder="Search ICD-10 code or term…"
           autoCapitalize="none"
-          onFocus={onFocus}
-          onBlur={onBlur}
+          onFocus={(e) => {
+            setDxOpen(true);
+            onFocus(e);
+          }}
+          onBlur={(e) => {
+            // Delay close so a tap on a suggestion still registers
+            setTimeout(() => setDxOpen(false), 200);
+            onBlur(e);
+          }}
         />
-        {dxQuery.trim().length >= 2 ? (
+        {dxOpen ? (
           <View className="overflow-hidden rounded-xl border border-neutral-200">
-            {dx.isLoading ? (
-              <Text className="px-3 py-2 text-sm text-neutral-400">Searching…</Text>
+            {dx.isPending && !(dx.data ?? []).length ? (
+              <Text className="px-3 py-2 text-sm text-neutral-400">
+                {dxQuery.trim() ? "Searching…" : "Loading diagnoses…"}
+              </Text>
             ) : (dx.data ?? []).length === 0 ? (
-              <Text className="px-3 py-2 text-sm text-neutral-400">No matches.</Text>
+              <Text className="px-3 py-2 text-sm text-neutral-400">
+                {dxQuery.trim() ? "No matches." : "No diagnosis codes available."}
+              </Text>
             ) : (
               (dx.data ?? []).slice(0, 8).map((c) => (
                 <Pressable
