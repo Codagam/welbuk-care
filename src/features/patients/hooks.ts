@@ -100,8 +100,8 @@ export function usePatientQuestionnaire(patientId: string | undefined) {
   const facilityId = useFacilityId();
   return useQuery({
     queryKey: ["patient-questionnaire", patientId, facilityId],
-    enabled: !!patientId,
-    queryFn: () => getPatientQuestionnaire(patientId!, facilityId ?? undefined),
+    enabled: !!patientId && !!facilityId,
+    queryFn: () => getPatientQuestionnaire(patientId!, facilityId!),
   });
 }
 
@@ -115,12 +115,13 @@ export function useSavePatientQuestionnaire(patientId: string | undefined) {
       completed?: boolean;
     }) => {
       if (!patientId) throw new Error("patientId is required");
+      if (!facilityId) throw new Error("facilityId is required");
       return savePatientQuestionnaire({
         patientId,
         stepNumber: input.stepNumber,
         stepData: input.stepData,
         completed: input.completed,
-        facilityId: facilityId ?? undefined,
+        facilityId,
       });
     },
     onSuccess: () => {

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   Switch,
@@ -9,8 +11,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 
-import { AppModal, Button, TextField } from "@/ui";
+import { AppModal, Button, DateField, Segmented, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
+import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import { useFacilityId } from "@/lib/auth/store";
 import { uploadQuestionnaireDocument } from "@/lib/api/endpoints/questionnaire";
 import {
@@ -31,11 +34,40 @@ const CONDITIONS = [
   "Mental Health Issues",
 ] as const;
 
+const GOVERNMENT_INSURANCE_NAMES = [
+  "CMCHIS (Chief Minister's Comprehensive Health Insurance Scheme)",
+  "ESI (Employees' State Insurance)",
+  "CGHS (Central Government Health Scheme)",
+  "ECHS (Ex-Servicemen Contributory Health Scheme)",
+  "Arogya Karnataka",
+  "Ayushman Bharat - Pradhan Mantri Jan Arogya Yojana (PM-JAY)",
+  "Other",
+] as const;
+
+const PRIVATE_INSURANCE_NAMES = [
+  "Bharati AXA General Insurance",
+  "Bajaj Allianz General Insurance",
+  "HDFC ERGO General Insurance",
+  "ICICI Lombard General Insurance",
+  "New India Assurance",
+  "Oriental Insurance",
+  "Reliance General Insurance",
+  "Star Health and Allied Insurance",
+  "United India Insurance",
+  "Other",
+] as const;
+
 const STEP_TITLES = [
   "Past medical history",
   "Medications & allergies",
   "Insurance",
 ] as const;
+
+const YES_NO = ["Yes", "No"] as const;
+const INSURANCE_TYPES = ["Government", "Private", "Other"] as const;
+
+type InsuranceTypeUi = (typeof INSURANCE_TYPES)[number];
+type YesNo = (typeof YES_NO)[number];
 
 type Props = {
   open: boolean;
@@ -47,9 +79,36 @@ type Props = {
   onSaved?: () => void;
 };
 
+type StoredDocument = { uri: string; name: string; size: number };
+
 function asField(v: unknown): QuestionnaireField {
   if (v && typeof v === "object") return v as QuestionnaireField;
   return { selectedValue: "", inputValue: "" };
+}
+
+function toYesNo(v: unknown): YesNo | "" {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "yes") return "Yes";
+  if (s === "no") return "No";
+  return "";
+}
+
+function parseInsuranceType(stored: string): InsuranceTypeUi | "" {
+  const s = stored.trim().toLowerCase();
+  if (s.includes("government")) return "Government";
+  if (s.includes("private")) return "Private";
+  if (s) return "Other";
+  return "";
+}
+
+function typeLabel(
+  ui: InsuranceTypeUi | "",
+  otherType: string
+): string {
+  if (ui === "Government") return "Government Insurance";
+  if (ui === "Private") return "Private Insurance";
+  if (ui === "Other") return otherType.trim() || "Other";
+  return "";
 }
 
 /**
@@ -70,11 +129,16 @@ export function QuestionnaireSheet({
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openingDoc, setOpeningDoc] = useState(false);
 
   // Step 1
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [otherCondition, setOtherCondition] = useState("");
+  const [hasSurgeries, setHasSurgeries] = useState<YesNo | "">("");
   const [surgeries, setSurgeries] = useState("");
+  const [hasHospitalizations, setHasHospitalizations] = useState<YesNo | "">(
+    ""
+  );
   const [hospitalizations, setHospitalizations] = useState("");
 
   // Step 2
@@ -88,13 +152,20 @@ export function QuestionnaireSheet({
   const [foodAllergyText, setFoodAllergyText] = useState("");
 
   // Step 3
-  const [hasInsurance, setHasInsurance] = useState(false);
-  const [insuranceType, setInsuranceType] = useState("");
+  const [hasInsurance, setHasInsurance] = useState<YesNo | "">("");
+  const [insuranceType, setInsuranceType] = useState<InsuranceTypeUi | "">("");
+  const [otherInsuranceType, setOtherInsuranceType] = useState("");
   const [insuranceName, setInsuranceName] = useState("");
+  const [insuranceNameOther, setInsuranceNameOther] = useState("");
   const [validTill, setValidTill] = useState("");
-  const [docUri, setDocUri] = useState<string | null>(null);
-  const [docName, setDocName] = useState<string | null>(null);
-  const [docMime, setDocMime] = useState("application/pdf");
+  /** Newly picked local file (upload on save). */
+  const [localDocUri, setLocalDocUri] = useState<string | null>(null);
+  const [localDocName, setLocalDocName] = useState<string | null>(null);
+  const [localDocMime, setLocalDocMime] = useState("application/pdf");
+  /** Already-persisted Spaces document from questionnaire JSON. */
+  const [storedDocument, setStoredDocument] = useState<StoredDocument | null>(
+    null
+  );
 
   const hydrated = useMemo(() => existing.data, [existing.data]);
 
@@ -103,6 +174,7 @@ export function QuestionnaireSheet({
     setStep(1);
     setError(null);
     setBusy(false);
+    setOpeningDoc(false);
 
     const mh = hydrated?.medicalHistory as Record<string, unknown> | undefined;
     const past = asField(mh?.pastConditions);
@@ -111,10 +183,13 @@ export function QuestionnaireSheet({
       Array.isArray(sel) ? sel.map(String) : sel ? [String(sel)] : []
     );
     setOtherCondition(String(past.inputValue ?? ""));
-    setSurgeries(String(asField(mh?.surgeries).inputValue ?? ""));
-    setHospitalizations(
-      String(asField(mh?.hospitalizations).inputValue ?? "")
-    );
+
+    const surg = asField(mh?.surgeries);
+    setHasSurgeries(toYesNo(surg.selectedValue));
+    setSurgeries(String(surg.inputValue ?? ""));
+    const hosp = asField(mh?.hospitalizations);
+    setHasHospitalizations(toYesNo(hosp.selectedValue));
+    setHospitalizations(String(hosp.inputValue ?? ""));
 
     const meds = asField(hydrated?.CurrentMedications?.medications);
     const herbalF = asField(hydrated?.CurrentMedications?.["herbal&ayurvedic"]);
@@ -134,12 +209,38 @@ export function QuestionnaireSheet({
       | Record<string, unknown>
       | null
       | undefined;
-    setHasInsurance(String(insurance?.hasInsurance ?? "") === "Yes");
-    setInsuranceType(String(insurance?.type ?? ""));
-    setInsuranceName(String(insurance?.insuranceName ?? ""));
-    setValidTill(String(insurance?.validTill ?? ""));
-    setDocUri(null);
-    setDocName(null);
+    setHasInsurance(toYesNo(insurance?.hasInsurance));
+    const storedType = String(insurance?.type ?? "");
+    const uiType = parseInsuranceType(storedType);
+    setInsuranceType(uiType);
+    setOtherInsuranceType(
+      uiType === "Other"
+        ? storedType === "Other"
+          ? ""
+          : storedType
+        : String(insurance?.insuranceNameOther ?? "")
+    );
+    const name = String(insurance?.insuranceName ?? "");
+    setInsuranceName(name);
+    setInsuranceNameOther(
+      name === "Other" ? String(insurance?.insuranceNameOther ?? "") : ""
+    );
+    const vt = insurance?.validTill;
+    setValidTill(vt ? String(vt).slice(0, 10) : "");
+
+    const doc = insurance?.document as Record<string, unknown> | undefined;
+    const docUri = String(doc?.uri ?? "").trim();
+    if (docUri) {
+      setStoredDocument({
+        uri: docUri,
+        name: String(doc?.name ?? "insurance"),
+        size: Number(doc?.size ?? 0) || 0,
+      });
+    } else {
+      setStoredDocument(null);
+    }
+    setLocalDocUri(null);
+    setLocalDocName(null);
   }, [open, hydrated]);
 
   const close = () => onOpenChange(false);
@@ -149,6 +250,17 @@ export function QuestionnaireSheet({
       prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
     );
   };
+
+  const insuranceNameOptions =
+    insuranceType === "Government"
+      ? GOVERNMENT_INSURANCE_NAMES
+      : insuranceType === "Private"
+        ? PRIVATE_INSURANCE_NAMES
+        : null;
+
+  const effectiveDocName =
+    localDocName || storedDocument?.name || null;
+  const hasAnyDocument = !!(localDocUri || storedDocument?.uri);
 
   const pickInsuranceDoc = async () => {
     setError(null);
@@ -160,16 +272,66 @@ export function QuestionnaireSheet({
       });
       if (picked.canceled || !picked.assets?.[0]) return;
       const a = picked.assets[0];
-      setDocUri(a.uri);
-      setDocName(a.name || "insurance");
-      setDocMime(a.mimeType || "application/pdf");
+      setLocalDocUri(a.uri);
+      setLocalDocName(a.name || "insurance");
+      setLocalDocMime(a.mimeType || "application/pdf");
     } catch (e) {
       setError(describeError(e));
     }
   };
 
+  const clearInsuranceDoc = () => {
+    setLocalDocUri(null);
+    setLocalDocName(null);
+    setStoredDocument(null);
+  };
+
+  const viewInsuranceDoc = async () => {
+    const url = storedDocument?.uri;
+    if (!url || localDocUri) return;
+    setError(null);
+    setOpeningDoc(true);
+    try {
+      const { localUri } = await fetchProxiedFileToCache(url);
+      await Linking.openURL(localUri);
+    } catch (e) {
+      setError(describeError(e));
+    } finally {
+      setOpeningDoc(false);
+    }
+  };
+
   const saveStep = async () => {
     setError(null);
+    if (!facilityId) {
+      setError("Select a facility before saving the questionnaire.");
+      return;
+    }
+
+    if (step === 3 && !hasInsurance) {
+      setError("Please select whether the patient has health insurance.");
+      return;
+    }
+
+    if (step === 3 && hasInsurance === "Yes") {
+      if (!insuranceType) {
+        setError("Insurance type is required when Yes is selected.");
+        return;
+      }
+      if (!insuranceName.trim()) {
+        setError("Insurance name is required when Yes is selected.");
+        return;
+      }
+      if (insuranceName === "Other" && !insuranceNameOther.trim()) {
+        setError("Please specify the other insurance name.");
+        return;
+      }
+      if (!hasAnyDocument) {
+        setError("Insurance document is required when Yes is selected.");
+        return;
+      }
+    }
+
     setBusy(true);
     try {
       if (step === 1) {
@@ -183,11 +345,13 @@ export function QuestionnaireSheet({
               otherConditionDate: "",
             },
             surgeries: {
-              selectedValue: surgeries.trim() ? "Yes" : "No",
+              selectedValue: hasSurgeries || (surgeries.trim() ? "Yes" : "No"),
               inputValue: surgeries.trim(),
             },
             hospitalizations: {
-              selectedValue: hospitalizations.trim() ? "Yes" : "No",
+              selectedValue:
+                hasHospitalizations ||
+                (hospitalizations.trim() ? "Yes" : "No"),
               inputValue: hospitalizations.trim(),
             },
           },
@@ -226,34 +390,72 @@ export function QuestionnaireSheet({
         });
         setStep(3);
       } else {
-        let document:
-          | { uri: string; name: string; size: number }
-          | undefined;
-        if (docUri && docName) {
+        let document: StoredDocument | undefined;
+        if (localDocUri && localDocName) {
           const uploaded = await uploadQuestionnaireDocument({
             patientId: mongoPatientId,
-            uri: docUri,
-            fileName: docName,
-            mimeType: docMime,
-            facilityId: facilityId ?? undefined,
+            uri: localDocUri,
+            fileName: localDocName,
+            mimeType: localDocMime,
+            facilityId,
           });
-          document = { uri: uploaded.url, name: docName, size: 0 };
+          document = {
+            uri: uploaded.url,
+            name: uploaded.fileName || localDocName,
+            size: 0,
+          };
+        } else if (storedDocument?.uri) {
+          document = storedDocument;
         }
 
         const priorMh =
           (hydrated?.medicalHistory as Record<string, unknown> | null) ?? {};
+        const nameValue =
+          insuranceName === "Other"
+            ? insuranceNameOther.trim() || "Other"
+            : insuranceName.trim();
+
         await save.mutateAsync({
           stepNumber: 3,
           completed: true,
           stepData: {
             ...priorMh,
+            pastConditions: {
+              selectedValue: selectedConditions,
+              inputValue: otherCondition.trim(),
+              conditionDates:
+                (asField(priorMh.pastConditions).conditionDates as
+                  | Record<string, string>
+                  | undefined) ?? {},
+              otherConditionDate:
+                String(asField(priorMh.pastConditions).otherConditionDate ?? ""),
+            },
+            surgeries: {
+              selectedValue: hasSurgeries || (surgeries.trim() ? "Yes" : "No"),
+              inputValue: surgeries.trim(),
+            },
+            hospitalizations: {
+              selectedValue:
+                hasHospitalizations ||
+                (hospitalizations.trim() ? "Yes" : "No"),
+              inputValue: hospitalizations.trim(),
+            },
             insurance: {
-              hasInsurance: hasInsurance ? "Yes" : "No",
-              type: insuranceType.trim(),
-              insuranceName: insuranceName.trim(),
-              insuranceNameOther: "",
-              validTill: validTill.trim(),
-              ...(document ? { document } : {}),
+              hasInsurance: hasInsurance === "Yes" ? "Yes" : "No",
+              type:
+                hasInsurance === "Yes"
+                  ? typeLabel(insuranceType, otherInsuranceType)
+                  : "",
+              insuranceName: hasInsurance === "Yes" ? nameValue : "",
+              insuranceNameOther:
+                hasInsurance === "Yes" && insuranceName === "Other"
+                  ? insuranceNameOther.trim()
+                  : otherInsuranceType.trim(),
+              validTill:
+                hasInsurance === "Yes" && validTill.trim()
+                  ? validTill.trim()
+                  : null,
+              ...(hasInsurance === "Yes" && document ? { document } : {}),
             },
           },
         });
@@ -325,18 +527,38 @@ export function QuestionnaireSheet({
                 value={otherCondition}
                 onChangeText={setOtherCondition}
               />
-              <TextField
-                label="Surgeries"
-                value={surgeries}
-                onChangeText={setSurgeries}
-                placeholder="Details or leave blank"
+              <Text className="text-sm font-medium text-neutral-800">
+                Surgeries
+              </Text>
+              <Segmented
+                options={YES_NO}
+                value={hasSurgeries}
+                onChange={setHasSurgeries}
               />
-              <TextField
-                label="Hospitalizations"
-                value={hospitalizations}
-                onChangeText={setHospitalizations}
-                placeholder="Details or leave blank"
+              {hasSurgeries === "Yes" ? (
+                <TextField
+                  label="Surgery details"
+                  value={surgeries}
+                  onChangeText={setSurgeries}
+                  placeholder="Details"
+                />
+              ) : null}
+              <Text className="text-sm font-medium text-neutral-800">
+                Hospitalizations
+              </Text>
+              <Segmented
+                options={YES_NO}
+                value={hasHospitalizations}
+                onChange={setHasHospitalizations}
               />
+              {hasHospitalizations === "Yes" ? (
+                <TextField
+                  label="Hospitalization details"
+                  value={hospitalizations}
+                  onChangeText={setHospitalizations}
+                  placeholder="Details"
+                />
+              ) : null}
             </>
           ) : null}
 
@@ -396,29 +618,91 @@ export function QuestionnaireSheet({
 
           {step === 3 ? (
             <>
-              <RowSwitch
-                label="Has health insurance"
+              <Text className="text-sm font-medium text-neutral-800">
+                Do you have health insurance?
+              </Text>
+              <Segmented
+                options={YES_NO}
                 value={hasInsurance}
-                onChange={setHasInsurance}
+                onChange={(v) => {
+                  setHasInsurance(v);
+                  if (v === "No") {
+                    setInsuranceType("");
+                    setInsuranceName("");
+                    setInsuranceNameOther("");
+                    setOtherInsuranceType("");
+                    setValidTill("");
+                  }
+                }}
               />
-              {hasInsurance ? (
+              {hasInsurance === "Yes" ? (
                 <>
-                  <TextField
-                    label="Insurance type"
+                  <Text className="text-sm font-medium text-neutral-800">
+                    Type of insurance
+                  </Text>
+                  <Segmented
+                    options={INSURANCE_TYPES}
                     value={insuranceType}
-                    onChangeText={setInsuranceType}
-                    placeholder="Government / Private / Other"
+                    onChange={(v) => {
+                      setInsuranceType(v);
+                      setInsuranceName("");
+                      setInsuranceNameOther("");
+                    }}
                   />
-                  <TextField
-                    label="Insurance name"
-                    value={insuranceName}
-                    onChangeText={setInsuranceName}
-                  />
-                  <TextField
-                    label="Valid till (YYYY-MM-DD)"
+                  {insuranceType === "Other" ? (
+                    <TextField
+                      label="Other type"
+                      value={otherInsuranceType}
+                      onChangeText={setOtherInsuranceType}
+                    />
+                  ) : null}
+                  {insuranceNameOptions ? (
+                    <>
+                      <Text className="text-sm font-medium text-neutral-800">
+                        Insurance name
+                      </Text>
+                      <View className="flex-row flex-wrap gap-2">
+                        {insuranceNameOptions.map((n) => {
+                          const on = insuranceName === n;
+                          return (
+                            <Pressable
+                              key={n}
+                              onPress={() => setInsuranceName(n)}
+                              className={`rounded-full px-3 py-1.5 ${
+                                on ? "bg-brand" : "bg-neutral-100"
+                              }`}
+                            >
+                              <Text
+                                className={`text-xs font-medium ${
+                                  on ? "text-white" : "text-neutral-700"
+                                }`}
+                              >
+                                {n}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      {insuranceName === "Other" ? (
+                        <TextField
+                          label="Specify insurance name"
+                          value={insuranceNameOther}
+                          onChangeText={setInsuranceNameOther}
+                        />
+                      ) : null}
+                    </>
+                  ) : insuranceType === "Other" ? (
+                    <TextField
+                      label="Insurance name"
+                      value={insuranceName}
+                      onChangeText={setInsuranceName}
+                    />
+                  ) : null}
+                  <DateField
+                    label="Valid till"
                     value={validTill}
-                    onChangeText={setValidTill}
-                    autoCapitalize="none"
+                    onChange={setValidTill}
+                    placeholder="Select date"
                   />
                   <Pressable
                     onPress={() => void pickInsuranceDoc()}
@@ -430,9 +714,33 @@ export function QuestionnaireSheet({
                       color="#FD006A"
                     />
                     <Text className="flex-1 text-sm text-neutral-800">
-                      {docName || "Attach insurance document (optional)"}
+                      {effectiveDocName ||
+                        "Attach insurance document (required)"}
                     </Text>
                   </Pressable>
+                  {hasAnyDocument ? (
+                    <View className="flex-row gap-2">
+                      {storedDocument?.uri && !localDocUri ? (
+                        <Button
+                          label={openingDoc ? "Opening…" : "View"}
+                          variant="outline"
+                          className="flex-1"
+                          disabled={openingDoc || busy}
+                          onPress={() => void viewInsuranceDoc()}
+                        />
+                      ) : null}
+                      <Button
+                        label="Remove"
+                        variant="outline"
+                        className="flex-1"
+                        disabled={busy}
+                        onPress={clearInsuranceDoc}
+                      />
+                    </View>
+                  ) : null}
+                  {openingDoc ? (
+                    <ActivityIndicator color="#FD006A" />
+                  ) : null}
                 </>
               ) : null}
             </>
@@ -449,7 +757,9 @@ export function QuestionnaireSheet({
                 variant="outline"
                 className="flex-1"
                 disabled={busy}
-                onPress={() => setStep((s) => (s === 1 ? 1 : ((s - 1) as 1 | 2 | 3)))}
+                onPress={() =>
+                  setStep((s) => (s === 1 ? 1 : ((s - 1) as 1 | 2 | 3)))
+                }
               />
             ) : null}
             <Button

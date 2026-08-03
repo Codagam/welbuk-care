@@ -29,6 +29,11 @@ function summarize(q: PatientQuestionnaire | null | undefined): string[] {
   if (mh?.surgeries) {
     lines.push(`Surgeries — ${fieldText(mh.surgeries as QuestionnaireField)}`);
   }
+  if (mh?.hospitalizations) {
+    lines.push(
+      `Hospitalizations — ${fieldText(mh.hospitalizations as QuestionnaireField)}`
+    );
+  }
   if (q.allergies?.medicineAllergies) {
     lines.push(
       `Medicine allergies — ${fieldText(q.allergies.medicineAllergies)}`
