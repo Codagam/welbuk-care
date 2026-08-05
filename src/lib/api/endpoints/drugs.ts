@@ -12,6 +12,20 @@ export interface DrugCatalogItem {
   facilityPrice?: number | null;
 }
 
+/**
+ * Facility drug master row from `GET /api/drugs?facilityId=`
+ * (legacy unpaginated catalog used by IP service picker).
+ */
+export interface FacilityDrugItem {
+  id: string;
+  name: string;
+  genericName: string;
+  strength?: string | null;
+  unit?: string | null;
+  price?: number | null;
+  gstRatePercent?: number | null;
+}
+
 export async function searchDrugs(body: {
   facilityId?: string;
   page?: number;
@@ -33,4 +47,17 @@ export async function searchDrugs(body: {
     },
   });
   return { drugs: res.drugs ?? [] };
+}
+
+/** GET /api/drugs?facilityId= — full facility catalog for client-side IP search. */
+export async function listFacilityDrugs(
+  facilityId: string,
+  signal?: AbortSignal
+): Promise<FacilityDrugItem[]> {
+  const data = await api<{ drugs: FacilityDrugItem[] }>({
+    path: "/api/drugs",
+    query: { facilityId },
+    signal,
+  });
+  return data.drugs ?? [];
 }

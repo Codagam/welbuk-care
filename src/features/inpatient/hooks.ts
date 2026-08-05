@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 
+import { listFacilityDrugs } from "@/lib/api/endpoints/drugs";
 import {
   getInpatientAdmission,
   getInpatientBill,
@@ -15,7 +16,11 @@ import {
   type PutInpatientBillInput,
 } from "@/lib/api/endpoints/inpatient";
 import { useFacilityId } from "@/lib/auth/store";
-import { mapAdmissionToRow } from "./utils";
+import {
+  drugToPickable,
+  mapAdmissionToRow,
+  rateCardToPickable,
+} from "./utils";
 import type { BillStatusQuery, InpatientListRow } from "./types";
 
 export type InpatientStatusFilter = "admitted" | "all";
@@ -111,6 +116,40 @@ export function useInpatientRateCard() {
     staleTime: 60_000,
     queryFn: ({ signal }) => listInpatientRateCard(facilityId!, signal),
   });
+}
+
+/** Rate-card + facility drugs catalogs for the IP service search dropdown. */
+export function useServicePickables() {
+  const facilityId = useFacilityId();
+
+  const rateCardQ = useQuery({
+    queryKey: ["inpatient-rate-card", facilityId],
+    enabled: !!facilityId,
+    staleTime: 60_000,
+    queryFn: ({ signal }) => listInpatientRateCard(facilityId!, signal),
+  });
+
+  const drugsQ = useQuery({
+    queryKey: ["facility-drugs-catalog", facilityId],
+    enabled: !!facilityId,
+    staleTime: 60_000,
+    queryFn: ({ signal }) => listFacilityDrugs(facilityId!, signal),
+  });
+
+  const pickables = useMemo(() => {
+    const fromRate = (rateCardQ.data ?? []).map(rateCardToPickable);
+    const fromDrugs = (drugsQ.data ?? []).map(drugToPickable);
+    return [...fromRate, ...fromDrugs];
+  }, [rateCardQ.data, drugsQ.data]);
+
+  return {
+    pickables,
+    isLoading: rateCardQ.isLoading || drugsQ.isLoading,
+    isError: rateCardQ.isError || drugsQ.isError,
+    refetch: async () => {
+      await Promise.all([rateCardQ.refetch(), drugsQ.refetch()]);
+    },
+  };
 }
 
 export function useSaveInpatientBill(admissionId: string | undefined) {

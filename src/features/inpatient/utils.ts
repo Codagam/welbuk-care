@@ -1,10 +1,16 @@
+import type { FacilityDrugItem } from "@/lib/api/endpoints/drugs";
 import type {
   BillItem,
   BillTotals,
   InpatientAdmission,
   InpatientListRow,
+  PickableService,
   RateCardItem,
 } from "./types";
+
+export const DRUG_SERVICE_PREFIX = "drug:";
+export const PHARMACY_CAT_ID = "cat_pha";
+export const UNCATEGORIZED_CAT = "__uncategorized__";
 
 export function formatInr(n: number | string | undefined | null): string {
   return (
@@ -200,20 +206,77 @@ export function buildBaseItems(admission: InpatientAdmission): BillItem[] {
   ];
 }
 
-export function billItemFromRateCard(row: RateCardItem): BillItem {
+export function categoryIcon(catId: string): string {
+  if (catId === PHARMACY_CAT_ID) return "💊";
+  if (catId.toUpperCase() === "ROOM_TYPES" || catId === "cat_roo") return "🛏";
+  return "📋";
+}
+
+export function rateCardToPickable(row: RateCardItem): PickableService {
   const raw = typeof row.categoryId === "string" ? row.categoryId.trim() : "";
+  return {
+    id: row.id,
+    catId: raw || UNCATEGORIZED_CAT,
+    name: row.name,
+    rate: Number(row.rate) || 0,
+    unit: row.unit?.trim() || "day",
+    taxRate: 0,
+    source: "rate-card",
+  };
+}
+
+export function drugToPickable(d: FacilityDrugItem): PickableService {
+  const parts = [d.name.trim()];
+  if (d.genericName?.trim() && d.genericName.trim() !== d.name.trim()) {
+    parts.push(`(${d.genericName.trim()})`);
+  }
+  if (d.strength?.trim()) parts.push(d.strength.trim());
+  const rate =
+    d.price != null && Number.isFinite(Number(d.price)) ? Number(d.price) : 0;
+  const tax =
+    d.gstRatePercent != null && Number.isFinite(Number(d.gstRatePercent))
+      ? Number(d.gstRatePercent)
+      : 0;
+  return {
+    id: `${DRUG_SERVICE_PREFIX}${d.id}`,
+    catId: PHARMACY_CAT_ID,
+    name: parts.join(" ") || d.name,
+    rate,
+    unit: d.unit?.trim() || "unit",
+    taxRate: tax,
+    source: "drug",
+  };
+}
+
+export function billItemFromPickable(svc: PickableService): BillItem {
   return recomputeLine({
     id: newBillItemId(),
-    serviceId: row.id,
-    catId: raw || "__uncategorized__",
-    name: row.name,
+    serviceId: svc.id,
+    catId: svc.catId,
+    name: svc.name,
     qty: 1,
-    rate: Number(row.rate) || 0,
+    rate: svc.rate,
     discountPct: 0,
-    taxRate: 0,
+    taxRate: svc.taxRate,
     lineTotal: 0,
     taxAmt: 0,
   });
+}
+
+/** If `serviceId` already on the bill → qty += 1; else append. */
+export function addOrBumpBillItem(
+  items: BillItem[],
+  svc: PickableService
+): BillItem[] {
+  const existing = items.find((it) => it.serviceId === svc.id);
+  if (existing) {
+    return items.map((it) =>
+      it.serviceId === svc.id
+        ? recomputeLine({ ...it, qty: (it.qty || 0) + 1 })
+        : it
+    );
+  }
+  return [...items, billItemFromPickable(svc)];
 }
 
 export function mapAdmissionToRow(a: InpatientAdmission): InpatientListRow {

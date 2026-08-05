@@ -108,3 +108,14 @@ export type RateCardItem = {
 };
 
 export type BillStatusQuery = "draft" | "final";
+
+/** Merged rate-card + drug row for the IP service search dropdown. */
+export type PickableService = {
+  id: string;
+  catId: string;
+  name: string;
+  rate: number;
+  unit: string;
+  taxRate: number;
+  source: "rate-card" | "drug";
+};

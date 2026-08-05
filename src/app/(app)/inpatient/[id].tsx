@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,10 +20,9 @@ import {
   useInpatientBillHydration,
   useSaveInpatientBill,
 } from "@/features/inpatient/hooks";
-import { RateCardPickerSheet } from "@/features/inpatient/RateCardPickerSheet";
+import { ServicePicker } from "@/features/inpatient/ServicePicker";
 import type { BillItem } from "@/features/inpatient/types";
 import {
-  billItemFromRateCard,
   billLineCategoryLabel,
   buildBaseItems,
   calcBillTotals,
@@ -59,7 +59,6 @@ export default function InpatientBillScreen() {
   const [hydratedAdmissionId, setHydratedAdmissionId] = useState<string | null>(
     null
   );
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Prefer IP serial in the URL once known (web parity).
   useEffect(() => {
@@ -116,6 +115,25 @@ export default function InpatientBillScreen() {
       prev.map((it) => {
         if (it.id !== id) return it;
         return recomputeLine({ ...it, qty: Math.max(1, (it.qty || 1) + delta) });
+      })
+    );
+  };
+
+  const updateField = (
+    id: string,
+    field: "rate" | "discountPct" | "taxRate",
+    raw: string
+  ) => {
+    const n = Number(raw.replace(/[^0-9.]/g, ""));
+    const value = Number.isFinite(n) ? Math.max(0, n) : 0;
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== id) return it;
+        const next =
+          field === "discountPct" || field === "taxRate"
+            ? Math.min(100, value)
+            : value;
+        return recomputeLine({ ...it, [field]: next });
       })
     );
   };
@@ -260,7 +278,7 @@ export default function InpatientBillScreen() {
 
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
       >
         <View className="rounded-2xl border border-neutral-200 bg-white p-4">
           <View className="flex-row items-start justify-between gap-2">
@@ -313,20 +331,15 @@ export default function InpatientBillScreen() {
         </View>
 
         <View className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-base font-semibold text-neutral-900">
-              Billing details
-            </Text>
-            {!readOnly ? (
-              <Pressable
-                onPress={() => setPickerOpen(true)}
-                className="flex-row items-center gap-1 rounded-xl bg-brand-50 px-3 py-1.5 active:bg-brand-100"
-              >
-                <Ionicons name="add" size={16} color="#FD006A" />
-                <Text className="text-sm font-semibold text-brand-700">Add</Text>
-              </Pressable>
-            ) : null}
-          </View>
+          <Text className="mb-3 text-base font-semibold text-neutral-900">
+            Inpatient Billing Details
+          </Text>
+
+          {!readOnly ? (
+            <View className="mb-3">
+              <ServicePicker items={items} setItems={setItems} />
+            </View>
+          ) : null}
 
           {items.length === 0 ? (
             <Text className="py-6 text-center text-sm text-neutral-500">
@@ -356,50 +369,95 @@ export default function InpatientBillScreen() {
                           {billLineCategoryLabel(it.catId)}
                         </Text>
                       </View>
-                      <Text className="font-mono text-sm font-semibold text-neutral-900">
-                        {formatInr(it.lineTotal)}
-                      </Text>
-                    </View>
-
-                    <View className="mt-2 flex-row items-center justify-between">
-                      <Text className="text-xs text-neutral-500">
-                        {formatInr(it.rate)} × {it.qty}
-                      </Text>
-                      {!readOnly ? (
-                        <View className="flex-row items-center gap-2">
-                          <Pressable
-                            onPress={() => updateQty(it.id, -1)}
-                            className="h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 bg-white"
-                          >
-                            <Text className="text-base font-bold text-neutral-700">
-                              −
-                            </Text>
-                          </Pressable>
-                          <Text className="min-w-[20px] text-center text-sm font-semibold">
-                            {it.qty}
-                          </Text>
-                          <Pressable
-                            onPress={() => updateQty(it.id, 1)}
-                            className="h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 bg-white"
-                          >
-                            <Text className="text-base font-bold text-neutral-700">
-                              +
-                            </Text>
-                          </Pressable>
+                      <View className="items-end gap-1">
+                        <Text className="font-mono text-sm font-semibold text-neutral-900">
+                          {formatInr(it.lineTotal + it.taxAmt)}
+                        </Text>
+                        {!readOnly ? (
                           <Pressable
                             onPress={() => removeItem(it.id)}
                             hitSlop={6}
-                            className="ml-1 h-8 w-8 items-center justify-center"
+                            accessibilityLabel="Remove line"
                           >
                             <Ionicons
-                              name="trash-outline"
-                              size={16}
+                              name="close"
+                              size={18}
                               color="#DC2626"
                             />
                           </Pressable>
-                        </View>
-                      ) : null}
+                        ) : null}
+                      </View>
                     </View>
+
+                    <View className="mt-2 flex-row items-center justify-between">
+                      <View className="flex-row items-center gap-2">
+                        {!readOnly ? (
+                          <>
+                            <Pressable
+                              onPress={() => updateQty(it.id, -1)}
+                              className="h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 bg-white"
+                            >
+                              <Text className="text-base font-bold text-neutral-700">
+                                −
+                              </Text>
+                            </Pressable>
+                            <Text className="min-w-[20px] text-center text-sm font-semibold">
+                              {it.qty}
+                            </Text>
+                            <Pressable
+                              onPress={() => updateQty(it.id, 1)}
+                              className="h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 bg-white"
+                            >
+                              <Text className="text-base font-bold text-neutral-700">
+                                +
+                              </Text>
+                            </Pressable>
+                          </>
+                        ) : (
+                          <Text className="text-xs text-neutral-500">
+                            Qty {it.qty}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+
+                    {!readOnly ? (
+                      <View className="mt-2 flex-row gap-2">
+                        <View style={{ flex: 1.4 }} className="min-w-0">
+                          <LineField
+                            label="Rate"
+                            value={String(it.rate)}
+                            onChangeText={(t) => updateField(it.id, "rate", t)}
+                          />
+                        </View>
+                        <View className="min-w-0 flex-1">
+                          <LineField
+                            label="Disc %"
+                            value={String(it.discountPct || 0)}
+                            onChangeText={(t) =>
+                              updateField(it.id, "discountPct", t)
+                            }
+                          />
+                        </View>
+                        <View className="min-w-0 flex-1">
+                          <LineField
+                            label="Tax %"
+                            value={String(it.taxRate || 0)}
+                            onChangeText={(t) =>
+                              updateField(it.id, "taxRate", t)
+                            }
+                          />
+                        </View>
+                      </View>
+                    ) : (
+                      <Text className="mt-1 text-xs text-neutral-500">
+                        {formatInr(it.rate)} × {it.qty}
+                        {it.discountPct
+                          ? ` · disc ${it.discountPct}%`
+                          : ""}
+                        {it.taxRate ? ` · tax ${it.taxRate}%` : ""}
+                      </Text>
+                    )}
                   </View>
                 );
               })}
@@ -427,7 +485,9 @@ export default function InpatientBillScreen() {
                 value={String(discountPct || "")}
                 onChangeText={(t) => {
                   const n = Number(t.replace(/[^0-9.]/g, ""));
-                  setDiscountPct(Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0);
+                  setDiscountPct(
+                    Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0
+                  );
                 }}
                 keyboardType="decimal-pad"
               />
@@ -486,15 +546,38 @@ export default function InpatientBillScreen() {
           </Text>
         )}
       </ScrollView>
+    </Screen>
+  );
+}
 
-      <RateCardPickerSheet
-        visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onPick={(row) => {
-          setItems((prev) => [...prev, billItemFromRateCard(row)]);
+function LineField({
+  label,
+  value,
+  onChangeText,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+}) {
+  return (
+    <View className="w-full gap-1">
+      <Text className="text-[10px] font-medium text-neutral-500">{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType="decimal-pad"
+        numberOfLines={1}
+        className="w-full rounded-lg border border-neutral-200 bg-white px-2.5 text-sm text-neutral-900"
+        style={{
+          height: 44,
+          minHeight: 44,
+          paddingVertical: 0,
+          textAlignVertical: "center",
+          // Android otherwise adds extra font padding that clips digits.
+          includeFontPadding: false,
         }}
       />
-    </Screen>
+    </View>
   );
 }
 
