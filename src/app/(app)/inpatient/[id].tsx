@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -13,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Button, Screen, TextField, TopBar } from "@/ui";
 import { describeError } from "@/lib/api/errors";
+import { SectionChrome } from "@/features/consult/components/SectionChrome";
 import { useCanAccessInpatient } from "@/features/permissions/hooks";
 import {
   useDischargeAdmission,
@@ -33,6 +36,7 @@ import {
   ipDaysBetween,
   patchRoomRentLineRates,
   patientDisplayName,
+  personInitials,
   ratePerDayFromRoom,
   recomputeLine,
   todayYmd,
@@ -55,12 +59,10 @@ export default function InpatientBillScreen() {
   const [items, setItems] = useState<BillItem[]>([]);
   const [discountPct, setDiscountPct] = useState(0);
   const [notes, setNotes] = useState("");
-  /** Mongo admission id we last hydrated editor state for. */
   const [hydratedAdmissionId, setHydratedAdmissionId] = useState<string | null>(
     null
   );
 
-  // Prefer IP serial in the URL once known (web parity).
   useEffect(() => {
     if (!admission || !admissionId) return;
     const preferred = inpatientRouteSegment(admission);
@@ -72,7 +74,6 @@ export default function InpatientBillScreen() {
     }
   }, [admission, admissionId, router]);
 
-  // Hydrate local editor once when admission + bill query settle.
   useEffect(() => {
     if (!admission || billQ.isLoading) return;
     if (hydratedAdmissionId === admission.id) return;
@@ -167,7 +168,6 @@ export default function InpatientBillScreen() {
         return;
       }
 
-      // Web finalize also discharges when still admitted.
       if (!isDischarged) {
         await discharge.mutateAsync(todayYmd());
       }
@@ -192,7 +192,12 @@ export default function InpatientBillScreen() {
   if (accessLoading) {
     return (
       <Screen>
-        <TopBar title="In-Patient Bill" />
+        <TopBar
+          title="In-Patient Bill"
+          variant="brand"
+          titleCentered
+          backLabel="Back"
+        />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#FD006A" />
         </View>
@@ -203,7 +208,12 @@ export default function InpatientBillScreen() {
   if (!canAccess) {
     return (
       <Screen>
-        <TopBar title="In-Patient Bill" />
+        <TopBar
+          title="In-Patient Bill"
+          variant="brand"
+          titleCentered
+          backLabel="Back"
+        />
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-sm text-neutral-600">
             You do not have permission to view inpatient billing.
@@ -219,10 +229,15 @@ export default function InpatientBillScreen() {
   ) {
     return (
       <Screen>
-        <TopBar title="In-Patient Bill" />
+        <TopBar
+          title="In-Patient Bill"
+          variant="brand"
+          titleCentered
+          backLabel="Back"
+        />
         <View className="flex-1 items-center justify-center gap-2">
           <ActivityIndicator color="#FD006A" />
-          <Text className="text-sm text-neutral-500">Loading admission…</Text>
+          <Text className="text-xs text-neutral-500">Loading admission…</Text>
         </View>
       </Screen>
     );
@@ -231,7 +246,12 @@ export default function InpatientBillScreen() {
   if (admissionQ.isError || !admission) {
     return (
       <Screen>
-        <TopBar title="In-Patient Bill" />
+        <TopBar
+          title="In-Patient Bill"
+          variant="brand"
+          titleCentered
+          backLabel="Back"
+        />
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-sm font-medium text-neutral-900">
             Admission not found
@@ -260,153 +280,186 @@ export default function InpatientBillScreen() {
       ? `IP-${admission.ipSerial}`
       : `IP-${admission.id.slice(-6).toUpperCase()}`;
 
+  const metaParts = [
+    ipLabel,
+    admission.patient.patientId != null
+      ? `#${admission.patient.patientId}`
+      : null,
+    admission.room.displayName,
+  ].filter(Boolean);
+
   return (
     <Screen>
       <TopBar
         title="In-Patient Bill"
         subtitle={patientName}
+        variant="brand"
+        titleCentered
+        backLabel="Back"
         right={
           <Pressable
             onPress={() => router.replace("/inpatient")}
             hitSlop={8}
-            className="rounded-lg px-2 py-1 active:bg-neutral-100"
+            className="rounded-full px-2 py-1 active:bg-white/15"
           >
-            <Text className="text-sm font-semibold text-neutral-700">List</Text>
+            <Text className="text-sm font-semibold text-white">List</Text>
           </Pressable>
         }
       />
 
-      <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}
-        keyboardShouldPersistTaps="always"
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <View className="flex-row items-start justify-between gap-2">
-            <View className="min-w-0 flex-1">
-              <Text className="text-lg font-semibold text-neutral-900">
-                {patientName}
-              </Text>
-              <Text className="mt-0.5 text-xs text-neutral-500">
-                {ipLabel}
-                {admission.patient.patientId != null
-                  ? ` · #${admission.patient.patientId}`
-                  : ""}
-              </Text>
-              <Text className="mt-1 text-sm text-neutral-600">
-                {admission.room.displayName}
-                {admission.diagnosis?.trim()
-                  ? ` · ${admission.diagnosis.trim()}`
-                  : ""}
-              </Text>
-            </View>
-            <View
-              className={`rounded-full px-2.5 py-1 ${
-                isDischarged ? "bg-emerald-50" : "bg-neutral-100"
-              }`}
-            >
-              <Text
-                className={`text-[10px] font-semibold ${
-                  isDischarged ? "text-emerald-700" : "text-neutral-700"
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 16,
+            paddingBottom: 24,
+            gap: 12,
+          }}
+          keyboardShouldPersistTaps="always"
+        >
+          {/* Patient identity — consult header strip */}
+          <View className="rounded-2xl border border-neutral-200 bg-white px-3.5 py-2.5">
+            <View className="flex-row items-center gap-2.5">
+              <View className="h-9 w-9 items-center justify-center rounded-full bg-brand">
+                <Text className="text-xs font-bold text-white">
+                  {personInitials(patientName)}
+                </Text>
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-base font-bold text-neutral-900"
+                  numberOfLines={1}
+                >
+                  {patientName}
+                </Text>
+                <Text
+                  className="mt-0.5 text-xs leading-4 text-neutral-500"
+                  numberOfLines={1}
+                >
+                  {metaParts.join("  ·  ")}
+                </Text>
+              </View>
+              <View
+                className={`rounded-full px-2.5 py-1 ${
+                  isDischarged ? "bg-emerald-50" : "bg-neutral-100"
                 }`}
               >
-                {isDischarged ? "Discharged" : "Admitted"}
+                <Text
+                  className={`text-[10px] font-semibold ${
+                    isDischarged ? "text-emerald-700" : "text-neutral-700"
+                  }`}
+                >
+                  {isDischarged ? "Discharged" : "Admitted"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <SectionChrome title="Admission" icon="bed-outline">
+            <View className="flex-row flex-wrap gap-x-4 gap-y-3">
+              <Meta
+                label="Doctor"
+                value={(admission.doctor.name ?? "—").trim() || "—"}
+              />
+              <Meta
+                label="Admitted"
+                value={`${toDisplayDateDdMmYyyy(admitDateLabel)} · ${days}d`}
+              />
+              <Meta
+                label="Room rent"
+                value={`${formatInr(days * roomRate)} (${formatInr(roomRate)}/d)`}
+              />
+              {admission.diagnosis?.trim() ? (
+                <Meta label="Diagnosis" value={admission.diagnosis.trim()} />
+              ) : null}
+            </View>
+          </SectionChrome>
+
+          <SectionChrome
+            title="Inpatient Billing Details"
+            icon="receipt-outline"
+            badge={items.length}
+          >
+            {!readOnly ? (
+              <View className="mb-3">
+                <ServicePicker items={items} setItems={setItems} />
+              </View>
+            ) : null}
+
+            {items.length === 0 ? (
+              <Text className="py-4 text-center text-xs italic text-neutral-500">
+                No bill lines yet.
               </Text>
-            </View>
-          </View>
-
-          <View className="mt-3 flex-row flex-wrap gap-x-4 gap-y-2 border-t border-neutral-100 pt-3">
-            <Meta
-              label="Doctor"
-              value={(admission.doctor.name ?? "—").trim() || "—"}
-            />
-            <Meta
-              label="Admitted"
-              value={`${toDisplayDateDdMmYyyy(admitDateLabel)} · ${days}d`}
-            />
-            <Meta
-              label="Room rent"
-              value={`${formatInr(days * roomRate)} (${formatInr(roomRate)}/d)`}
-            />
-          </View>
-        </View>
-
-        <View className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <Text className="mb-3 text-base font-semibold text-neutral-900">
-            Inpatient Billing Details
-          </Text>
-
-          {!readOnly ? (
-            <View className="mb-3">
-              <ServicePicker items={items} setItems={setItems} />
-            </View>
-          ) : null}
-
-          {items.length === 0 ? (
-            <Text className="py-6 text-center text-sm text-neutral-500">
-              No bill lines yet.
-            </Text>
-          ) : (
-            <View className="gap-2">
-              {items.map((it) => {
-                const color = CAT_COLOR[it.catId] ?? "#6B7280";
-                return (
-                  <View
-                    key={it.id}
-                    className="rounded-xl border border-neutral-100 bg-neutral-50 px-3 py-2.5"
-                  >
-                    <View className="flex-row items-start justify-between gap-2">
-                      <View className="min-w-0 flex-1">
-                        <Text
-                          className="text-sm font-semibold text-neutral-900"
-                          numberOfLines={2}
-                        >
-                          {it.name}
-                        </Text>
-                        <Text
-                          className="mt-0.5 text-[10px] font-medium"
-                          style={{ color }}
-                        >
-                          {billLineCategoryLabel(it.catId)}
-                        </Text>
-                      </View>
-                      <View className="items-end gap-1">
-                        <Text className="font-mono text-sm font-semibold text-neutral-900">
+            ) : (
+              <View>
+                <View className="mb-1 flex-row border-b border-neutral-100 pb-1.5">
+                  <Text className="flex-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                    Service
+                  </Text>
+                  <Text className="w-20 text-right text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                    Total
+                  </Text>
+                </View>
+                {items.map((it, index) => {
+                  const color = CAT_COLOR[it.catId] ?? "#6B7280";
+                  return (
+                    <View
+                      key={it.id}
+                      className={`py-2.5 ${
+                        index > 0 ? "border-t border-neutral-100" : ""
+                      }`}
+                    >
+                      <View className="flex-row items-start gap-2">
+                        <View className="min-w-0 flex-1">
+                          <Text
+                            className="text-sm font-semibold text-neutral-900"
+                            numberOfLines={2}
+                          >
+                            {it.name}
+                          </Text>
+                          <Text
+                            className="mt-0.5 text-[10px] font-medium"
+                            style={{ color }}
+                          >
+                            {billLineCategoryLabel(it.catId)}
+                          </Text>
+                        </View>
+                        <Text className="w-20 text-right font-mono text-sm font-semibold text-neutral-900">
                           {formatInr(it.lineTotal + it.taxAmt)}
                         </Text>
                         {!readOnly ? (
                           <Pressable
                             onPress={() => removeItem(it.id)}
-                            hitSlop={6}
+                            hitSlop={8}
                             accessibilityLabel="Remove line"
+                            className="rounded-md p-1 active:bg-brand/10"
                           >
-                            <Ionicons
-                              name="close"
-                              size={18}
-                              color="#DC2626"
-                            />
+                            <Ionicons name="close" size={16} color="#DC2626" />
                           </Pressable>
                         ) : null}
                       </View>
-                    </View>
 
-                    <View className="mt-2 flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-2">
+                      <View className="mt-2 flex-row items-center gap-2">
                         {!readOnly ? (
                           <>
                             <Pressable
                               onPress={() => updateQty(it.id, -1)}
-                              className="h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 bg-white"
+                              className="h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white active:bg-neutral-50"
                             >
                               <Text className="text-base font-bold text-neutral-700">
                                 −
                               </Text>
                             </Pressable>
-                            <Text className="min-w-[20px] text-center text-sm font-semibold">
+                            <Text className="min-w-[24px] text-center text-sm font-semibold text-neutral-900">
                               {it.qty}
                             </Text>
                             <Pressable
                               onPress={() => updateQty(it.id, 1)}
-                              className="h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 bg-white"
+                              className="h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white active:bg-neutral-50"
                             >
                               <Text className="text-base font-bold text-neutral-700">
                                 +
@@ -419,133 +472,143 @@ export default function InpatientBillScreen() {
                           </Text>
                         )}
                       </View>
+
+                      {!readOnly ? (
+                        <View className="mt-2 flex-row gap-2">
+                          <View style={{ flex: 1.4 }} className="min-w-0">
+                            <LineField
+                              label="Rate"
+                              value={String(it.rate)}
+                              onChangeText={(t) =>
+                                updateField(it.id, "rate", t)
+                              }
+                            />
+                          </View>
+                          <View className="min-w-0 flex-1">
+                            <LineField
+                              label="Disc %"
+                              value={String(it.discountPct || 0)}
+                              onChangeText={(t) =>
+                                updateField(it.id, "discountPct", t)
+                              }
+                            />
+                          </View>
+                          <View className="min-w-0 flex-1">
+                            <LineField
+                              label="Tax %"
+                              value={String(it.taxRate || 0)}
+                              onChangeText={(t) =>
+                                updateField(it.id, "taxRate", t)
+                              }
+                            />
+                          </View>
+                        </View>
+                      ) : (
+                        <Text className="mt-1 text-xs text-neutral-500">
+                          {formatInr(it.rate)} × {it.qty}
+                          {it.discountPct
+                            ? ` · disc ${it.discountPct}%`
+                            : ""}
+                          {it.taxRate ? ` · tax ${it.taxRate}%` : ""}
+                        </Text>
+                      )}
                     </View>
-
-                    {!readOnly ? (
-                      <View className="mt-2 flex-row gap-2">
-                        <View style={{ flex: 1.4 }} className="min-w-0">
-                          <LineField
-                            label="Rate"
-                            value={String(it.rate)}
-                            onChangeText={(t) => updateField(it.id, "rate", t)}
-                          />
-                        </View>
-                        <View className="min-w-0 flex-1">
-                          <LineField
-                            label="Disc %"
-                            value={String(it.discountPct || 0)}
-                            onChangeText={(t) =>
-                              updateField(it.id, "discountPct", t)
-                            }
-                          />
-                        </View>
-                        <View className="min-w-0 flex-1">
-                          <LineField
-                            label="Tax %"
-                            value={String(it.taxRate || 0)}
-                            onChangeText={(t) =>
-                              updateField(it.id, "taxRate", t)
-                            }
-                          />
-                        </View>
-                      </View>
-                    ) : (
-                      <Text className="mt-1 text-xs text-neutral-500">
-                        {formatInr(it.rate)} × {it.qty}
-                        {it.discountPct
-                          ? ` · disc ${it.discountPct}%`
-                          : ""}
-                        {it.taxRate ? ` · tax ${it.taxRate}%` : ""}
-                      </Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          <View className="mt-4 gap-1.5 border-t border-neutral-100 pt-3">
-            <TotalRow label="Subtotal" value={formatInr(totals.subtotal)} />
-            <TotalRow
-              label="Discount"
-              value={`−${formatInr(totals.overallDisc)}`}
-            />
-            <TotalRow label="Tax" value={formatInr(totals.totalTax)} />
-            <TotalRow
-              label="Patient payable"
-              value={formatInr(totals.patientPayable)}
-              bold
-            />
-          </View>
-
-          {!readOnly ? (
-            <View className="mt-3">
-              <TextField
-                label="Overall discount %"
-                value={String(discountPct || "")}
-                onChangeText={(t) => {
-                  const n = Number(t.replace(/[^0-9.]/g, ""));
-                  setDiscountPct(
-                    Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0
                   );
-                }}
-                keyboardType="decimal-pad"
+                })}
+              </View>
+            )}
+
+            <View className="mt-3 gap-1.5 border-t border-neutral-100 pt-3">
+              <TotalRow label="Subtotal" value={formatInr(totals.subtotal)} />
+              <TotalRow
+                label="Discount"
+                value={`−${formatInr(totals.overallDisc)}`}
+              />
+              <TotalRow label="Tax" value={formatInr(totals.totalTax)} />
+              <TotalRow
+                label="Patient payable"
+                value={formatInr(totals.patientPayable)}
+                bold
               />
             </View>
+
+            {!readOnly ? (
+              <View className="mt-3">
+                <TextField
+                  label="Overall discount %"
+                  value={String(discountPct || "")}
+                  onChangeText={(t) => {
+                    const n = Number(t.replace(/[^0-9.]/g, ""));
+                    setDiscountPct(
+                      Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0
+                    );
+                  }}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            ) : null}
+          </SectionChrome>
+
+          <SectionChrome title="Notes" icon="document-text-outline">
+            <TextField
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              editable={!readOnly}
+              placeholder="Discharge summary, remarks…"
+              style={{ minHeight: 88, textAlignVertical: "top" }}
+            />
+          </SectionChrome>
+
+          {readOnly ? (
+            <Text className="text-center text-xs italic text-neutral-500">
+              Final bill on file — editing is locked after discharge.
+            </Text>
           ) : null}
-        </View>
+        </ScrollView>
 
-        <View className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <TextField
-            label="Notes / discharge remarks"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            editable={!readOnly}
-            placeholder="Discharge summary, remarks…"
-            style={{ minHeight: 88, textAlignVertical: "top" }}
-          />
-        </View>
-
+        {/* Sticky actions — consult CompleteFooter pattern */}
         {!readOnly ? (
-          <View className="flex-row gap-2">
-            <View className="flex-1">
-              <Button
-                label="Save draft"
-                variant="outline"
-                loading={busy && saveBill.variables?.status === "draft"}
-                disabled={busy}
-                onPress={() => void persist("draft")}
-              />
-            </View>
-            <View className="flex-1">
-              <Button
-                label="Finalise"
-                loading={busy && saveBill.variables?.status === "final"}
-                disabled={busy || isDischarged}
-                onPress={() => {
-                  Alert.alert(
-                    "Finalise bill?",
-                    "This saves a FINAL bill and discharges the patient.",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Finalise",
-                        style: "destructive",
-                        onPress: () => void persist("final"),
-                      },
-                    ]
-                  );
-                }}
-              />
+          <View className="border-t border-neutral-200 bg-white px-4 pb-3 pt-3">
+            <View className="w-full flex-row gap-2 self-center" style={{ maxWidth: 1152 }}>
+              <View className="flex-1">
+                <Button
+                  label="Save draft"
+                  variant="outline"
+                  size="lg"
+                  loading={busy && saveBill.variables?.status === "draft"}
+                  disabled={busy}
+                  onPress={() => void persist("draft")}
+                  className="min-h-[52px]"
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  label="Finalise"
+                  size="lg"
+                  loading={busy && saveBill.variables?.status === "final"}
+                  disabled={busy || isDischarged}
+                  className="min-h-[52px]"
+                  onPress={() => {
+                    Alert.alert(
+                      "Finalise bill?",
+                      "This saves a FINAL bill and discharges the patient.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Finalise",
+                          style: "destructive",
+                          onPress: () => void persist("final"),
+                        },
+                      ]
+                    );
+                  }}
+                />
+              </View>
             </View>
           </View>
-        ) : (
-          <Text className="text-center text-xs text-neutral-500">
-            Final bill on file — editing is locked after discharge.
-          </Text>
-        )}
-      </ScrollView>
+        ) : null}
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -561,19 +624,20 @@ function LineField({
 }) {
   return (
     <View className="w-full gap-1">
-      <Text className="text-[10px] font-medium text-neutral-500">{label}</Text>
+      <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+        {label}
+      </Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         keyboardType="decimal-pad"
         numberOfLines={1}
-        className="w-full rounded-lg border border-neutral-200 bg-white px-2.5 text-sm text-neutral-900"
+        className="w-full rounded-xl border border-neutral-200 bg-white px-2.5 text-sm text-neutral-900"
         style={{
           height: 44,
           minHeight: 44,
           paddingVertical: 0,
           textAlignVertical: "center",
-          // Android otherwise adds extra font padding that clips digits.
           includeFontPadding: false,
         }}
       />
@@ -584,10 +648,13 @@ function LineField({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <View className="min-w-[40%]">
-      <Text className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+      <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
         {label}
       </Text>
-      <Text className="text-sm font-semibold text-neutral-900" numberOfLines={2}>
+      <Text
+        className="mt-0.5 text-sm font-semibold text-neutral-900"
+        numberOfLines={2}
+      >
         {value}
       </Text>
     </View>
@@ -606,12 +673,18 @@ function TotalRow({
   return (
     <View className="flex-row items-center justify-between">
       <Text
-        className={`text-sm ${bold ? "font-semibold text-neutral-900" : "text-neutral-600"}`}
+        className={`text-sm ${
+          bold ? "font-semibold text-neutral-900" : "text-neutral-600"
+        }`}
       >
         {label}
       </Text>
       <Text
-        className={`font-mono text-sm ${bold ? "font-bold text-neutral-900" : "font-semibold text-neutral-800"}`}
+        className={`font-mono text-sm ${
+          bold
+            ? "font-bold text-neutral-900"
+            : "font-semibold text-neutral-800"
+        }`}
       >
         {value}
       </Text>

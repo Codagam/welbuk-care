@@ -9,7 +9,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Screen, Segmented, TopBar } from "@/ui";
+import { Screen, TopBar } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { useCanAccessInpatient } from "@/features/permissions/hooks";
 import {
@@ -25,20 +25,15 @@ import {
   toDisplayDateDdMmYyyy,
 } from "@/features/inpatient/utils";
 
-const FILTER_OPTIONS = ["Admitted", "All"] as const;
-
-function filterFromLabel(
-  label: (typeof FILTER_OPTIONS)[number]
-): InpatientStatusFilter {
-  return label === "All" ? "all" : "admitted";
-}
+const FILTERS = [
+  { id: "admitted" as const, label: "Admitted" },
+  { id: "all" as const, label: "All" },
+];
 
 export default function InpatientListScreen() {
   const router = useRouter();
   const { canAccess, isLoading: accessLoading } = useCanAccessInpatient();
-  const [filterLabel, setFilterLabel] =
-    useState<(typeof FILTER_OPTIONS)[number]>("Admitted");
-  const filter = filterFromLabel(filterLabel);
+  const [filter, setFilter] = useState<InpatientStatusFilter>("admitted");
   const q = useInpatientAdmissions(filter);
 
   const openBill = (row: InpatientListRow) => {
@@ -48,10 +43,20 @@ export default function InpatientListScreen() {
     });
   };
 
+  const countLabel =
+    filter === "admitted"
+      ? `${q.admittedCount} currently admitted`
+      : `${q.totalCount} admission${q.totalCount === 1 ? "" : "s"}`;
+
   if (accessLoading) {
     return (
       <Screen>
-        <TopBar title="Inpatients" />
+        <TopBar
+          title="Inpatient"
+          variant="brand"
+          titleCentered
+          backLabel="Back"
+        />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#FD006A" />
         </View>
@@ -62,7 +67,12 @@ export default function InpatientListScreen() {
   if (!canAccess) {
     return (
       <Screen>
-        <TopBar title="Inpatients" />
+        <TopBar
+          title="Inpatient"
+          variant="brand"
+          titleCentered
+          backLabel="Back"
+        />
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-sm text-neutral-600">
             You do not have permission to view inpatient admissions, or this
@@ -79,18 +89,47 @@ export default function InpatientListScreen() {
 
   return (
     <Screen>
-      <TopBar title="Inpatients" subtitle="IP census" />
-      <View className="gap-2 border-b border-neutral-200 bg-white px-4 pb-3 pt-2">
-        <Segmented
-          options={FILTER_OPTIONS}
-          value={filterLabel}
-          onChange={setFilterLabel}
-        />
-        <Text className="text-xs text-neutral-500">
-          {filter === "admitted"
-            ? `${q.admittedCount} admitted`
-            : `${q.totalCount} admission${q.totalCount === 1 ? "" : "s"}`}
-        </Text>
+      <TopBar
+        title="Inpatient"
+        subtitle={q.isLoading ? undefined : countLabel}
+        variant="brand"
+        titleCentered
+        backLabel="Back"
+      />
+
+      {/* Filter rail — consult SectionNavigator chip pattern */}
+      <View className="border-b border-neutral-200 bg-white">
+        <View className="flex-row items-center gap-2 px-3 py-2.5">
+          {FILTERS.map((f) => {
+            const active = filter === f.id;
+            return (
+              <Pressable
+                key={f.id}
+                onPress={() => setFilter(f.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${f.label}`}
+                className={`rounded-full px-4 py-2.5 ${
+                  active ? "bg-brand" : "bg-neutral-100"
+                }`}
+              >
+                <Text
+                  className={`text-sm font-medium ${
+                    active ? "text-brand-foreground" : "text-neutral-600"
+                  }`}
+                >
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {!q.isLoading && filter === "admitted" && q.admittedCount > 0 ? (
+            <View className="ml-auto rounded-full bg-brand/10 px-2.5 py-1">
+              <Text className="text-[10px] font-semibold text-brand">
+                {q.admittedCount}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       {q.isLoading ? (
@@ -111,15 +150,16 @@ export default function InpatientListScreen() {
           keyExtractor={(r) => r.id}
           contentContainerStyle={{
             paddingHorizontal: 16,
-            paddingTop: 12,
-            paddingBottom: 24,
-            gap: 8,
+            paddingTop: 16,
+            paddingBottom: 32,
+            gap: 10,
+            flexGrow: 1,
           }}
           renderItem={({ item }) => (
             <AdmissionRow row={item} onOpenBill={() => openBill(item)} />
           )}
           ListEmptyComponent={
-            <Text className="mt-10 text-center text-sm text-neutral-500">
+            <Text className="mt-16 text-center text-xs italic text-neutral-500">
               {filter === "admitted"
                 ? "No admitted patients."
                 : "No admissions found."}
@@ -154,29 +194,30 @@ function AdmissionRow({
     row.doctorShort,
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join("  ·  ");
 
   const admitted = row.statusKey === "admitted";
 
   return (
-    <View className="rounded-2xl border border-neutral-200 bg-white">
+    <View className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
       <View className="flex-row items-stretch">
         <Pressable
           onPress={onOpenBill}
           accessibilityRole="button"
           accessibilityLabel={`View billing for ${name}`}
-          className="min-w-0 flex-1 px-4 py-3 active:bg-neutral-50"
+          className="min-w-0 flex-1 px-3.5 py-3 active:bg-neutral-50"
         >
-          <View className="flex-row items-center gap-3">
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-brand-50">
-              <Text className="text-sm font-bold text-brand-700">
+          {/* Identity — consult PatientHeaderCard rhythm */}
+          <View className="flex-row items-center gap-2.5">
+            <View className="h-9 w-9 items-center justify-center rounded-full bg-brand">
+              <Text className="text-xs font-bold text-white">
                 {personInitials(name)}
               </Text>
             </View>
             <View className="min-w-0 flex-1">
               <View className="flex-row items-center gap-2">
                 <Text
-                  className="min-w-0 flex-1 text-base font-semibold text-neutral-900"
+                  className="min-w-0 flex-1 text-base font-bold text-neutral-900"
                   numberOfLines={1}
                 >
                   {name}
@@ -187,7 +228,7 @@ function AdmissionRow({
                   }`}
                 >
                   <Text
-                    className={`text-[10px] font-medium ${
+                    className={`text-[10px] font-semibold ${
                       admitted ? "text-neutral-700" : "text-emerald-700"
                     }`}
                   >
@@ -196,16 +237,25 @@ function AdmissionRow({
                 </View>
               </View>
               {meta ? (
-                <Text className="text-xs text-neutral-500" numberOfLines={1}>
+                <Text
+                  className="mt-0.5 text-xs leading-4 text-neutral-500"
+                  numberOfLines={1}
+                >
                   {meta}
                 </Text>
               ) : null}
             </View>
           </View>
 
-          <View className="mt-2 flex-row items-start justify-between gap-3 border-t border-neutral-100 pt-2">
+          <View className="mt-2.5 flex-row items-start justify-between gap-3 border-t border-neutral-100 pt-2.5">
             <View className="min-w-0 flex-1">
-              <Text className="text-sm text-neutral-800" numberOfLines={1}>
+              <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+                Room
+              </Text>
+              <Text
+                className="mt-0.5 text-sm font-semibold text-neutral-900"
+                numberOfLines={1}
+              >
                 {row.roomLabel}
               </Text>
               {roomMeta ? (
@@ -216,27 +266,28 @@ function AdmissionRow({
               </Text>
             </View>
             <View className="items-end">
-              <Text className="font-mono text-sm font-semibold text-neutral-900">
+              <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+                Running
+              </Text>
+              <Text className="mt-0.5 font-mono text-sm font-semibold text-neutral-900">
                 {formatInr(row.running)}
               </Text>
-              <Text className="text-[10px] text-neutral-500">Running</Text>
             </View>
           </View>
 
           {row.diagnosis ? (
-            <Text className="mt-1.5 text-xs text-neutral-500" numberOfLines={2}>
+            <Text className="mt-2 text-xs text-neutral-500" numberOfLines={2}>
               {row.diagnosis}
             </Text>
           ) : null}
         </Pressable>
 
-        {/* Eye — View billing (web IPListClient actions parity) */}
         <Pressable
           onPress={onOpenBill}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="View billing"
-          className="items-center justify-center border-l border-neutral-100 px-3 active:bg-brand-50"
+          className="items-center justify-center border-l border-neutral-100 px-3.5 active:bg-brand/10"
         >
           <Ionicons name="eye-outline" size={22} color="#FD006A" />
         </Pressable>

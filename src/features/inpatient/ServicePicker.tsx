@@ -62,7 +62,11 @@ export function ServicePicker({ items, setItems, disabled }: Props) {
         }`}
         style={{ minHeight: 48 }}
       >
-        <Ionicons name="search-outline" size={16} color="#9ca3af" />
+        <Ionicons
+          name="search-outline"
+          size={16}
+          color={pickerOpen ? "#FD006A" : "#9ca3af"}
+        />
         <TextInput
           value={query}
           editable={!disabled}
