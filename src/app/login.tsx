@@ -3,11 +3,13 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
 import { Redirect, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Button, Screen, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
@@ -24,6 +26,7 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -113,10 +116,27 @@ export default function LoginScreen() {
                   label="Password"
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                   placeholder="••••••••"
                   onSubmitEditing={onSubmit}
                   returnKeyType="go"
+                  autoComplete="password"
+                  rightAccessory={
+                    <Pressable
+                      onPress={() => setShowPassword((v) => !v)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                    >
+                      <Ionicons
+                        name={showPassword ? "eye-off-outline" : "eye-outline"}
+                        size={22}
+                        color="#737373"
+                      />
+                    </Pressable>
+                  }
                 />
                 {error ? (
                   <Text className="text-sm text-red-500">{error}</Text>
