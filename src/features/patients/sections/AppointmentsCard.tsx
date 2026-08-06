@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { describeError } from "@/lib/api/errors";
 import { SectionChrome } from "@/features/consult/components/SectionChrome";
 import { openConsultForAppointment } from "@/lib/api/endpoints/consult";
+import { useCanAccessConsult } from "@/features/permissions";
 import { Button } from "@/ui";
 import { usePatientAppointments } from "../hooks";
 
@@ -47,6 +48,9 @@ export function AppointmentsCard({
   const q = usePatientAppointments(mongoPatientId);
   const rows = q.data ?? [];
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
+    useCanAccessConsult();
+  const canOpenConsult = canAccessConsult && !consultAccessLoading;
 
   const openReport = async (row: {
     id?: string;
@@ -54,6 +58,14 @@ export function AppointmentsCard({
     startTime?: string;
   }) => {
     if (!row.id) return;
+    if (consultAccessLoading) return;
+    if (!canOpenConsult) {
+      Alert.alert(
+        "You don't have permission",
+        "Your role can't open consultations. Ask a facility administrator if you need access."
+      );
+      return;
+    }
     setOpeningId(row.id);
     try {
       const consult = await openConsultForAppointment(row.id);
@@ -117,7 +129,8 @@ export function AppointmentsCard({
                     {String(row.status ?? "—")}
                   </Text>
                 </View>
-                {String(row.status ?? "").toUpperCase() === "COMPLETED" ? (
+                {String(row.status ?? "").toUpperCase() === "COMPLETED" &&
+                canOpenConsult ? (
                   <Button
                     label="View report"
                     size="md"

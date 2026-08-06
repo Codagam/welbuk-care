@@ -15,6 +15,7 @@ import { describeError } from "@/lib/api/errors";
 import { userDisplayName } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
+import { useCanAccessConsult } from "@/features/permissions";
 import { AppointmentCard } from "./AppointmentCard";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
 import {
@@ -54,9 +55,13 @@ export function AppointmentListScreen() {
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
   const readyForNext = useReadyForNext();
+  const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
+    useCanAccessConsult();
 
   /** Same gate as Practice consult list — linked doctor account only. */
   const isDoctorLogin = Boolean(user?.doctorId);
+  /** Open consult only when role still has consult.* (nurses are stripped). */
+  const canOpenConsult = canAccessConsult && !consultAccessLoading;
 
   const appointments = useMemo(
     () => q.data?.pages.flatMap((p) => p.data ?? []) ?? [],
@@ -83,6 +88,14 @@ export function AppointmentListScreen() {
   };
 
   const onOpen = async (appt: Appointment) => {
+    if (consultAccessLoading) return;
+    if (!canOpenConsult) {
+      Alert.alert(
+        "You don't have permission",
+        "Your role can't open consultations. Only doctors can consult a patient. Ask a facility administrator if you need access."
+      );
+      return;
+    }
     if (!canOpenAppointmentFromList(appt)) {
       Alert.alert(
         "Consult unavailable",
@@ -222,6 +235,7 @@ export function AppointmentListScreen() {
             <AppointmentCard
               appointment={item}
               opening={openingId === item.id}
+              canOpenConsult={canOpenConsult}
               onPress={() => onOpen(item)}
             />
           )}

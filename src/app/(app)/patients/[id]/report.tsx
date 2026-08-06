@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,11 @@ import {
   usePrescriptions,
   useSummary,
 } from "@/features/consult/hooks";
+import {
+  NoAccess,
+  SectionAccessLoading,
+  useCanAccessConsult,
+} from "@/features/permissions";
 import { describeError } from "@/lib/api/errors";
 import { printLocalPdf } from "@/lib/api/printLocalPdf";
 import { shareLocalFileOrAlert } from "@/lib/api/shareLocalFile";
@@ -94,6 +99,8 @@ export default function PatientAppointmentReportScreen() {
   const summaryQ = useSummary(consultationId);
   const rxQ = usePrescriptions(consultationId);
   const activeFacility = useActiveFacility();
+  const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
+    useCanAccessConsult();
   const [downloading, setDownloading] = useState(false);
   const [printing, setPrinting] = useState(false);
 
@@ -110,6 +117,32 @@ export default function PatientAppointmentReportScreen() {
     if (!p) return "Patient";
     return [p.firstName, p.lastName].filter(Boolean).join(" ") || "Patient";
   }, [patientQ.data]);
+
+  useEffect(() => {
+    if (consultAccessLoading || canAccessConsult) return;
+    Alert.alert(
+      "You don't have permission",
+      "Consult isn't available for your role. Ask a facility administrator if you need access."
+    );
+  }, [consultAccessLoading, canAccessConsult]);
+
+  if (consultAccessLoading) {
+    return (
+      <Screen>
+        <TopBar title="Consultation report" variant="brand" titleCentered backLabel="Back" />
+        <SectionAccessLoading label="Consult" />
+      </Screen>
+    );
+  }
+
+  if (!canAccessConsult) {
+    return (
+      <Screen>
+        <TopBar title="Consultation report" variant="brand" titleCentered backLabel="Back" />
+        <NoAccess sectionLabel="Consult" />
+      </Screen>
+    );
+  }
 
   const prescriptionRows = (rxQ.data?.prescriptions ?? []).filter(
     (line) => !line.isAttachment

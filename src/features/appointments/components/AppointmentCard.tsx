@@ -24,6 +24,8 @@ import { statusStyle } from "../lib/statusStyles";
 type Props = {
   appointment: Appointment;
   opening?: boolean;
+  /** RBAC: false when role has no consult.read (e.g. nurse). */
+  canOpenConsult?: boolean;
   onPress: () => void;
   onOpenMenu?: () => void;
 };
@@ -31,6 +33,7 @@ type Props = {
 function AppointmentCardInner({
   appointment,
   opening,
+  canOpenConsult = true,
   onPress,
   onOpenMenu,
 }: Props) {
@@ -49,7 +52,8 @@ function AppointmentCardInner({
   const end = formatTime12h(appointment.endTime);
   const timeLabel =
     start && end ? `${start} – ${end}` : start || "—";
-  const canOpen = canOpenAppointmentFromList(appointment);
+  const canOpen =
+    canOpenConsult && canOpenAppointmentFromList(appointment);
   const followUp = isAppointmentFollowUp(appointment);
   const awaitingSlot = isFollowUpAwaitingTimeSlot(appointment);
   const comingSoon =
