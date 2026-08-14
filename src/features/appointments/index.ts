@@ -9,6 +9,7 @@ export { AppointmentCard } from "./components/AppointmentCard";
 export {
   useAppointmentList,
   useAppointmentListState,
+  useCheckInAppointment,
   useOpenConsult,
   useReadyForNext,
 } from "./hooks/useAppointmentList";

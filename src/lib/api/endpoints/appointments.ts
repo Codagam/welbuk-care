@@ -85,6 +85,25 @@ export function deleteFacilityAppointment(id: string): Promise<{ message?: strin
   });
 }
 
+/** Desk check-in: SCHEDULED → WAITING. Requires `appointment.update`. */
+export function checkInAppointment(
+  appointmentId: string
+): Promise<{ appointment?: FacilityAppointment; id?: string }> {
+  return updateFacilityAppointment({ id: appointmentId, status: "WAITING" });
+}
+
+/** Late arrival — server picks next slot. Requires `appointment.update`. */
+export function lateArrivalAppointment(body: {
+  appointmentId: string;
+  facilityId: string;
+}): Promise<{ appointment?: FacilityAppointment; error?: string }> {
+  return api({
+    path: "/api/facility/appointments/late-arrival",
+    method: "POST",
+    body,
+  });
+}
+
 /** Fire-and-forget fee sync after follow-up create (Practice web does the same). */
 export function syncAppointmentFee(body: {
   appointmentId: string;

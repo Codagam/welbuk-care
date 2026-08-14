@@ -89,9 +89,8 @@ export function isPreConsultVitalStatus(status: unknown): boolean {
   return (
     s === "SCHEDULED" ||
     s === "CONFIRMED" ||
+    s === "WAITING" ||
     s === "RESCHEDULE" ||
-    s === "IN_PROGRESS" ||
-    s === "NO_SHOW" ||
     s === "TENTATIVE"
   );
 }

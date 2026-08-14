@@ -15,12 +15,16 @@ import { describeError } from "@/lib/api/errors";
 import { userDisplayName } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
-import { useCanAccessConsult } from "@/features/permissions";
+import {
+  useCanAccessConsult,
+  useCanWrite,
+} from "@/features/permissions";
 import { AppointmentCard } from "./AppointmentCard";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
 import {
   useAppointmentList,
   useAppointmentListState,
+  useCheckInAppointment,
   useOpenConsult,
   useReadyForNext,
 } from "../hooks/useAppointmentList";
@@ -39,6 +43,7 @@ export function AppointmentListScreen() {
   const facilityId = useFacilityId();
   const user = useAuthUser();
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [checkingInId, setCheckingInId] = useState<string | null>(null);
 
   const {
     search,
@@ -54,13 +59,13 @@ export function AppointmentListScreen() {
 
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
+  const checkIn = useCheckInAppointment();
   const readyForNext = useReadyForNext();
   const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
     useCanAccessConsult();
+  const canUpdateAppointment = useCanWrite("appointment");
 
-  /** Same gate as Practice consult list — linked doctor account only. */
   const isDoctorLogin = Boolean(user?.doctorId);
-  /** Open consult only when role still has consult.* (nurses are stripped). */
   const canOpenConsult = canAccessConsult && !consultAccessLoading;
 
   const appointments = useMemo(
@@ -70,9 +75,9 @@ export function AppointmentListScreen() {
   const totalCount = q.data?.pages[0]?.totalCount ?? 0;
 
   const greetName = userDisplayName(user);
-  const welcomeTitle = greetName
+  const doctorSubtitle = greetName
     ? `Welcome, ${doctorWelcomeName(greetName)}`
-    : "Welcome";
+    : null;
 
   const onReadyForNext = async () => {
     if (!facilityId) {
@@ -87,22 +92,7 @@ export function AppointmentListScreen() {
     }
   };
 
-  const onOpen = async (appt: Appointment) => {
-    if (consultAccessLoading) return;
-    if (!canOpenConsult) {
-      Alert.alert(
-        "You don't have permission",
-        "Your role can't open consultations. Only doctors can consult a patient. Ask a facility administrator if you need access."
-      );
-      return;
-    }
-    if (!canOpenAppointmentFromList(appt)) {
-      Alert.alert(
-        "Consult unavailable",
-        "Only today's appointments can be opened. Scheduled visits become available on the day of the visit; follow-up fees and time slots must be completed first."
-      );
-      return;
-    }
+  const navigateToConsult = async (appt: Appointment) => {
     setOpeningId(appt.id);
     try {
       const consult = await open.mutateAsync(appt.id);
@@ -121,24 +111,77 @@ export function AppointmentListScreen() {
     }
   };
 
+  const onOpenConsult = async (appt: Appointment) => {
+    if (consultAccessLoading) return;
+    if (!canOpenConsult) {
+      Alert.alert(
+        "You don't have permission",
+        "Your role can't open consultations. Only doctors can consult a patient. Ask a facility administrator if you need access."
+      );
+      return;
+    }
+    if (!canOpenAppointmentFromList(appt)) {
+      Alert.alert(
+        "Consult unavailable",
+        "Only today's appointments can be opened. Scheduled visits become available on the day of the visit; follow-up fees and time slots must be completed first."
+      );
+      return;
+    }
+    await navigateToConsult(appt);
+  };
+
+  const performCheckIn = async (appt: Appointment) => {
+    setCheckingInId(appt.id);
+    try {
+      await checkIn.mutateAsync(appt.id);
+      Alert.alert("Checked in", "Patient is now in the waiting queue.");
+    } catch (err) {
+      Alert.alert("Check-in failed", describeError(err));
+    } finally {
+      setCheckingInId(null);
+    }
+  };
+
+  const onCheckIn = (appt: Appointment) => {
+    const patientLabel = appt.patient
+      ? [appt.patient.firstName, appt.patient.lastName].filter(Boolean).join(" ")
+      : "this patient";
+    Alert.alert(
+      "Check-in",
+      `Mark ${patientLabel} as arrived and move to the waiting queue?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Check-in",
+          onPress: () => void performCheckIn(appt),
+        },
+      ]
+    );
+  };
+
   const permissionDenied =
     q.isError &&
     /permission|access denied|appointment\.read/i.test(describeError(q.error));
 
-  const appointmentMeta =
+  const subtitleParts = [
+    facility?.name ? `at ${facility.name}` : null,
     totalCount > 0
-      ? `${totalCount} appointment${totalCount === 1 ? "" : "s"} today`
-      : "Today's schedule";
+      ? `${totalCount} appointment${totalCount === 1 ? "" : "s"}`
+      : "No appointments yet",
+  ].filter(Boolean);
 
   return (
     <Screen edges={["left", "right", "bottom"]}>
       <View className="bg-brand pt-3">
-        {/* Utility row — facility + tools */}
         <View className="flex-row items-center justify-between gap-3 px-5 pb-3 pt-2">
           <View className="min-w-0 flex-1 flex-row items-center gap-2">
             {facility?.name ? (
               <>
-                <Ionicons name="business-outline" size={16} color="rgba(255,255,255,0.85)" />
+                <Ionicons
+                  name="business-outline"
+                  size={16}
+                  color="rgba(255,255,255,0.85)"
+                />
                 <Text
                   className="min-w-0 flex-1 text-sm font-medium text-white/90"
                   numberOfLines={1}
@@ -155,18 +198,22 @@ export function AppointmentListScreen() {
 
         <View className="mx-5 h-px bg-white/20" />
 
-        {/* Primary row — greeting + Next Patient */}
         <View className="flex-row items-start justify-between gap-4 px-5 py-4">
           <View className="min-w-0 flex-1 gap-1">
             <Text
               className="text-[22px] font-semibold leading-7 text-brand-foreground"
               numberOfLines={2}
             >
-              {welcomeTitle}
+              Today&apos;s appointments
             </Text>
-            <Text className="text-sm text-white/80" numberOfLines={1}>
-              {appointmentMeta}
+            <Text className="text-sm text-white/80" numberOfLines={2}>
+              {subtitleParts.join(" · ")}
             </Text>
+            {isDoctorLogin && doctorSubtitle ? (
+              <Text className="text-xs text-white/65" numberOfLines={1}>
+                {doctorSubtitle}
+              </Text>
+            ) : null}
           </View>
 
           {isDoctorLogin ? (
@@ -235,13 +282,16 @@ export function AppointmentListScreen() {
             <AppointmentCard
               appointment={item}
               opening={openingId === item.id}
+              checkingIn={checkingInId === item.id}
               canOpenConsult={canOpenConsult}
-              onPress={() => onOpen(item)}
+              canUpdateAppointment={canUpdateAppointment}
+              onCheckIn={() => onCheckIn(item)}
+              onOpenConsult={() => void onOpenConsult(item)}
             />
           )}
           ListEmptyComponent={
             <Text className="mt-10 text-center text-sm text-neutral-500">
-              No appointments found
+              No appointments
             </Text>
           }
           ListFooterComponent={
