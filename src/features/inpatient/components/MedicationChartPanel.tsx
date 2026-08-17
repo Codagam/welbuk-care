@@ -194,6 +194,7 @@ export function MedicationChartPanel({
                     }`}
                   >
                     <Text
+                      numberOfLines={1}
                       className={`text-xs font-medium ${
                         active ? "text-white" : "text-neutral-600"
                       }`}
@@ -283,7 +284,7 @@ export function MedicationChartPanel({
               key={row.drugId}
               className="rounded-lg bg-white/80 p-2.5"
             >
-              <View className="flex-row items-start justify-between gap-2">
+              <View className="flex-row items-center justify-between gap-2">
                 <View className="min-w-0 flex-1">
                   <Text className="text-sm font-medium text-neutral-900">
                     {row.drugName}
@@ -302,9 +303,13 @@ export function MedicationChartPanel({
                       setSettleQty(String(row.unaccounted));
                       setSettleNotes("");
                     }}
-                    className="rounded-lg border border-neutral-200 px-2.5 py-1.5"
+                    style={{ flexShrink: 0 }}
+                    className="shrink-0 rounded-lg border border-neutral-200 px-2.5 py-1.5"
                   >
-                    <Text className="text-xs font-semibold text-neutral-800">
+                    <Text
+                      numberOfLines={1}
+                      className="text-xs font-semibold text-neutral-800"
+                    >
                       Account for it
                     </Text>
                   </Pressable>
@@ -316,28 +321,36 @@ export function MedicationChartPanel({
                   <Text className="text-xs font-medium text-neutral-700">
                     What happened?
                   </Text>
-                  <View className="flex-row gap-2">
+                  <View className="flex-row flex-wrap gap-2">
                     <Pressable
                       onPress={() => setSettleOutcome("RETURNED")}
-                      className={`flex-1 rounded-xl border px-2 py-2 ${
+                      style={{ flexShrink: 0 }}
+                      className={`shrink-0 rounded-xl border px-3 py-2 ${
                         settleOutcome === "RETURNED"
                           ? "border-brand bg-brand/5"
                           : "border-neutral-200"
                       }`}
                     >
-                      <Text className="text-center text-xs font-medium text-neutral-800">
+                      <Text
+                        numberOfLines={1}
+                        className="text-xs font-medium text-neutral-800"
+                      >
                         Went back to the pharmacy
                       </Text>
                     </Pressable>
                     <Pressable
                       onPress={() => setSettleOutcome("CONSUMED")}
-                      className={`flex-1 rounded-xl border px-2 py-2 ${
+                      style={{ flexShrink: 0 }}
+                      className={`shrink-0 rounded-xl border px-3 py-2 ${
                         settleOutcome === "CONSUMED"
                           ? "border-brand bg-brand/5"
                           : "border-neutral-200"
                       }`}
                     >
-                      <Text className="text-center text-xs font-medium text-neutral-800">
+                      <Text
+                        numberOfLines={1}
+                        className="text-xs font-medium text-neutral-800"
+                      >
                         Used, but never charted
                       </Text>
                     </Pressable>
@@ -431,8 +444,14 @@ export function MedicationChartPanel({
                   </Text>
                 </View>
                 {!a.matchedOrder ? (
-                  <View className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5">
-                    <Text className="text-[10px] font-medium text-amber-800">
+                  <View
+                    style={{ flexShrink: 0 }}
+                    className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5"
+                  >
+                    <Text
+                      numberOfLines={1}
+                      className="text-[10px] font-medium text-amber-800"
+                    >
                       No matching order
                     </Text>
                   </View>

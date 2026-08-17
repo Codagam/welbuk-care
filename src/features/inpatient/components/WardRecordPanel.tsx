@@ -108,13 +108,19 @@ export function WardRecordPanel({
     <View className="gap-5">
       <View className="gap-2">
         <View className="flex-row items-center justify-between gap-2">
-          <Text className="text-sm font-semibold text-neutral-900">Vitals</Text>
+          <Text className="min-w-0 flex-1 text-sm font-semibold text-neutral-900">
+            Vitals
+          </Text>
           {!entering ? (
             <Pressable
               onPress={() => setEntering(true)}
-              className="rounded-lg border border-neutral-200 px-3 py-1.5 active:bg-neutral-50"
+              style={{ flexShrink: 0 }}
+              className="shrink-0 rounded-lg border border-neutral-200 px-3 py-1.5 active:bg-neutral-50"
             >
-              <Text className="text-xs font-semibold text-neutral-800">
+              <Text
+                numberOfLines={1}
+                className="text-xs font-semibold text-neutral-800"
+              >
                 Record a round
               </Text>
             </Pressable>
@@ -229,6 +235,7 @@ export function WardRecordPanel({
                   }`}
                 >
                   <Text
+                    numberOfLines={1}
                     className={`text-xs font-medium ${
                       active ? "text-white" : "text-neutral-600"
                     }`}

@@ -183,6 +183,7 @@ export function StayDetailScreen() {
                 }`}
               >
                 <Text
+                  numberOfLines={1}
                   className={`text-sm font-medium ${
                     isActive ? "text-brand-foreground" : "text-neutral-600"
                   }`}

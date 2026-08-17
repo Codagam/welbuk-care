@@ -64,7 +64,9 @@ export function PageStaffButton({
           className="h-11 min-h-[44px] flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-white active:bg-brand/5"
         >
           <Ionicons name="notifications-outline" size={16} color="#FD006A" />
-          <Text className="text-sm font-semibold text-brand">Page doctor</Text>
+          <Text numberOfLines={1} className="text-sm font-semibold text-brand">
+            Page doctor
+          </Text>
         </Pressable>
         <Pressable
           onPress={() => setWho("NURSE")}
@@ -73,7 +75,9 @@ export function PageStaffButton({
           className="h-11 min-h-[44px] flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-white active:bg-brand/5"
         >
           <Ionicons name="notifications-outline" size={16} color="#FD006A" />
-          <Text className="text-sm font-semibold text-brand">Page nurse</Text>
+          <Text numberOfLines={1} className="text-sm font-semibold text-brand">
+            Page nurse
+          </Text>
         </Pressable>
       </View>
 
