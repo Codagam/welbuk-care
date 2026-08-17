@@ -117,8 +117,10 @@ export function drugSearchLabel(d: {
   genericName?: string | null;
   strength?: string | null;
 }): string {
-  const name = (d.name || d.brandName || d.genericName || "").trim();
-  return [name, d.strength?.trim()].filter(Boolean).join(" ");
+  // GET /api/drugs returns brand as `name`; Practice labels with brandName || genericName.
+  const name = (d.brandName || d.name || d.genericName || "").trim();
+  const strength = d.strength?.trim();
+  return [name, strength].filter(Boolean).join(" ");
 }
 
 export function inpatientRouteSegment(

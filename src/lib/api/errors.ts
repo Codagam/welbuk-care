@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "FORBIDDEN" // 403 generic (permission)
   | "ABHA_GOVERNED_FIELD" // 409 — demographic locked by ABHA
   | "PATIENT_MANAGE_REQUIRED" // 403 — needs patient.manage
+  | "MODULE_NOT_ENABLED" // 403 — site switch inpatient_enable is off
   | "IP_BLOCKED" // 403 — per-facility IP allowlist
   | "NOT_FOUND" // 404
   | "CONFLICT" // 409 generic
@@ -54,6 +55,7 @@ export function mapErrorCode(
   if (status === 401) return "UNAUTHORIZED";
   if (serverCode === "ABHA_GOVERNED_FIELD") return "ABHA_GOVERNED_FIELD";
   if (serverCode === "PATIENT_MANAGE_REQUIRED") return "PATIENT_MANAGE_REQUIRED";
+  if (serverCode === "MODULE_NOT_ENABLED") return "MODULE_NOT_ENABLED";
   if (status === 403) {
     const m = (message ?? "").toLowerCase();
     if (NETWORK_BLOCK_HINTS.some((h) => m.includes(h))) return "IP_BLOCKED";
@@ -114,6 +116,8 @@ export function describeError(err: unknown): string {
         return "Name, date of birth and gender are verified from ABHA. Update them in ABHA and re-verify.";
       case "PATIENT_MANAGE_REQUIRED":
         return "Date of birth can only be changed by a user with the Patient Manager role.";
+      case "MODULE_NOT_ENABLED":
+        return "Inpatient is not available on this deployment.";
       case "NETWORK":
         return FRIENDLY_NETWORK;
       case "NOT_FOUND":
@@ -137,4 +141,11 @@ export function describeError(err: unknown): string {
     return friendlyFromMessage(err, FRIENDLY_GENERIC);
   }
   return FRIENDLY_GENERIC;
+}
+
+export function isModuleNotEnabled(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.code === "MODULE_NOT_ENABLED" || err.serverCode === "MODULE_NOT_ENABLED")
+  );
 }

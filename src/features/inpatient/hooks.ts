@@ -1,11 +1,15 @@
 import { useMemo } from "react";
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 
-import { listFacilityDrugs } from "@/lib/api/endpoints/drugs";
+import {
+  listFacilityDrugs,
+  searchFacilityDrugs,
+} from "@/lib/api/endpoints/drugs";
 import {
   accountMedication,
   getInpatientAdmission,
@@ -282,6 +286,25 @@ export function useMedicationChart(admissionId: string | undefined) {
     enabled: !!facilityId && !!admissionId,
     queryFn: ({ signal }) =>
       getMedicationChart(facilityId!, admissionId!, signal),
+  });
+}
+
+const DRUG_SEARCH_PAGE_SIZE = 10;
+
+/** Paginated GET /api/drugs?q= — empty q still returns page 1. */
+export function useFacilityDrugSearch(q: string, enabled: boolean) {
+  const facilityId = useFacilityId();
+  return useInfiniteQuery({
+    queryKey: ["facility-drugs-search", facilityId, q],
+    enabled: !!facilityId && enabled,
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) =>
+      searchFacilityDrugs(
+        facilityId!,
+        { q, page: pageParam, pageSize: DRUG_SEARCH_PAGE_SIZE },
+        signal
+      ),
+    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
   });
 }
 

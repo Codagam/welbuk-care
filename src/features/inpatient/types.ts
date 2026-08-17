@@ -137,6 +137,7 @@ export type MatchingOrder = {
 export type RecordDoseResult = {
   ok: true;
   id: string;
+  administeredAt?: string;
   matchedOrder: boolean;
   candidateOrders?: MatchingOrder[];
 };

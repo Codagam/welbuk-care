@@ -65,19 +65,51 @@ export async function listFacilityDrugs(
   return data.drugs ?? [];
 }
 
+export type FacilityDrugsPage = {
+  drugs: FacilityDrugItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
 /**
- * GET /api/drugs?facilityId=&q= — server-side search (brand / generic / barcode).
- * Used by the IPD medication chart; search param is `q`, not `search`.
+ * GET /api/drugs?facilityId=&q=&page=&pageSize=
+ * Param is `q` (not `search`). Matches brandName, genericName, barcode.
+ * Empty q still returns page 1 of the facility catalogue.
  */
 export async function searchFacilityDrugs(
   facilityId: string,
-  q: string,
+  opts: { q?: string; page?: number; pageSize?: number } = {},
   signal?: AbortSignal
-): Promise<FacilityDrugItem[]> {
-  const data = await api<{ drugs: FacilityDrugItem[] }>({
+): Promise<FacilityDrugsPage> {
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 10;
+  const q = opts.q ?? "";
+  const data = await api<{
+    drugs?: FacilityDrugItem[];
+    total?: number;
+    page?: number;
+    pageSize?: number;
+    hasMore?: boolean;
+  }>({
     path: "/api/drugs",
-    query: { facilityId, q, page: 1, pageSize: 30 },
+    query: { facilityId, q, page, pageSize },
     signal,
   });
-  return data.drugs ?? [];
+  const drugs = data.drugs ?? [];
+  const total = typeof data.total === "number" ? data.total : drugs.length;
+  const resolvedPage = data.page ?? page;
+  const resolvedPageSize = data.pageSize ?? pageSize;
+  const hasMore =
+    typeof data.hasMore === "boolean"
+      ? data.hasMore
+      : resolvedPage * resolvedPageSize < total;
+  return {
+    drugs,
+    total,
+    page: resolvedPage,
+    pageSize: resolvedPageSize,
+    hasMore,
+  };
 }

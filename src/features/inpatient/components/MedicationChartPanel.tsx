@@ -1,21 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Button, TextField } from "@/ui";
-import { searchFacilityDrugs } from "@/lib/api/endpoints/drugs";
-import { describeError } from "@/lib/api/errors";
+import { describeError, isModuleNotEnabled } from "@/lib/api/errors";
+import {
+  searchFacilityDrugs,
+  type FacilityDrugItem,
+} from "@/lib/api/endpoints/drugs";
 import { useFacilityId } from "@/lib/auth/store";
+import { useRealtimeToastStore } from "@/lib/realtime/toastStore";
 import {
   useAccountMedication,
+  useFacilityDrugSearch,
   useMedicationChart,
   useRecordDose,
 } from "../hooks";
@@ -23,6 +29,15 @@ import type { AuditEditor, MedReconciliation } from "../types";
 import { drugSearchLabel, formatDateTime } from "../utils";
 
 const ROUTES = ["Oral", "IV", "IM", "SC", "Topical", "Inhaled", "Other"] as const;
+const SEARCH_DEBOUNCE_MS = 300;
+const LIST_MAX_HEIGHT = 224; // ~14rem
+const ROW_SELECTED = "#F1F5F9";
+const CARD_BORDER = "#E5E7EB";
+const MUTED = "#6B7280";
+const BODY = "#1A1A1A";
+const BRAND = "#fd006a";
+const AMBER_BG = "#FFFBEB";
+const AMBER_BORDER = "#FCD34D";
 
 function useDebounced(value: string, delay: number) {
   const [v, setV] = useState(value);
@@ -33,6 +48,171 @@ function useDebounced(value: string, delay: number) {
   return v;
 }
 
+function medToast(
+  title: string,
+  opts?: { body?: string; tone?: "success" | "warning" | "error" }
+) {
+  useRealtimeToastStore.getState().show({
+    id: `med-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    body: opts?.body,
+    tone: opts?.tone ?? "success",
+  });
+}
+
+function DrugPicker({
+  onSelect,
+}: {
+  onSelect: (drug: FacilityDrugItem) => void;
+}) {
+  const facilityId = useFacilityId();
+  const inputRef = useRef<TextInput>(null);
+  const [query, setQuery] = useState("");
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const debounced = useDebounced(query, SEARCH_DEBOUNCE_MS);
+  const searchQ = useFacilityDrugSearch(debounced, true);
+
+  const drugs = useMemo(
+    () => searchQ.data?.pages.flatMap((p) => p.drugs) ?? [],
+    [searchQ.data]
+  );
+
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    setActiveId(drugs[0]?.id ?? null);
+  }, [drugs]);
+
+  const pick = (d: FacilityDrugItem) => {
+    onSelect(d);
+  };
+
+  const onListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (contentSize.height <= layoutMeasurement.height) return;
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 48) {
+      if (searchQ.hasNextPage && !searchQ.isFetchingNextPage) {
+        void searchQ.fetchNextPage();
+      }
+    }
+  };
+
+  const showInitialLoading =
+    searchQ.isPending || (searchQ.isFetching && drugs.length === 0);
+  const showEmpty =
+    !showInitialLoading && !searchQ.isError && drugs.length === 0;
+
+  return (
+    <View>
+      <TextInput
+        ref={inputRef}
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Scan the pack, or search by name…"
+        placeholderTextColor="#9ca3af"
+        autoFocus
+        autoCorrect={false}
+        autoCapitalize="none"
+        returnKeyType="search"
+        className="h-12 rounded-lg border border-neutral-300 bg-white px-4 text-base text-neutral-900"
+        style={{
+          height: 48,
+          minHeight: 48,
+          textAlignVertical: "center",
+          paddingVertical: 0,
+        }}
+        onSubmitEditing={() => {
+          void (async () => {
+            if (submitting) return;
+            const q = query.trim();
+            if (q === debounced && drugs[0]) {
+              pick(drugs[0]);
+              return;
+            }
+            if (!facilityId) return;
+            setSubmitting(true);
+            try {
+              const page = await searchFacilityDrugs(facilityId, {
+                q,
+                page: 1,
+                pageSize: 10,
+              });
+              if (page.drugs[0]) pick(page.drugs[0]);
+            } catch {
+              if (drugs[0]) pick(drugs[0]);
+            } finally {
+              setSubmitting(false);
+            }
+          })();
+        }}
+      />
+
+      <View
+        className="mt-1 overflow-hidden rounded-lg border"
+        style={{ borderColor: CARD_BORDER }}
+      >
+        {searchQ.isError ? (
+          <Text className="px-3 py-3 text-xs text-red-600">
+            {describeError(searchQ.error)}
+          </Text>
+        ) : showInitialLoading ? (
+          <View className="items-center py-4">
+            <ActivityIndicator color={BRAND} />
+          </View>
+        ) : showEmpty ? (
+          <Text className="px-3 py-3 text-xs" style={{ color: MUTED }}>
+            No matching medicine
+          </Text>
+        ) : (
+          <ScrollView
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            style={{ maxHeight: LIST_MAX_HEIGHT }}
+            contentContainerStyle={{ paddingVertical: 4 }}
+            onScroll={onListScroll}
+            scrollEventThrottle={16}
+          >
+            {drugs.map((d, i) => {
+              const selected = activeId === d.id;
+              return (
+                <Pressable
+                  key={d.id}
+                  onPress={() => pick(d)}
+                  onHoverIn={() => setActiveId(d.id)}
+                  className={i > 0 ? "border-t border-neutral-100" : ""}
+                  style={({ pressed }) => ({
+                    backgroundColor:
+                      pressed || selected ? ROW_SELECTED : "transparent",
+                    paddingHorizontal: 16,
+                    paddingVertical: 14,
+                  })}
+                >
+                  <Text
+                    className="text-sm font-medium"
+                    style={{ color: BODY }}
+                    numberOfLines={1}
+                  >
+                    {drugSearchLabel(d)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {searchQ.isFetchingNextPage ? (
+              <View className="items-center py-2">
+                <ActivityIndicator color={BRAND} />
+              </View>
+            ) : null}
+          </ScrollView>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export function MedicationChartPanel({
   admissionId,
   editors,
@@ -40,13 +220,10 @@ export function MedicationChartPanel({
   admissionId: string;
   editors?: Record<string, AuditEditor>;
 }) {
-  const facilityId = useFacilityId();
   const chartQ = useMedicationChart(admissionId);
   const record = useRecordDose(admissionId);
   const settle = useAccountMedication(admissionId);
 
-  const [query, setQuery] = useState("");
-  const debounced = useDebounced(query, 250);
   const [drug, setDrug] = useState<{ id: string; label: string } | null>(null);
   const [quantity, setQuantity] = useState("1");
   const [route, setRoute] = useState("");
@@ -57,13 +234,6 @@ export function MedicationChartPanel({
   const [settleQty, setSettleQty] = useState("");
   const [settleNotes, setSettleNotes] = useState("");
 
-  const searchQ = useQuery({
-    queryKey: ["facility-drugs-search", facilityId, debounced],
-    enabled: !!facilityId && !drug && debounced.trim().length > 0,
-    queryFn: ({ signal }) =>
-      searchFacilityDrugs(facilityId!, debounced.trim(), signal),
-  });
-
   const outstanding = (chartQ.data?.reconciliation ?? []).filter(
     (r) => r.unaccounted > 0
   );
@@ -71,10 +241,7 @@ export function MedicationChartPanel({
   const recordDose = async () => {
     if (!drug) return;
     const qty = Math.trunc(Number(quantity));
-    if (!Number.isFinite(qty) || qty < 1) {
-      Alert.alert("Units", "Enter a whole number of units.");
-      return;
-    }
+    if (!Number.isFinite(qty) || qty < 1) return;
     try {
       const out = await record.mutateAsync({
         drugId: drug.id,
@@ -82,24 +249,28 @@ export function MedicationChartPanel({
         route: route || null,
       });
       if (out.matchedOrder) {
-        Alert.alert("Dose recorded", "Matches the order.");
+        medToast("Dose recorded — matches the order");
       } else if (out.candidateOrders?.length) {
-        Alert.alert(
-          "Recorded — the order was not an exact match",
-          `Closest: ${out.candidateOrders[0].name ?? "an order"}. Check it against the prescription.`
-        );
+        medToast("Recorded — the order was not an exact match", {
+          body: `Closest: ${out.candidateOrders[0].name ?? "an order"}. Check it against the prescription.`,
+          tone: "warning",
+        });
       } else {
-        Alert.alert(
-          "Recorded — no matching order was found",
-          "Check it against the doctor's prescription."
-        );
+        medToast("Recorded — no matching order was found", {
+          body: "Check it against the doctor's prescription.",
+          tone: "warning",
+        });
       }
       setDrug(null);
-      setQuery("");
       setQuantity("1");
       setRoute("");
     } catch (err) {
-      Alert.alert("Could not record the dose", describeError(err));
+      medToast(
+        isModuleNotEnabled(err)
+          ? "Inpatient is not available on this deployment."
+          : "Could not record the dose",
+        { body: isModuleNotEnabled(err) ? undefined : describeError(err), tone: "error" }
+      );
     }
   };
 
@@ -115,7 +286,7 @@ export function MedicationChartPanel({
         outcome: settleOutcome,
         notes: settleNotes.trim() || null,
       });
-      Alert.alert(
+      medToast(
         out.status === "AWAITING_REVIEW"
           ? "Sent back to the pharmacy for review"
           : "Recorded"
@@ -125,22 +296,19 @@ export function MedicationChartPanel({
       setSettleQty("");
       setSettleNotes("");
     } catch (err) {
-      Alert.alert("Could not record it", describeError(err));
+      medToast(
+        isModuleNotEnabled(err)
+          ? "Inpatient is not available on this deployment."
+          : "Could not record it",
+        { body: isModuleNotEnabled(err) ? undefined : describeError(err), tone: "error" }
+      );
     }
   };
 
-  if (chartQ.isLoading) {
+  if (chartQ.isError && isModuleNotEnabled(chartQ.error)) {
     return (
-      <View className="items-center py-6">
-        <ActivityIndicator color="#FD006A" />
-      </View>
-    );
-  }
-
-  if (chartQ.isError) {
-    return (
-      <Text className="text-sm text-red-600">
-        {describeError(chartQ.error)}
+      <Text className="text-sm" style={{ color: MUTED }}>
+        Inpatient is not available on this deployment.
       </Text>
     );
   }
@@ -148,16 +316,24 @@ export function MedicationChartPanel({
   return (
     <View className="gap-5">
       {editors?.medication?.changedBy ? (
-        <Text className="text-[11px] text-neutral-500">
+        <Text className="text-[11px]" style={{ color: MUTED }}>
           Edited by {editors.medication.changedBy} ·{" "}
           {formatDateTime(String(editors.medication.changedAt))}
         </Text>
       ) : null}
 
-      <View className="gap-2 rounded-xl border border-neutral-200 p-3">
+      <View
+        className="gap-2 bg-white"
+        style={{
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: CARD_BORDER,
+          padding: 12,
+        }}
+      >
         <View className="flex-row items-center gap-1.5">
-          <Ionicons name="barcode-outline" size={16} color="#737373" />
-          <Text className="text-sm font-medium text-neutral-900">
+          <Ionicons name="scan-outline" size={16} color={MUTED} />
+          <Text className="text-sm font-medium" style={{ color: BODY }}>
             Record a dose
           </Text>
         </View>
@@ -165,11 +341,20 @@ export function MedicationChartPanel({
         {drug ? (
           <View className="gap-3">
             <View>
-              <Text className="text-sm font-semibold text-neutral-900">
+              <Text className="text-sm font-semibold" style={{ color: BODY }}>
                 {drug.label}
               </Text>
-              <Pressable onPress={() => setDrug(null)} className="mt-0.5">
-                <Text className="text-xs text-neutral-500 underline">Change</Text>
+              <Pressable
+                onPress={() => {
+                  setDrug(null);
+                  setQuantity("1");
+                  setRoute("");
+                }}
+                className="mt-0.5"
+              >
+                <Text className="text-xs underline" style={{ color: MUTED }}>
+                  Change
+                </Text>
               </Pressable>
             </View>
             <TextField
@@ -178,289 +363,301 @@ export function MedicationChartPanel({
               onChangeText={setQuantity}
               keyboardType="number-pad"
             />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8 }}
-            >
-              {ROUTES.map((r) => {
-                const active = route === r;
-                return (
-                  <Pressable
-                    key={r}
-                    onPress={() => setRoute(active ? "" : r)}
-                    className={`rounded-full px-3 py-2 ${
-                      active ? "bg-brand" : "bg-neutral-100"
-                    }`}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      className={`text-xs font-medium ${
-                        active ? "text-white" : "text-neutral-600"
+            <View className="gap-1.5">
+              <Text className="text-sm font-medium text-neutral-700">Route</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8 }}
+              >
+                {ROUTES.map((r) => {
+                  const active = route === r;
+                  return (
+                    <Pressable
+                      key={r}
+                      onPress={() => setRoute(r)}
+                      className={`rounded-lg px-3 py-2 ${
+                        active ? "bg-brand" : "bg-neutral-100"
                       }`}
                     >
-                      {r}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                      <Text
+                        numberOfLines={1}
+                        className={`text-xs font-medium ${
+                          active ? "text-white" : "text-neutral-600"
+                        }`}
+                      >
+                        {r}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
             <Button
               label="Record"
               size="md"
               loading={record.isPending}
               disabled={record.isPending || Math.trunc(Number(quantity)) < 1}
               onPress={() => void recordDose()}
+              style={{ backgroundColor: BRAND }}
             />
           </View>
         ) : (
-          <View>
-            <TextField
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Scan the pack, or search by name…"
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="search"
-              onSubmitEditing={() => {
-                const first = searchQ.data?.[0];
-                if (first) {
-                  setDrug({ id: first.id, label: drugSearchLabel(first) });
-                  setQuery("");
-                }
+          <DrugPicker
+            onSelect={(d) =>
+              setDrug({ id: d.id, label: drugSearchLabel(d) })
+            }
+          />
+        )}
+      </View>
+
+      {chartQ.isLoading ? (
+        <View className="items-center py-4">
+          <ActivityIndicator color={BRAND} />
+        </View>
+      ) : chartQ.isError ? (
+        <Text className="text-sm text-red-600">
+          {describeError(chartQ.error)}
+        </Text>
+      ) : (
+        <>
+          {outstanding.length > 0 ? (
+            <View
+              className="gap-2"
+              style={{
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: AMBER_BORDER,
+                backgroundColor: AMBER_BG,
+                padding: 12,
               }}
-            />
-            {searchQ.isFetching ? (
-              <ActivityIndicator className="mt-2" color="#FD006A" />
-            ) : null}
-            {(searchQ.data ?? []).length > 0 ? (
-              <View className="mt-1 overflow-hidden rounded-xl border border-neutral-200">
-                {(searchQ.data ?? []).slice(0, 8).map((d, i) => (
-                  <Pressable
-                    key={d.id}
-                    onPress={() => {
-                      setDrug({ id: d.id, label: drugSearchLabel(d) });
-                      setQuery("");
-                    }}
-                    className={`px-3 py-2.5 active:bg-neutral-50 ${
+            >
+              <View className="flex-row items-center gap-1.5">
+                <Ionicons name="warning-outline" size={16} color="#B45309" />
+                <Text className="text-sm font-medium" style={{ color: BODY }}>
+                  Not yet accounted for
+                </Text>
+              </View>
+              <Text className="text-xs" style={{ color: MUTED }}>
+                Issued by the pharmacy but not charted. Say whether it went back or
+                was used — a bill is only safe to collect on medicine somebody can
+                account for.
+              </Text>
+              {outstanding.map((row) => (
+                <View
+                  key={row.drugId}
+                  className="rounded-lg bg-white/80 p-2.5"
+                >
+                  <View className="flex-row items-center justify-between gap-2">
+                    <View className="min-w-0 flex-1">
+                      <Text
+                        className="text-sm font-medium"
+                        style={{ color: BODY }}
+                      >
+                        {row.drugName}
+                      </Text>
+                      <Text className="text-xs" style={{ color: MUTED }}>
+                        {row.dispensed} issued · {row.administered} given
+                        {row.settled > 0 ? ` · ${row.settled} settled` : ""} ·{" "}
+                        {row.unaccounted} outstanding
+                      </Text>
+                    </View>
+                    {settling?.drugId !== row.drugId ? (
+                      <Pressable
+                        onPress={() => {
+                          setSettling(row);
+                          setSettleOutcome("");
+                          setSettleQty(String(row.unaccounted));
+                          setSettleNotes("");
+                        }}
+                        style={{ flexShrink: 0 }}
+                        className="shrink-0 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
+                      >
+                        <Text
+                          numberOfLines={1}
+                          className="text-xs font-semibold text-neutral-800"
+                        >
+                          Account for it
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  {settling?.drugId === row.drugId ? (
+                    <View className="mt-2.5 gap-2 border-t border-neutral-100 pt-2.5">
+                      <Text className="text-xs font-medium text-neutral-700">
+                        What happened?
+                      </Text>
+                      <View className="flex-row flex-wrap gap-2">
+                        <Pressable
+                          onPress={() => setSettleOutcome("RETURNED")}
+                          style={{ flexShrink: 0 }}
+                          className={`shrink-0 rounded-xl border px-3 py-2 ${
+                            settleOutcome === "RETURNED"
+                              ? "border-brand bg-brand/5"
+                              : "border-neutral-200"
+                          }`}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            className="text-xs font-medium text-neutral-800"
+                          >
+                            Went back to the pharmacy
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => setSettleOutcome("CONSUMED")}
+                          style={{ flexShrink: 0 }}
+                          className={`shrink-0 rounded-xl border px-3 py-2 ${
+                            settleOutcome === "CONSUMED"
+                              ? "border-brand bg-brand/5"
+                              : "border-neutral-200"
+                          }`}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            className="text-xs font-medium text-neutral-800"
+                          >
+                            Used, but never charted
+                          </Text>
+                        </Pressable>
+                      </View>
+                      <TextField
+                        label="Units"
+                        value={settleQty}
+                        onChangeText={setSettleQty}
+                        keyboardType="number-pad"
+                      />
+                      {settleOutcome ? (
+                        <Text className="text-xs" style={{ color: MUTED }}>
+                          {settleOutcome === "RETURNED"
+                            ? "The pharmacy decides whether it goes back on the shelf — the ward cannot restock its own returns."
+                            : "Nothing moves; the units already left stock when they were issued. This records who accounted for them."}
+                        </Text>
+                      ) : null}
+                      <TextField
+                        label={
+                          settleOutcome === "CONSUMED"
+                            ? "What happened to them?"
+                            : "Notes (optional)"
+                        }
+                        value={settleNotes}
+                        onChangeText={setSettleNotes}
+                        placeholder={
+                          settleOutcome === "CONSUMED"
+                            ? "e.g. part vial discarded after the dose"
+                            : "Anything the pharmacy should know"
+                        }
+                      />
+                      <View className="flex-row gap-2">
+                        <View className="flex-1">
+                          <Button
+                            label="Record"
+                            size="md"
+                            loading={settle.isPending}
+                            disabled={
+                              !settleOutcome ||
+                              settle.isPending ||
+                              Math.trunc(Number(settleQty)) < 1 ||
+                              Math.trunc(Number(settleQty)) >
+                                row.unaccounted ||
+                              (settleOutcome === "CONSUMED" &&
+                                settleNotes.trim().length < 3)
+                            }
+                            onPress={() => void accountFor()}
+                            style={{ backgroundColor: BRAND }}
+                          />
+                        </View>
+                        <Button
+                          label="Cancel"
+                          variant="ghost"
+                          size="md"
+                          onPress={() => setSettling(null)}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <View className="gap-2">
+            <Text className="text-sm font-medium" style={{ color: BODY }}>
+              Doses given
+            </Text>
+            {(chartQ.data?.administrations ?? []).length === 0 ? (
+              <View
+                className="px-3 py-5"
+                style={{
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderStyle: "dashed",
+                  borderColor: CARD_BORDER,
+                }}
+              >
+                <Text
+                  className="text-center text-sm font-medium"
+                  style={{ color: BODY }}
+                >
+                  Nothing charted yet
+                </Text>
+                <Text
+                  className="mt-1 text-center text-xs"
+                  style={{ color: MUTED }}
+                >
+                  Doses you record will be listed here, newest first.
+                </Text>
+              </View>
+            ) : (
+              <View
+                className="overflow-hidden"
+                style={{
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: CARD_BORDER,
+                }}
+              >
+                {(chartQ.data?.administrations ?? []).map((a, i) => (
+                  <View
+                    key={a.id}
+                    className={`flex-row items-start gap-2 px-3 py-2.5 ${
                       i > 0 ? "border-t border-neutral-100" : ""
                     }`}
                   >
-                    <Text className="text-sm font-medium text-neutral-900">
-                      {drugSearchLabel(d)}
-                    </Text>
-                    {d.genericName && d.genericName !== d.name ? (
-                      <Text className="text-xs text-neutral-500">
-                        {d.genericName}
+                    <View className="min-w-0 flex-1">
+                      <Text
+                        className="text-sm font-medium"
+                        style={{ color: BODY }}
+                      >
+                        {a.drugName}
                       </Text>
+                      <Text className="text-xs" style={{ color: MUTED }}>
+                        {a.quantity} unit{a.quantity === 1 ? "" : "s"}
+                        {a.route ? ` · ${a.route}` : ""} ·{" "}
+                        {formatDateTime(a.administeredAt)} · {a.administeredBy}
+                      </Text>
+                    </View>
+                    {!a.matchedOrder ? (
+                      <View
+                        style={{ flexShrink: 0 }}
+                        className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5"
+                      >
+                        <Text
+                          numberOfLines={1}
+                          className="text-[10px] font-medium text-amber-800"
+                        >
+                          No matching order
+                        </Text>
+                      </View>
                     ) : null}
-                  </Pressable>
+                  </View>
                 ))}
               </View>
-            ) : query.trim() && !searchQ.isFetching && searchQ.isSuccess ? (
-              <Text className="mt-2 text-xs text-neutral-500">
-                No matching medicine
-              </Text>
-            ) : null}
+            )}
           </View>
-        )}
-      </View>
-
-      {outstanding.length > 0 ? (
-        <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
-          <View className="flex-row items-center gap-1.5">
-            <Ionicons name="warning-outline" size={16} color="#B45309" />
-            <Text className="text-sm font-medium text-amber-900">
-              Not yet accounted for
-            </Text>
-          </View>
-          <Text className="text-xs text-amber-800/80">
-            Issued by the pharmacy but not charted. Say whether it went back or
-            was used — a bill is only safe to collect on medicine somebody can
-            account for.
-          </Text>
-          {outstanding.map((row) => (
-            <View
-              key={row.drugId}
-              className="rounded-lg bg-white/80 p-2.5"
-            >
-              <View className="flex-row items-center justify-between gap-2">
-                <View className="min-w-0 flex-1">
-                  <Text className="text-sm font-medium text-neutral-900">
-                    {row.drugName}
-                  </Text>
-                  <Text className="text-xs text-neutral-500">
-                    {row.dispensed} issued · {row.administered} given
-                    {row.settled > 0 ? ` · ${row.settled} settled` : ""} ·{" "}
-                    {row.unaccounted} outstanding
-                  </Text>
-                </View>
-                {settling?.drugId !== row.drugId ? (
-                  <Pressable
-                    onPress={() => {
-                      setSettling(row);
-                      setSettleOutcome("");
-                      setSettleQty(String(row.unaccounted));
-                      setSettleNotes("");
-                    }}
-                    style={{ flexShrink: 0 }}
-                    className="shrink-0 rounded-lg border border-neutral-200 px-2.5 py-1.5"
-                  >
-                    <Text
-                      numberOfLines={1}
-                      className="text-xs font-semibold text-neutral-800"
-                    >
-                      Account for it
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {settling?.drugId === row.drugId ? (
-                <View className="mt-2.5 gap-2 border-t border-neutral-100 pt-2.5">
-                  <Text className="text-xs font-medium text-neutral-700">
-                    What happened?
-                  </Text>
-                  <View className="flex-row flex-wrap gap-2">
-                    <Pressable
-                      onPress={() => setSettleOutcome("RETURNED")}
-                      style={{ flexShrink: 0 }}
-                      className={`shrink-0 rounded-xl border px-3 py-2 ${
-                        settleOutcome === "RETURNED"
-                          ? "border-brand bg-brand/5"
-                          : "border-neutral-200"
-                      }`}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        className="text-xs font-medium text-neutral-800"
-                      >
-                        Went back to the pharmacy
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => setSettleOutcome("CONSUMED")}
-                      style={{ flexShrink: 0 }}
-                      className={`shrink-0 rounded-xl border px-3 py-2 ${
-                        settleOutcome === "CONSUMED"
-                          ? "border-brand bg-brand/5"
-                          : "border-neutral-200"
-                      }`}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        className="text-xs font-medium text-neutral-800"
-                      >
-                        Used, but never charted
-                      </Text>
-                    </Pressable>
-                  </View>
-                  <TextField
-                    label="Units"
-                    value={settleQty}
-                    onChangeText={setSettleQty}
-                    keyboardType="number-pad"
-                  />
-                  {settleOutcome ? (
-                    <Text className="text-xs text-neutral-500">
-                      {settleOutcome === "RETURNED"
-                        ? "The pharmacy decides whether it goes back on the shelf — the ward cannot restock its own returns."
-                        : "Nothing moves; the units already left stock when they were issued. This records who accounted for them."}
-                    </Text>
-                  ) : null}
-                  <TextField
-                    label={
-                      settleOutcome === "CONSUMED"
-                        ? "What happened to them?"
-                        : "Notes (optional)"
-                    }
-                    value={settleNotes}
-                    onChangeText={setSettleNotes}
-                    placeholder={
-                      settleOutcome === "CONSUMED"
-                        ? "e.g. part vial discarded after the dose"
-                        : "Anything the pharmacy should know"
-                    }
-                  />
-                  <View className="flex-row gap-2">
-                    <View className="flex-1">
-                      <Button
-                        label="Record"
-                        size="md"
-                        loading={settle.isPending}
-                        disabled={
-                          !settleOutcome ||
-                          settle.isPending ||
-                          Math.trunc(Number(settleQty)) < 1 ||
-                          Math.trunc(Number(settleQty)) > row.unaccounted ||
-                          (settleOutcome === "CONSUMED" &&
-                            settleNotes.trim().length < 3)
-                        }
-                        onPress={() => void accountFor()}
-                      />
-                    </View>
-                    <Button
-                      label="Cancel"
-                      variant="ghost"
-                      size="md"
-                      onPress={() => setSettling(null)}
-                    />
-                  </View>
-                </View>
-              ) : null}
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      <View className="gap-2">
-        <Text className="text-sm font-medium text-neutral-900">Doses given</Text>
-        {(chartQ.data?.administrations ?? []).length === 0 ? (
-          <View className="rounded-xl border border-dashed border-neutral-200 px-3 py-5">
-            <Text className="text-center text-sm font-medium text-neutral-800">
-              Nothing charted yet
-            </Text>
-            <Text className="mt-1 text-center text-xs text-neutral-500">
-              Doses you record will be listed here, newest first.
-            </Text>
-          </View>
-        ) : (
-          <View className="overflow-hidden rounded-xl border border-neutral-200">
-            {(chartQ.data?.administrations ?? []).map((a, i) => (
-              <View
-                key={a.id}
-                className={`flex-row items-start gap-2 px-3 py-2.5 ${
-                  i > 0 ? "border-t border-neutral-100" : ""
-                }`}
-              >
-                <View className="min-w-0 flex-1">
-                  <Text className="text-sm font-medium text-neutral-900">
-                    {a.drugName}
-                  </Text>
-                  <Text className="text-xs text-neutral-500">
-                    {a.quantity} unit{a.quantity === 1 ? "" : "s"}
-                    {a.route ? ` · ${a.route}` : ""} ·{" "}
-                    {formatDateTime(a.administeredAt)} · {a.administeredBy}
-                  </Text>
-                </View>
-                {!a.matchedOrder ? (
-                  <View
-                    style={{ flexShrink: 0 }}
-                    className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5"
-                  >
-                    <Text
-                      numberOfLines={1}
-                      className="text-[10px] font-medium text-amber-800"
-                    >
-                      No matching order
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
+        </>
+      )}
     </View>
   );
 }
