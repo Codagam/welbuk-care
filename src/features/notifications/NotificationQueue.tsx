@@ -36,6 +36,9 @@ function eventIcon(
   event?: string | null
 ): keyof typeof Ionicons.glyphMap {
   const t = (type || event || "").toUpperCase();
+  if (t.includes("DOCTOR_CHANGED") || t.includes("LANE_TRANSFERRED")) {
+    return "swap-horizontal-outline";
+  }
   if (t.includes("APPOINTMENT") || t.includes("VITALS")) return "calendar-outline";
   if (t.includes("PRESCRIPTION")) return "medkit-outline";
   if (t.includes("LAB")) return "flask-outline";

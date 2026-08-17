@@ -19,11 +19,14 @@ export interface DrugCatalogItem {
 export interface FacilityDrugItem {
   id: string;
   name: string;
+  /** Present on some `/api/drugs?q=` rows; prefer `name`. */
+  brandName?: string | null;
   genericName: string;
   strength?: string | null;
   unit?: string | null;
   price?: number | null;
   gstRatePercent?: number | null;
+  barcode?: string | null;
 }
 
 export async function searchDrugs(body: {
@@ -57,6 +60,23 @@ export async function listFacilityDrugs(
   const data = await api<{ drugs: FacilityDrugItem[] }>({
     path: "/api/drugs",
     query: { facilityId },
+    signal,
+  });
+  return data.drugs ?? [];
+}
+
+/**
+ * GET /api/drugs?facilityId=&q= — server-side search (brand / generic / barcode).
+ * Used by the IPD medication chart; search param is `q`, not `search`.
+ */
+export async function searchFacilityDrugs(
+  facilityId: string,
+  q: string,
+  signal?: AbortSignal
+): Promise<FacilityDrugItem[]> {
+  const data = await api<{ drugs: FacilityDrugItem[] }>({
+    path: "/api/drugs",
+    query: { facilityId, q, page: 1, pageSize: 30 },
     signal,
   });
   return data.drugs ?? [];

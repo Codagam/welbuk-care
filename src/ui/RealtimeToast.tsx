@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -6,6 +7,7 @@ import {
   useRealtimeToastStore,
 } from "@/lib/realtime/toastStore";
 import type {
+  IpdPageAlarm,
   RealtimeToast,
   RealtimeToastTone,
 } from "@/lib/realtime/events";
@@ -67,13 +69,77 @@ function ToastCard({
   );
 }
 
-/** In-app realtime banner — no push required; shows while Care is open. */
+function PageAlarmCard({
+  alarm,
+  onDismiss,
+}: {
+  alarm: IpdPageAlarm;
+  onDismiss: () => void;
+}) {
+  const router = useRouter();
+  const urgent = alarm.urgent;
+  return (
+    <View
+      className={`mx-4 flex-row items-start gap-3 rounded-2xl border-l-4 p-3 shadow-lg ${
+        urgent
+          ? "border-l-red-600 bg-red-50"
+          : "border-l-brand bg-brand/10"
+      }`}
+    >
+      <Ionicons
+        name="notifications"
+        size={20}
+        color={urgent ? "#DC2626" : "#FD006A"}
+      />
+      <Pressable
+        className="min-w-0 flex-1"
+        onPress={() => {
+          onDismiss();
+          if (alarm.admissionId) {
+            router.push({
+              pathname: "/inpatient/[id]",
+              params: { id: alarm.admissionId },
+            });
+          }
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${alarm.title}. ${alarm.room} ${alarm.patientName}`}
+      >
+        <Text className="text-sm font-semibold text-neutral-900">
+          {alarm.title}
+        </Text>
+        <Text className="mt-0.5 text-sm text-neutral-800">
+          {alarm.room ? (
+            <Text className="font-bold">{alarm.room}</Text>
+          ) : null}
+          {alarm.room ? " · " : ""}
+          {alarm.patientName}
+        </Text>
+        {alarm.detail ? (
+          <Text className="mt-0.5 text-xs text-neutral-500">{alarm.detail}</Text>
+        ) : null}
+      </Pressable>
+      <Pressable
+        onPress={onDismiss}
+        hitSlop={8}
+        accessibilityLabel="Dismiss"
+        className="rounded p-1"
+      >
+        <Ionicons name="close" size={16} color="#737373" />
+      </Pressable>
+    </View>
+  );
+}
+
+/** In-app realtime banner — sticky IPD pages sit above auto-dismiss toasts. */
 export function RealtimeToastHost() {
   const insets = useSafeAreaInsets();
   const current = useRealtimeToastStore((s) => s.current);
+  const alarms = useRealtimeToastStore((s) => s.alarms);
   const dismiss = useRealtimeToastStore((s) => s.dismiss);
+  const dismissAlarm = useRealtimeToastStore((s) => s.dismissAlarm);
 
-  if (!current) return null;
+  if (!current && alarms.length === 0) return null;
 
   return (
     <View
@@ -84,9 +150,17 @@ export function RealtimeToastHost() {
         left: 0,
         right: 0,
         zIndex: 100,
+        gap: 8,
       }}
     >
-      <ToastCard toast={current} onDismiss={dismiss} />
+      {alarms.map((alarm) => (
+        <PageAlarmCard
+          key={alarm.id}
+          alarm={alarm}
+          onDismiss={() => dismissAlarm(alarm.id)}
+        />
+      ))}
+      {current ? <ToastCard toast={current} onDismiss={dismiss} /> : null}
     </View>
   );
 }

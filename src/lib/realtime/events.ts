@@ -7,6 +7,8 @@ export type WelbukEventType =
   | "APPOINTMENT_COMPLETED"
   | "APPOINTMENT_TENTATIVE_CREATED"
   | "APPOINTMENT_VITALS_RECORDED"
+  | "APPOINTMENT_DOCTOR_CHANGED"
+  | "APPOINTMENT_DOCTOR_LANE_TRANSFERRED"
   | "LAB_ORDER_RAISED"
   | "LAB_RESULT_READY"
   | "PRESCRIPTION_ISSUED"
@@ -37,6 +39,18 @@ export type RealtimeToast = {
   tone: RealtimeToastTone;
 };
 
+/** Sticky ward page — distinct from auto-dismiss appointment toasts. */
+export type IpdPageAlarm = {
+  id: string;
+  title: string;
+  room: string;
+  patientName: string;
+  detail: string;
+  urgent: boolean;
+  admissionId: string;
+  who: string;
+};
+
 /** Socket.io may send the envelope `{ payload }` or a flat payload object. */
 export function unwrapRealtimePayload(
   raw: Record<string, unknown> | undefined
@@ -51,6 +65,65 @@ export function unwrapRealtimePayload(
 
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
+}
+
+/**
+ * IPD page vs Care coordination call — same WS event `PATIENT_CALL_RAISED`.
+ * IPD has `admissionId` / `who` / `urgent` / `ward`; Care calls have `callType` / `priority`.
+ */
+export function isIpdPagePayload(payload: Record<string, unknown>): boolean {
+  const admissionId = str(payload.admissionId);
+  if (!admissionId) return false;
+  if (str(payload.callType) || str(payload.priority)) return false;
+  const who = str(payload.who).toUpperCase();
+  return (
+    who === "NURSE" ||
+    who === "DOCTOR" ||
+    str(payload.ward).length > 0 ||
+    str(payload.urgent).length > 0
+  );
+}
+
+export function formatIpdPageAlarm(
+  payload: Record<string, unknown>
+): IpdPageAlarm | null {
+  const admissionId = str(payload.admissionId);
+  if (!admissionId) return null;
+  const whoRaw = str(payload.who).toUpperCase() === "DOCTOR" ? "DOCTOR" : "NURSE";
+  const who = whoRaw === "DOCTOR" ? "Doctor" : "Nurse";
+  const urgent = str(payload.urgent) === "true";
+  const room = [str(payload.ward), str(payload.roomNumber)]
+    .filter(Boolean)
+    .join(" ");
+  const patientName = str(payload.patientName) || "A patient";
+  const detail = [str(payload.reason), str(payload.admissionRef)]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    id: `page-${admissionId}-${whoRaw}`,
+    title: `${urgent ? "URGENT — " : ""}${who} needed`,
+    room,
+    patientName,
+    detail,
+    urgent,
+    admissionId,
+    who: whoRaw,
+  };
+}
+
+/** Single "Dr." prefix — matches Practice `formatNotificationDoctorLabel`. */
+function doctorLabel(name: unknown): string {
+  const raw = str(name);
+  if (!raw) return "the doctor";
+  const without = raw.replace(/^(?:dr\.?\s*)+/i, "").trim();
+  return without ? `Dr. ${without}` : "the doctor";
+}
+
+export function isDoctorTransferEvent(event: string): boolean {
+  return (
+    event === "APPOINTMENT_DOCTOR_CHANGED" ||
+    event === "APPOINTMENT_DOCTOR_LANE_TRANSFERRED"
+  );
 }
 
 function normalizeDoctorName(name: string): string {
@@ -108,12 +181,25 @@ export function isEventRelevantToViewer(args: {
 }): boolean {
   const { event, payload, isDoctorLogin, doctorId, userId, userName } = args;
 
+  if (event === "PATIENT_CALL_RAISED" && isIpdPagePayload(payload)) {
+    return true;
+  }
+
   if (!isDoctorLogin) {
     // Front desk / staff — skip noisy pharma-only if needed later; show facility feed.
     return true;
   }
 
   if (!isDoctorClinicalEvent(event)) return false;
+
+  // CareLane / doctor-of-care swap: only outgoing or incoming doctor.
+  // Must run before `payload.doctorId` — that field is always the NEW doctor.
+  if (isDoctorTransferEvent(event)) {
+    if (!doctorId) return false;
+    const fromId = str(payload.fromDoctorId);
+    const toId = str(payload.toDoctorId);
+    return doctorId === fromId || doctorId === toId;
+  }
 
   const payloadDoctorId = str(payload.doctorId);
   const payloadDoctorUserId = str(payload.doctorUserId);
@@ -200,6 +286,23 @@ export function formatRealtimeToast(
         body: who,
         tone: "warning",
       };
+    case "APPOINTMENT_DOCTOR_CHANGED":
+      return {
+        id,
+        title: "Doctor changed",
+        body: `${who} — appointment moved from ${doctorLabel(payload.fromDoctorName)} to ${doctorLabel(payload.toDoctorName)}`,
+        tone: "info",
+      };
+    case "APPOINTMENT_DOCTOR_LANE_TRANSFERRED": {
+      const count = Number(payload.movedCount ?? 0);
+      const n = Number.isFinite(count) ? count : 0;
+      return {
+        id,
+        title: "CareLane transferred",
+        body: `${n} appointment(s) moved from ${doctorLabel(payload.fromDoctorName)} to ${doctorLabel(payload.toDoctorName)}`,
+        tone: "info",
+      };
+    }
     case "PRESCRIPTION_ISSUED":
       return {
         id,
@@ -219,6 +322,7 @@ export function formatRealtimeToast(
       };
     }
     case "PATIENT_CALL_RAISED":
+      if (isIpdPagePayload(payload)) return null;
       return {
         id,
         title: "Patient call",

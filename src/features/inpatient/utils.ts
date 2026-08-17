@@ -69,6 +69,58 @@ export function personInitials(name?: string): string {
     .slice(0, 2);
 }
 
+/** Practice `PatientAvatar` palette — hash is first character code, not brand pink. */
+export const AVATAR_PALETTE = [
+  "#2563EB",
+  "#7C3AED",
+  "#059669",
+  "#D97706",
+  "#DC2626",
+  "#0891B2",
+  "#DB2777",
+  "#EA580C",
+] as const;
+
+export function avatarBg(name?: string): string {
+  return AVATAR_PALETTE[(name || "A").charCodeAt(0) % AVATAR_PALETTE.length];
+}
+
+/** Ward / med timestamps — Practice `formatDateTime` (en-IN). */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** MRD lives on the facility link, not the patient root. */
+export function mrdForFacility(
+  admission: InpatientAdmission,
+  facilityId: string | null | undefined
+): string | null {
+  const rows = admission.patient.facilities ?? [];
+  const match = facilityId
+    ? rows.find((f) => f.facilityId === facilityId)
+    : undefined;
+  const raw = (match ?? rows[0])?.mrdNumber?.trim();
+  return raw || null;
+}
+
+export function drugSearchLabel(d: {
+  name?: string | null;
+  brandName?: string | null;
+  genericName?: string | null;
+  strength?: string | null;
+}): string {
+  const name = (d.name || d.brandName || d.genericName || "").trim();
+  return [name, d.strength?.trim()].filter(Boolean).join(" ");
+}
+
 export function inpatientRouteSegment(
   row: Pick<InpatientListRow, "id" | "ipSerial"> | Pick<InpatientAdmission, "id" | "ipSerial">
 ): string {

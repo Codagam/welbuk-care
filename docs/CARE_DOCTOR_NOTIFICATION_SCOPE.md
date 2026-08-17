@@ -58,11 +58,15 @@ flowchart LR
 | Event | Emit target | Doctor sees when |
 |-------|-------------|------------------|
 | `APPOINTMENT_*` | facility + `payload.doctorId` | doctorScope + live filter match |
+| `APPOINTMENT_DOCTOR_CHANGED` | facility + `fromDoctorId` / `toDoctorId` | **only** from or to doctor (not other doctors at the clinic) |
+| `APPOINTMENT_DOCTOR_LANE_TRANSFERRED` | facility + `fromDoctorId` / `toDoctorId` | **only** from or to doctor (CareLane bulk transfer) |
 | `LAB_*` / `PRESCRIPTION_ISSUED` / `REFERRAL_*` | facility + ideally `doctorId` | same |
 | `PATIENT_ASSIGNED` | `{ type: "user", userId }` | `targetUserId` / `staffUserId` match |
 | `PATIENT_CALL_RAISED` | user if assigned, else facility | doctor: only user target; staff/admin: facility ok |
 | Payment / QR / check-in / onboard | facility | **admin/staff only** |
 | `DOCTOR_READY_FOR_NEXT` | facility | **staff/admin only** (front desk) |
+
+Date/time **reschedule with the same doctor** does **not** emit these events. Changing the doctor (Change doctor, StepIn, or Transfer lane) does — Care toasts and refreshes `appointments` / `queue`.
 
 Do **not** switch emits to role rooms for this fix — client/API scoping matches Practice design.
 
@@ -87,8 +91,8 @@ List / read-all already honour `?doctorScope=1`.
 |------|--------|
 | `src/lib/api/endpoints/notifications.ts` | `doctorScope` query on list + read-all |
 | `src/features/notifications/hooks.ts` | `isDoctorHome` → scope; query key `["notifications", facilityId, "doctor" \| "facility"]` |
-| `src/lib/realtime/events.ts` | Tighten CALL/ASSIGNED (user-target only); align clinical allowlist |
-| `src/lib/realtime/useRealtime.ts` | Invalidate scoped notifications key; no clinical toast/invalidate when filtered out |
+| `src/lib/realtime/events.ts` | Tighten CALL/ASSIGNED (user-target only); from/to filter for doctor-change + CareLane transfer |
+| `src/lib/realtime/useRealtime.ts` | Invalidate scoped notifications key; no clinical toast/invalidate when filtered out; idempotency dedup |
 
 ---
 
@@ -108,3 +112,6 @@ List / read-all already honour `?doctorScope=1`.
 - [ ] Raise call assigned to Doctor A: only A toasts/lists; unassigned facility raise: staff yes, doctors no
 - [ ] Mark all read as doctor: only scoped unread clear
 - [ ] Doctor who is also facility admin: full feed (by design)
+- [ ] Doctor A → Doctor B change: A and B toast + queue refresh; Doctor C does not
+- [ ] CareLane transfer A → B: one `APPOINTMENT_DOCTOR_LANE_TRANSFERRED` on A and B only
+- [ ] Same-doctor reschedule: no doctor-change toast

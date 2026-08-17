@@ -7,14 +7,26 @@ import {
 
 import { listFacilityDrugs } from "@/lib/api/endpoints/drugs";
 import {
+  accountMedication,
   getInpatientAdmission,
+  getInpatientAudit,
   getInpatientBill,
+  getMedicationChart,
   listInpatientAdmissions,
+  listInpatientNotes,
   listInpatientRateCard,
+  listInpatientRooms,
+  listInpatientVitals,
+  pageInpatientStaff,
+  postInpatientNote,
+  postInpatientVitals,
+  postMedicationAdministration,
   putInpatientBill,
   updateInpatientAdmission,
+  type PostInpatientVitalsInput,
   type PutInpatientBillInput,
 } from "@/lib/api/endpoints/inpatient";
+import type { NoteKind, PageWho } from "./types";
 import { useFacilityId } from "@/lib/auth/store";
 import {
   drugToPickable,
@@ -188,6 +200,186 @@ export function useDischargeAdmission(admissionId: string | undefined) {
       qc.invalidateQueries({ queryKey: ["inpatient-admission", admissionId] });
       qc.invalidateQueries({ queryKey: ["inpatient-admissions"] });
       qc.invalidateQueries({ queryKey: ["inpatient-bill-hydrate", admissionId] });
+    },
+  });
+}
+
+export function useInpatientRooms() {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["inpatient-rooms", facilityId],
+    enabled: !!facilityId,
+    staleTime: 30_000,
+    queryFn: ({ signal }) => listInpatientRooms(facilityId!, signal),
+  });
+}
+
+export function useWardVitals(admissionId: string | undefined) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["ward-vitals", facilityId, admissionId],
+    enabled: !!facilityId && !!admissionId,
+    queryFn: ({ signal }) =>
+      listInpatientVitals(facilityId!, admissionId!, signal),
+  });
+}
+
+export function useRecordWardVitals(admissionId: string | undefined) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (
+      fields: Omit<PostInpatientVitalsInput, "facilityId" | "admissionId">
+    ) => {
+      if (!admissionId || !facilityId) throw new Error("admissionId is required");
+      return postInpatientVitals({ facilityId, admissionId, ...fields });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ward-vitals", facilityId, admissionId] });
+      qc.invalidateQueries({
+        queryKey: ["inpatient-audit", facilityId, admissionId],
+      });
+    },
+  });
+}
+
+export function useWardNotes(admissionId: string | undefined) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["ward-notes", facilityId, admissionId],
+    enabled: !!facilityId && !!admissionId,
+    queryFn: ({ signal }) =>
+      listInpatientNotes(facilityId!, admissionId!, signal),
+  });
+}
+
+export function useAddWardNote(admissionId: string | undefined) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (input: { body: string; kind: NoteKind }) => {
+      if (!admissionId || !facilityId) throw new Error("admissionId is required");
+      return postInpatientNote({
+        facilityId,
+        admissionId,
+        body: input.body,
+        kind: input.kind,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ward-notes", facilityId, admissionId] });
+      qc.invalidateQueries({
+        queryKey: ["inpatient-audit", facilityId, admissionId],
+      });
+    },
+  });
+}
+
+export function useMedicationChart(admissionId: string | undefined) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["med-chart", facilityId, admissionId],
+    enabled: !!facilityId && !!admissionId,
+    queryFn: ({ signal }) =>
+      getMedicationChart(facilityId!, admissionId!, signal),
+  });
+}
+
+export function useRecordDose(admissionId: string | undefined) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (input: {
+      drugId: string;
+      quantity: number;
+      route?: string | null;
+    }) => {
+      if (!admissionId || !facilityId) throw new Error("admissionId is required");
+      return postMedicationAdministration({
+        facilityId,
+        admissionId,
+        ...input,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["med-chart", facilityId, admissionId] });
+      qc.invalidateQueries({
+        queryKey: ["inpatient-audit", facilityId, admissionId],
+      });
+    },
+  });
+}
+
+export function useAccountMedication(admissionId: string | undefined) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (input: {
+      drugId: string;
+      quantity: number;
+      outcome: "RETURNED" | "CONSUMED";
+      notes?: string | null;
+    }) => {
+      if (!admissionId || !facilityId) throw new Error("admissionId is required");
+      return accountMedication({ facilityId, admissionId, ...input });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["med-chart", facilityId, admissionId] });
+    },
+  });
+}
+
+export function usePageStaff(admissionId: string | undefined) {
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (input: {
+      who: PageWho;
+      reason?: string | null;
+      urgent?: boolean;
+    }) => {
+      if (!admissionId || !facilityId) throw new Error("admissionId is required");
+      return pageInpatientStaff({
+        facilityId,
+        admissionId,
+        who: input.who,
+        reason: input.reason,
+        urgent: input.urgent,
+      });
+    },
+  });
+}
+
+export function useInpatientAudit(admissionId: string | undefined) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["inpatient-audit", facilityId, admissionId],
+    enabled: !!facilityId && !!admissionId,
+    queryFn: ({ signal }) =>
+      getInpatientAudit(admissionId!, facilityId!, signal),
+    retry: false,
+  });
+}
+
+export function useUpdateAttender(admissionId: string | undefined) {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+  return useMutation({
+    mutationFn: (input: {
+      attenderName: string;
+      attenderPhone: string;
+      attenderRelation: string;
+    }) => {
+      if (!admissionId || !facilityId) throw new Error("admissionId is required");
+      return updateInpatientAdmission(admissionId, {
+        facilityId,
+        attenderName: input.attenderName,
+        attenderPhone: input.attenderPhone,
+        attenderRelation: input.attenderRelation,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inpatient-admission", admissionId] });
+      qc.invalidateQueries({ queryKey: ["inpatient-admissions"] });
     },
   });
 }

@@ -9,13 +9,32 @@ import {
   useFacilityId,
 } from "@/lib/auth/store";
 import {
+  formatIpdPageAlarm,
   formatRealtimeToast,
   isEventRelevantToViewer,
+  isIpdPagePayload,
   queriesToInvalidate,
   unwrapRealtimePayload,
 } from "./events";
+import { playPageChime } from "./pageChime";
 import { createRealtime } from "./socket";
 import { useRealtimeToastStore } from "./toastStore";
+
+const SEEN_KEYS_MAX = 80;
+
+function envelopeIdempotencyKey(
+  raw: Record<string, unknown> | undefined
+): string {
+  if (!raw || typeof raw !== "object") return "";
+  const top = raw.idempotencyKey;
+  if (typeof top === "string" && top.trim()) return top.trim();
+  const inner = raw.payload;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    const nested = (inner as Record<string, unknown>).idempotencyKey;
+    if (typeof nested === "string" && nested.trim()) return nested.trim();
+  }
+  return "";
+}
 
 /**
  * Live facility WebSocket: toast + TanStack invalidation.
@@ -28,6 +47,7 @@ export function useRealtime() {
   const doctorId = useDoctorId();
   const qc = useQueryClient();
   const showToast = useRealtimeToastStore((s) => s.show);
+  const showAlarm = useRealtimeToastStore((s) => s.showAlarm);
 
   const isDoctorLogin = isDoctorHome(user);
   const userId = user?.id ?? null;
@@ -36,14 +56,35 @@ export function useRealtime() {
   useEffect(() => {
     if (!facilityId) return;
 
+    const seenKeys: string[] = [];
+
     const socket = createRealtime(facilityId, (event, raw) => {
       const payload = unwrapRealtimePayload(raw);
+      const idempotencyKey = envelopeIdempotencyKey(raw);
+
+      if (idempotencyKey) {
+        if (seenKeys.includes(idempotencyKey)) return;
+        seenKeys.push(idempotencyKey);
+        if (seenKeys.length > SEEN_KEYS_MAX) seenKeys.shift();
+      }
 
       // Tray unread badge stays live for all facility WS traffic (API still
       // scopes rows via doctorScope). Do this before doctor-only toast filtering.
       void qc.invalidateQueries({
         queryKey: notificationsQueryKey(facilityId, isDoctorLogin),
       });
+
+      if (
+        event === "PATIENT_CALL_RAISED" &&
+        isIpdPagePayload(payload)
+      ) {
+        const alarm = formatIpdPageAlarm(payload);
+        if (alarm) {
+          showAlarm(alarm);
+          playPageChime();
+        }
+        return;
+      }
 
       if (
         !isEventRelevantToViewer({
@@ -78,7 +119,9 @@ export function useRealtime() {
       }
 
       const toast = formatRealtimeToast(event, payload);
-      if (toast) showToast(toast);
+      if (toast) {
+        showToast(idempotencyKey ? { ...toast, id: idempotencyKey } : toast);
+      }
     });
 
     return () => {
@@ -88,6 +131,7 @@ export function useRealtime() {
     facilityId,
     qc,
     showToast,
+    showAlarm,
     isDoctorLogin,
     doctorId,
     userId,
