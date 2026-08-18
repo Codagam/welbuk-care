@@ -7,6 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "welbukcare",
     "userInterfaceStyle": "light",
+    "platforms": ["ios", "android"],
     "androidStatusBar": {
       "backgroundColor": "#FD006A",
       "barStyle": "light-content",
@@ -31,10 +32,6 @@
         "android.permission.VIBRATE"
       ],
       "package": "com.codagam_gobi.welbukcare"
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",

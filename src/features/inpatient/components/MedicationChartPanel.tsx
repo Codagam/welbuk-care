@@ -183,16 +183,16 @@ function DrugPicker({
                   key={d.id}
                   onPress={() => pick(d)}
                   onHoverIn={() => setActiveId(d.id)}
-                  className={i > 0 ? "border-t border-neutral-100" : ""}
-                  style={({ pressed }) => ({
-                    backgroundColor:
-                      pressed || selected ? ROW_SELECTED : "transparent",
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                  })}
+                  className={`justify-center px-4 py-4 active:bg-slate-100 ${
+                    i > 0 ? "border-t border-neutral-100" : ""
+                  }`}
+                  style={{
+                    minHeight: 48,
+                    backgroundColor: selected ? ROW_SELECTED : "transparent",
+                  }}
                 >
                   <Text
-                    className="text-sm font-medium"
+                    className="text-sm font-medium leading-5"
                     style={{ color: BODY }}
                     numberOfLines={1}
                   >
