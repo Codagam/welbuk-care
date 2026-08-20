@@ -9,9 +9,11 @@ import { isBookedFollowUpSummaryLine } from "../followUp";
 export function CompleteBar({
   followUpSummaryLine,
   onFollowUp,
+  locked = false,
 }: {
   followUpSummaryLine?: string | null;
   onFollowUp: () => void;
+  locked?: boolean;
 }) {
   const booked = isBookedFollowUpSummaryLine(followUpSummaryLine);
 
@@ -31,9 +33,12 @@ export function CompleteBar({
 
         <Pressable
           onPress={onFollowUp}
+          disabled={locked}
           accessibilityRole="button"
           accessibilityLabel="Follow-up"
-          className="relative min-h-[48px] min-w-[120px] items-center justify-center rounded-xl bg-brand px-5 py-3 active:bg-brand-600"
+          className={`relative min-h-[48px] min-w-[120px] items-center justify-center rounded-xl px-5 py-3 ${
+            locked ? "bg-brand opacity-50" : "bg-brand active:bg-brand-600"
+          }`}
         >
           <Text className="text-base font-semibold text-white">
             Follow-up

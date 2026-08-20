@@ -41,6 +41,7 @@ export function ReportsPanel({
   labReports,
   doctorNotes,
   onRefresh,
+  locked = false,
 }: {
   consultationId: string;
   patientId?: string;
@@ -48,6 +49,7 @@ export function ReportsPanel({
   labReports: LabReportItem[];
   doctorNotes: DoctorNote[];
   onRefresh?: () => void;
+  locked?: boolean;
 }) {
   const facilityId = useFacilityId();
   const summaryQ = useSummary(consultationId);
@@ -235,7 +237,7 @@ export function ReportsPanel({
               size="md"
               className="shrink-0"
               onPress={() => setUploadOpen(true)}
-              disabled={!consultationId}
+              disabled={!consultationId || locked}
               icon={<Ionicons name="add" size={16} color="#fff" />}
             />
           </View>
@@ -324,7 +326,7 @@ export function ReportsPanel({
                         <Ionicons name="eye-outline" size={16} color="#FD006A" />
                       </Pressable>
                     ) : null}
-                    {item.canDelete ? (
+                    {item.canDelete && !locked ? (
                       <Pressable
                         onPress={() => handleDeleteLab(item)}
                         disabled={deleteLab.isPending}
@@ -452,7 +454,7 @@ export function ReportsPanel({
             ) : (
               <View />
             )}
-            {canDeleteCurrent ? (
+            {canDeleteCurrent && !locked ? (
               <Button
                 label="Delete"
                 variant="danger"

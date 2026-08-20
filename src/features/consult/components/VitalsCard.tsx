@@ -73,9 +73,11 @@ function VitalRow({
 function VitalsHeader({
   onEdit,
   compact,
+  locked,
 }: {
   onEdit: () => void;
   compact?: boolean;
+  locked?: boolean;
 }) {
   return (
     <View className="mb-1.5 flex-row items-center justify-between">
@@ -87,15 +89,17 @@ function VitalsHeader({
       >
         Patient Vitals
       </Text>
-      <Pressable
-        onPress={onEdit}
-        hitSlop={8}
-        className="rounded-md p-1 active:bg-brand/10"
-        accessibilityRole="button"
-        accessibilityLabel="Edit vitals"
-      >
-        <Ionicons name="create-outline" size={14} color="#FD006A" />
-      </Pressable>
+      {locked ? null : (
+        <Pressable
+          onPress={onEdit}
+          hitSlop={8}
+          className="rounded-md p-1 active:bg-brand/10"
+          accessibilityRole="button"
+          accessibilityLabel="Edit vitals"
+        >
+          <Ionicons name="create-outline" size={14} color="#FD006A" />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -105,12 +109,14 @@ export function VitalsCard({
   vitals,
   onVitalsUpdate,
   embedded = false,
+  locked = false,
 }: {
   consultationId: string;
   vitals: VitalsValues;
   onVitalsUpdate?: () => void;
   /** Skip SectionChrome / nested box — parent provides the unified card. */
   embedded?: boolean;
+  locked?: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
@@ -122,7 +128,10 @@ export function VitalsCard({
     !!vitals.spO2 ||
     !!vitals.bloodSugar;
 
-  const openEdit = () => setEditOpen(true);
+  const openEdit = () => {
+    if (locked) return;
+    setEditOpen(true);
+  };
 
   const rows = (
     <View className="gap-1">
@@ -171,8 +180,8 @@ export function VitalsCard({
     return (
       <>
         <View className="px-3.5 py-2.5">
-          <VitalsHeader onEdit={openEdit} compact />
-          {hasAny ? rows : emptyAdd}
+          <VitalsHeader onEdit={openEdit} compact locked={locked} />
+          {hasAny ? rows : locked ? rows : emptyAdd}
         </View>
         {sheet}
       </>
@@ -183,7 +192,7 @@ export function VitalsCard({
     return (
       <>
         <SectionChrome title="Patient Vitals" emptyBorder className="flex-1">
-          {emptyAdd}
+          {locked ? rows : emptyAdd}
         </SectionChrome>
         {sheet}
       </>
@@ -196,13 +205,15 @@ export function VitalsCard({
         title="Patient Vitals"
         className="flex-1"
         right={
-          <Pressable
-            onPress={openEdit}
-            hitSlop={8}
-            className="rounded-md p-1.5 active:bg-white/60"
-          >
-            <Ionicons name="create-outline" size={14} color="#FD006A" />
-          </Pressable>
+          locked ? undefined : (
+            <Pressable
+              onPress={openEdit}
+              hitSlop={8}
+              className="rounded-md p-1.5 active:bg-white/60"
+            >
+              <Ionicons name="create-outline" size={14} color="#FD006A" />
+            </Pressable>
+          )
         }
       >
         <View className="gap-2 rounded-lg bg-white p-3">{rows}</View>

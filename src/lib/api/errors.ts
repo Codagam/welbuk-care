@@ -13,6 +13,7 @@ export type ApiErrorCode =
   | "MODULE_NOT_ENABLED" // 403 — site switch inpatient_enable is off
   | "IP_BLOCKED" // 403 — per-facility IP allowlist
   | "NOT_FOUND" // 404
+  | "CONSULT_COMPLETED" // 409 — consultation is locked; reopen to edit
   | "CONFLICT" // 409 generic
   | "VALIDATION" // 400
   | "NETWORK" // fetch failed / offline
@@ -56,6 +57,7 @@ export function mapErrorCode(
   if (serverCode === "ABHA_GOVERNED_FIELD") return "ABHA_GOVERNED_FIELD";
   if (serverCode === "PATIENT_MANAGE_REQUIRED") return "PATIENT_MANAGE_REQUIRED";
   if (serverCode === "MODULE_NOT_ENABLED") return "MODULE_NOT_ENABLED";
+  if (serverCode === "CONSULT_COMPLETED") return "CONSULT_COMPLETED";
   if (status === 403) {
     const m = (message ?? "").toLowerCase();
     if (NETWORK_BLOCK_HINTS.some((h) => m.includes(h))) return "IP_BLOCKED";
@@ -118,6 +120,11 @@ export function describeError(err: unknown): string {
         return "Date of birth can only be changed by a user with the Patient Manager role.";
       case "MODULE_NOT_ENABLED":
         return "Inpatient is not available on this deployment.";
+      case "CONSULT_COMPLETED":
+        return friendlyFromMessage(
+          err.message,
+          "This consultation is completed and locked. Reopen it to make changes."
+        );
       case "NETWORK":
         return FRIENDLY_NETWORK;
       case "NOT_FOUND":
@@ -147,5 +154,14 @@ export function isModuleNotEnabled(err: unknown): boolean {
   return (
     err instanceof ApiError &&
     (err.code === "MODULE_NOT_ENABLED" || err.serverCode === "MODULE_NOT_ENABLED")
+  );
+}
+
+/** True when Practice refused a write because the consult is COMPLETED. */
+export function isConsultCompletedLock(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  return (
+    err.code === "CONSULT_COMPLETED" ||
+    err.serverCode === "CONSULT_COMPLETED"
   );
 }

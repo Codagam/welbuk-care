@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
+import { ConsultLockBanner } from "@/features/consult/components/ConsultLockBanner";
 import { SectionNavigator } from "@/features/consult/components/SectionNavigator";
 import { PlanOfCareSection } from "@/features/consult/plan-of-care/PlanOfCareSection";
 import {
@@ -93,6 +94,8 @@ export default function ConsultScreen() {
     consultation,
     appointment,
     doctorId: consultDoctorId,
+    lock,
+    isLocked,
   } = useConsultPatientHeader(id);
   const headerName = header?.name || "Consultation";
   const dental = isDentalType(facility?.consultationType);
@@ -189,6 +192,7 @@ export default function ConsultScreen() {
             headerError={headerError ? headerErr : null}
             appointment={appointment}
             showExtended={open}
+            locked={isLocked}
           />
         )}
       </ConsultSectionCard>
@@ -211,7 +215,11 @@ export default function ConsultScreen() {
           subtitle="Eye exam and findings"
           onLayoutY={onSectionLayout}
         >
-          <EyeSection consultationId={id} appointmentId={appointmentId} />
+          <EyeSection
+            consultationId={id}
+            appointmentId={appointmentId}
+            locked={isLocked}
+          />
         </ConsultSectionCard>
       ) : null}
 
@@ -221,7 +229,7 @@ export default function ConsultScreen() {
         subtitle="SOAP notes and diagnosis codes"
         onLayoutY={onSectionLayout}
       >
-        <NotesSection consultationId={id} />
+        <NotesSection consultationId={id} locked={isLocked} />
       </ConsultSectionCard>
 
       <ConsultSectionCard
@@ -240,6 +248,7 @@ export default function ConsultScreen() {
           doctorId={consultDoctorId ?? user?.id}
           doctorName={user?.name ?? user?.email}
           onStickyFooter={setStickyFooter}
+          locked={isLocked}
         />
       </ConsultSectionCard>
     </View>
@@ -254,6 +263,10 @@ export default function ConsultScreen() {
         title={`Consulting for ${headerName}`}
         right={<NotificationQueue light />}
       />
+
+      {isLocked ? (
+        <ConsultLockBanner consultationId={id} lock={lock} />
+      ) : null}
 
       <SectionNavigator
         sections={navItems}
@@ -272,6 +285,7 @@ export default function ConsultScreen() {
             appointmentId={appointmentId}
             facilityId={facility?.id}
             defaultDoctorId={consultDoctorId ?? user?.id ?? ""}
+            locked={isLocked}
           >
             <View className="flex-1">
               <ScrollView

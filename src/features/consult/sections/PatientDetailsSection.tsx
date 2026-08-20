@@ -33,6 +33,7 @@ export function PatientDetailsSection({
   appointment,
   /** When false, hide records / conversation / reports; vitals + identity stay. */
   showExtended = true,
+  locked = false,
 }: {
   consultationId: string;
   patientId?: string;
@@ -41,6 +42,7 @@ export function PatientDetailsSection({
   headerError?: unknown;
   appointment?: ConsultAppointment | null;
   showExtended?: boolean;
+  locked?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const sideBySide = width >= 700;
@@ -121,6 +123,7 @@ export function PatientDetailsSection({
                 vitals={displayVitals}
                 onVitalsUpdate={() => void vitalsQ.refetch()}
                 embedded
+                locked={locked}
               />
             )}
           </View>
@@ -158,6 +161,7 @@ export function PatientDetailsSection({
             labReports={labReports}
             doctorNotes={doctorNotes}
             onRefresh={refreshHistory}
+            locked={locked}
           />
 
           {patientId ? <DocumentsCard patientId={patientId} /> : null}

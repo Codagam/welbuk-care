@@ -21,6 +21,7 @@ import {
   isFollowUpAwaitingTimeSlot,
   isPreConsultVitalStatus,
   isTreatAsNoShow,
+  normalizeStatusToken,
   shouldShowCheckIn,
 } from "../lib/appointmentGates";
 import { statusStyle } from "../lib/statusStyles";
@@ -122,6 +123,8 @@ function AppointmentCardInner({
   const rowBusy = opening || checkingIn || fittingIn;
   const checkInDisabled = rowBusy || checkInBlocked;
   const isToday = isAppointmentOnToday(appointment);
+  const isCompleted =
+    normalizeStatusToken(appointment.status) === "COMPLETED";
 
   return (
     <View
@@ -282,7 +285,7 @@ function AppointmentCardInner({
             ) : primaryAction === "open-consult" ? (
               <Button
                 label={t("appointments.consult")}
-                variant="primary"
+                variant={isCompleted ? "outline" : "primary"}
                 size="md"
                 loading={opening}
                 disabled={rowBusy}
@@ -292,12 +295,16 @@ function AppointmentCardInner({
                     <MaterialCommunityIcons
                       name="stethoscope"
                       size={16}
-                      color="#fff"
+                      color={isCompleted ? "#9ca3af" : "#fff"}
                     />
                   )
                 }
                 style={{ height: 44, minWidth: 128 }}
-                className="rounded-xl"
+                className={
+                  isCompleted
+                    ? "rounded-xl border-neutral-200 bg-neutral-50"
+                    : "rounded-xl"
+                }
               />
             ) : primaryAction === "fit-in-slot" ? (
               <Button

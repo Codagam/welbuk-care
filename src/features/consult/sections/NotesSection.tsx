@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { describeError } from "@/lib/api/errors";
 import { Button, TextField } from "@/ui";
 import { useDiagnosisSearch, useSaveSummary, useSummary } from "../hooks";
+import { CONSULT_LOCKED_MESSAGE } from "../consultLock";
 import type { DiagnosisCode } from "../types";
 import { useCardFocusHighlight } from "../useCardFocusHighlight";
 
@@ -16,7 +17,13 @@ const SOAP: { key: SoapKey; label: string; placeholder: string }[] = [
   { key: "plan", label: "Plan", placeholder: "Treatment plan, follow-up…" },
 ];
 
-export function NotesSection({ consultationId }: { consultationId: string }) {
+export function NotesSection({
+  consultationId,
+  locked = false,
+}: {
+  consultationId: string;
+  locked?: boolean;
+}) {
   const q = useSummary(consultationId);
   const save = useSaveSummary(consultationId);
   const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
@@ -51,17 +58,20 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
   };
 
   const addCode = (c: DiagnosisCode) => {
+    if (locked) return;
     if (codes.some((x) => x.code === c.code)) return;
     setCodes([...codes, { ...c, isPrimary: codes.length === 0 }]);
     setDxQuery("");
     setSaved(false);
   };
   const removeCode = (code: string) => {
+    if (locked) return;
     setCodes(codes.filter((c) => c.code !== code));
     setSaved(false);
   };
 
   const onSave = async () => {
+    if (locked) return;
     setError(null);
     try {
       await save.mutateAsync({ ...form, diagnosisCodes: codes });
@@ -99,6 +109,7 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
           onChangeText={(v) => set(f.key, v)}
           placeholder={f.placeholder}
           multiline
+          editable={!locked}
           style={{ minHeight: 72, textAlignVertical: "top" }}
           onFocus={onFocus}
           onBlur={onBlur}
@@ -115,13 +126,16 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
               <Pressable
                 key={c.code}
                 onPress={() => removeCode(c.code)}
+                disabled={locked}
                 className="flex-row items-center gap-1 rounded-full bg-brand-50 px-3 py-1"
               >
                 <Text className="text-xs font-medium text-brand-700">
                   {c.code}
                   {c.isPrimary ? " ★" : ""}
                 </Text>
-                <Text className="text-xs text-brand-400">✕</Text>
+                {locked ? null : (
+                  <Text className="text-xs text-brand-400">✕</Text>
+                )}
               </Pressable>
             ))}
           </View>
@@ -132,7 +146,9 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
           onChangeText={setDxQuery}
           placeholder="Search ICD-10 code or term…"
           autoCapitalize="none"
+          editable={!locked}
           onFocus={(e) => {
+            if (locked) return;
             setDxOpen(true);
             onFocus(e);
           }}
@@ -157,6 +173,7 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
                 <Pressable
                   key={c.code}
                   onPress={() => addCode(c)}
+                  disabled={locked}
                   className="border-b border-neutral-100 px-3 py-2 active:bg-neutral-50"
                 >
                   <Text className="text-sm font-medium text-neutral-900">
@@ -175,7 +192,15 @@ export function NotesSection({ consultationId }: { consultationId: string }) {
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {saved ? <Text className="text-sm text-emerald-600">Notes saved.</Text> : null}
 
-      <Button label="Save notes" onPress={onSave} loading={save.isPending} />
+      <Button
+        label="Save notes"
+        onPress={onSave}
+        loading={save.isPending}
+        disabled={locked}
+      />
+      {locked ? (
+        <Text className="text-xs text-amber-700">{CONSULT_LOCKED_MESSAGE}</Text>
+      ) : null}
     </View>
   );
 }

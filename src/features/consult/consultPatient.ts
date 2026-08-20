@@ -24,7 +24,16 @@ export type ConsultAppointment = {
   isFollowUp?: boolean;
 };
 
+/** Completion-lock detail from GET /api/consult/:id. Absent or stale after reopen. */
+export type ConsultLock = {
+  completedAt: string | null;
+  /** Display name, never a user id. */
+  completedBy: string | null;
+  reopenCount: number;
+};
+
 export type ConsultLoadResponse = {
+  lock?: ConsultLock | null;
   consultation?: {
     id: string;
     facilityId?: string | null;

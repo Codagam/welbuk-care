@@ -9,7 +9,7 @@ export const queryClient = new QueryClient({
       retry: (failureCount, error) => {
         // Never retry auth/permission failures — they won't fix themselves.
         if (error instanceof ApiError) {
-          if (["UNAUTHORIZED", "FORBIDDEN", "IP_BLOCKED", "PATIENT_MANAGE_REQUIRED"].includes(error.code)) {
+          if (["UNAUTHORIZED", "FORBIDDEN", "IP_BLOCKED", "PATIENT_MANAGE_REQUIRED", "CONSULT_COMPLETED"].includes(error.code)) {
             return false;
           }
         }

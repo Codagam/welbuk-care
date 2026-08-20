@@ -13,6 +13,7 @@ import {
 import { searchDrugs, type DrugCatalogItem } from "@/lib/api/endpoints/drugs";
 import { uploadFile } from "@/lib/api/endpoints/recording";
 import { useFacilityId } from "@/lib/auth/store";
+import { refetchConsultIfCompletedLock } from "@/features/consult/consultLock";
 import type { Prescription } from "@/features/consult/types";
 
 import { matchPrescriptionLinesToAllergies } from "../allergy";
@@ -253,6 +254,7 @@ export function useAttachPrescription(consultationId: string) {
       qc.invalidateQueries({ queryKey: ["prescriptions", consultationId] });
       qc.invalidateQueries({ queryKey: ["summary", consultationId] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 
@@ -265,6 +267,7 @@ export function usePatchRxAttachments(consultationId: string) {
       qc.invalidateQueries({ queryKey: ["prescriptions", consultationId] });
       qc.invalidateQueries({ queryKey: ["summary", consultationId] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 
@@ -351,6 +354,7 @@ export function useCompletePrescription(consultationId: string) {
       qc.invalidateQueries({ queryKey: ["summary", consultationId] });
       qc.invalidateQueries({ queryKey: ["queue"] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 
