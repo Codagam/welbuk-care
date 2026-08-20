@@ -4,7 +4,7 @@
     "patients": "Patients",
     "care": "Care",
     "home": "Home",
-    "more": "More"
+    "more": "Settings"
   },
   "queue": {
     "title": "Today's queue",
@@ -38,5 +38,23 @@
   "common": {
     "signOut": "Sign out",
     "switchFacility": "Switch facility"
+  },
+  "settings": {
+    "title": "Settings",
+    "signedIn": "Signed in",
+    "account": "Account",
+    "activeFacility": "Active facility",
+    "practice": "practice",
+    "support": "Support",
+    "helpFaq": "Help & FAQ",
+    "helpFaqHint": "Guides and common questions",
+    "contactSupport": "Contact support",
+    "contactSupportHint": "Get help from our team",
+    "legal": "Legal",
+    "terms": "Terms & Conditions",
+    "privacy": "Privacy Policy",
+    "about": "About",
+    "appVersion": "App version",
+    "noFacility": "No facility selected"
   }
 }

@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import { userDisplayName } from "@/lib/auth/roles";
+import { userGreetingName } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
 import {
@@ -32,12 +32,6 @@ import {
 } from "../hooks/useAppointmentList";
 import { canOpenAppointmentFromList } from "../lib/appointmentGates";
 import type { Appointment } from "../types";
-
-function doctorWelcomeName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "";
-  return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
-}
 
 function patientDisplayName(appt: Appointment): string {
   if (!appt.patient) return "this patient";
@@ -86,10 +80,8 @@ export function AppointmentListScreen() {
   );
   const totalCount = q.data?.pages[0]?.totalCount ?? 0;
 
-  const greetName = userDisplayName(user);
-  const doctorSubtitle = greetName
-    ? `Welcome, ${doctorWelcomeName(greetName)}`
-    : null;
+  const greetName = userGreetingName(user);
+  const doctorSubtitle = greetName ? `Welcome, ${greetName}` : null;
 
   const onReadyForNext = async () => {
     if (!facilityId) {

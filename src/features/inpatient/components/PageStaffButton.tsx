@@ -4,14 +4,43 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { AppModal, Button, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
+import { isDoctorRole, isNurseRole } from "@/lib/auth/roles";
+import { useAuthUser } from "@/lib/auth/store";
 import { usePageStaff } from "../hooks";
 import type { PageWho } from "../types";
+
+function PageTargetButton({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className="h-11 min-h-[44px] flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-white active:bg-brand/5"
+    >
+      <Ionicons name="notifications-outline" size={16} color="#FD006A" />
+      <Text numberOfLines={1} className="text-sm font-semibold text-brand">
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export function PageStaffButton({
   admissionId,
 }: {
   admissionId: string;
 }) {
+  const user = useAuthUser();
+  const doctorLogin = isDoctorRole(user);
+  const nurseLogin = isNurseRole(user);
+  const showPageDoctor = !doctorLogin;
+  const showPageNurse = !nurseLogin;
   const [who, setWho] = useState<PageWho | null>(null);
   const [reason, setReason] = useState("");
   const [urgent, setUrgent] = useState(false);
@@ -57,28 +86,18 @@ export function PageStaffButton({
   return (
     <>
       <View className="flex-row gap-2">
-        <Pressable
-          onPress={() => setWho("DOCTOR")}
-          accessibilityRole="button"
-          accessibilityLabel="Page doctor"
-          className="h-11 min-h-[44px] flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-white active:bg-brand/5"
-        >
-          <Ionicons name="notifications-outline" size={16} color="#FD006A" />
-          <Text numberOfLines={1} className="text-sm font-semibold text-brand">
-            Page doctor
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setWho("NURSE")}
-          accessibilityRole="button"
-          accessibilityLabel="Page nurse"
-          className="h-11 min-h-[44px] flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-brand/40 bg-white active:bg-brand/5"
-        >
-          <Ionicons name="notifications-outline" size={16} color="#FD006A" />
-          <Text numberOfLines={1} className="text-sm font-semibold text-brand">
-            Page nurse
-          </Text>
-        </Pressable>
+        {showPageDoctor ? (
+          <PageTargetButton
+            label="Page doctor"
+            onPress={() => setWho("DOCTOR")}
+          />
+        ) : null}
+        {showPageNurse ? (
+          <PageTargetButton
+            label="Page nurse"
+            onPress={() => setWho("NURSE")}
+          />
+        ) : null}
       </View>
 
       <AppModal

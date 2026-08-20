@@ -58,7 +58,7 @@ export default function TabsLayout() {
         options={{
           title: t("nav.more"),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="ellipsis-horizontal" color={color} size={size} />
+            <Ionicons name="settings-outline" color={color} size={size} />
           ),
         }}
       />
