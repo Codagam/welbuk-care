@@ -14,7 +14,19 @@
     "searchPlaceholder": "Search appointments…",
     "empty": "No appointments found",
     "errorLoading": "Error loading appointments",
-    "permissionDenied": "You don’t have permission to view appointments."
+    "permissionDenied": "You don’t have permission to view appointments.",
+    "checkIn": "Check-in",
+    "checkInConfirmTitle": "Check-in",
+    "checkInConfirmMessage": "Are you sure you want to check in {{name}}?",
+    "checkInSuccess": "Patient checked in",
+    "failedToCheckIn": "Failed to check in",
+    "consult": "Consult",
+    "comingSoon": "Coming soon",
+    "setFollowUpSlot": "Set time slot",
+    "fitInNextSlot": "Fit in next slot",
+    "fitInSuccess": "Appointment re-slotted",
+    "failedToFitIn": "Could not fit into next slot",
+    "cancel": "Cancel"
   },
   "care": {
     "title": "Care",

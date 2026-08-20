@@ -3,9 +3,14 @@
  * @see practice/Welbuk_/lib/appointments/appointment-lifecycle.ts
  */
 
-import { normalizeStatusToken } from "./appointmentGates";
-
 export const OVERDUE_AFTER_MINUTES = 15;
+
+function normalizeStatus(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+}
 
 export type OverdueState = {
   overdue: boolean;
@@ -34,7 +39,7 @@ export function resolveOverdueState(
     waitingTooLong: false,
   };
 
-  const status = normalizeStatusToken(entry.status);
+  const status = normalizeStatus(entry.status);
   if (!status || SETTLED.has(status)) return none;
 
   const start = entry.startTime ? new Date(entry.startTime) : null;

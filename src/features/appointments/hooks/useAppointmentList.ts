@@ -7,6 +7,7 @@ import {
 
 import {
   checkInAppointment,
+  lateArrivalAppointment,
   searchAppointments,
 } from "@/lib/api/endpoints/appointments";
 import {
@@ -142,6 +143,24 @@ export function useCheckInAppointment() {
 
   return useMutation({
     mutationFn: (appointmentId: string) => checkInAppointment(appointmentId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
+}
+
+/** NO_SHOW / late arrival — re-slot to next free slot as SCHEDULED. */
+export function useLateArrivalAppointment() {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+
+  return useMutation({
+    mutationFn: (appointmentId: string) => {
+      if (!facilityId) {
+        throw new Error("Select a facility first");
+      }
+      return lateArrivalAppointment({ appointmentId, facilityId });
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["appointments"] });
     },

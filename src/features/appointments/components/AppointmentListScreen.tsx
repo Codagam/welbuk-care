@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
@@ -25,6 +26,7 @@ import {
   useAppointmentList,
   useAppointmentListState,
   useCheckInAppointment,
+  useLateArrivalAppointment,
   useOpenConsult,
   useReadyForNext,
 } from "../hooks/useAppointmentList";
@@ -37,13 +39,22 @@ function doctorWelcomeName(name: string): string {
   return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
 }
 
+function patientDisplayName(appt: Appointment): string {
+  if (!appt.patient) return "this patient";
+  return [appt.patient.firstName, appt.patient.lastName]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function AppointmentListScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const facility = useActiveFacility();
   const facilityId = useFacilityId();
   const user = useAuthUser();
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const [fittingInId, setFittingInId] = useState<string | null>(null);
 
   const {
     search,
@@ -60,6 +71,7 @@ export function AppointmentListScreen() {
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
   const checkIn = useCheckInAppointment();
+  const lateArrival = useLateArrivalAppointment();
   const readyForNext = useReadyForNext();
   const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
     useCanAccessConsult();
@@ -81,12 +93,18 @@ export function AppointmentListScreen() {
 
   const onReadyForNext = async () => {
     if (!facilityId) {
-      Alert.alert("Select a facility", "Choose a facility before notifying reception.");
+      Alert.alert(
+        "Select a facility",
+        "Choose a facility before notifying reception."
+      );
       return;
     }
     try {
       await readyForNext.mutateAsync();
-      Alert.alert("Front desk notified", "Reception has been told you are ready for the next patient.");
+      Alert.alert(
+        "Front desk notified",
+        "Reception has been told you are ready for the next patient."
+      );
     } catch (err) {
       Alert.alert("Could not notify front desk", describeError(err));
     }
@@ -123,7 +141,7 @@ export function AppointmentListScreen() {
     if (!canOpenAppointmentFromList(appt)) {
       Alert.alert(
         "Consult unavailable",
-        "Only today's appointments can be opened. Scheduled visits become available on the day of the visit; follow-up fees and time slots must be completed first."
+        "Check in the patient first when the visit is still Scheduled. Walk-ins and waiting visits can open directly. Follow-up fees and time slots must be completed first."
       );
       return;
     }
@@ -131,32 +149,50 @@ export function AppointmentListScreen() {
   };
 
   const performCheckIn = async (appt: Appointment) => {
+    if (checkingInId !== null) return;
     setCheckingInId(appt.id);
     try {
       await checkIn.mutateAsync(appt.id);
-      Alert.alert("Checked in", "Patient is now in the waiting queue.");
+      Alert.alert(t("appointments.checkInSuccess"));
     } catch (err) {
-      Alert.alert("Check-in failed", describeError(err));
+      Alert.alert(t("appointments.failedToCheckIn"), describeError(err));
     } finally {
       setCheckingInId(null);
     }
   };
 
   const onCheckIn = (appt: Appointment) => {
-    const patientLabel = appt.patient
-      ? [appt.patient.firstName, appt.patient.lastName].filter(Boolean).join(" ")
-      : "this patient";
+    if (checkingInId !== null) return;
+    const name = patientDisplayName(appt);
     Alert.alert(
-      "Check-in",
-      `Mark ${patientLabel} as arrived and move to the waiting queue?`,
+      t("appointments.checkInConfirmTitle"),
+      t("appointments.checkInConfirmMessage", { name }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("appointments.cancel"), style: "cancel" },
         {
-          text: "Check-in",
+          text: t("appointments.checkIn"),
           onPress: () => void performCheckIn(appt),
         },
       ]
     );
+  };
+
+  const performFitInNextSlot = async (appt: Appointment) => {
+    if (fittingInId !== null) return;
+    setFittingInId(appt.id);
+    try {
+      await lateArrival.mutateAsync(appt.id);
+      Alert.alert(t("appointments.fitInSuccess"));
+    } catch (err) {
+      Alert.alert(t("appointments.failedToFitIn"), describeError(err));
+    } finally {
+      setFittingInId(null);
+    }
+  };
+
+  const onFitInNextSlot = (appt: Appointment) => {
+    if (fittingInId !== null) return;
+    void performFitInNextSlot(appt);
   };
 
   const permissionDenied =
@@ -264,8 +300,8 @@ export function AppointmentListScreen() {
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-base font-medium text-red-500">
             {permissionDenied
-              ? "You don’t have permission to view appointments."
-              : "Error loading appointments"}
+              ? t("appointments.permissionDenied")
+              : t("appointments.errorLoading")}
           </Text>
           <Text className="mt-2 text-center text-sm text-neutral-500">
             {permissionDenied
@@ -283,15 +319,20 @@ export function AppointmentListScreen() {
               appointment={item}
               opening={openingId === item.id}
               checkingIn={checkingInId === item.id}
+              fittingIn={fittingInId === item.id}
+              checkInBlocked={
+                checkingInId !== null && checkingInId !== item.id
+              }
               canOpenConsult={canOpenConsult}
               canUpdateAppointment={canUpdateAppointment}
               onCheckIn={() => onCheckIn(item)}
               onOpenConsult={() => void onOpenConsult(item)}
+              onFitInNextSlot={() => onFitInNextSlot(item)}
             />
           )}
           ListEmptyComponent={
             <Text className="mt-10 text-center text-sm text-neutral-500">
-              No appointments
+              {t("appointments.empty")}
             </Text>
           }
           ListFooterComponent={

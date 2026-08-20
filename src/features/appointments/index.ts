@@ -10,6 +10,7 @@ export {
   useAppointmentList,
   useAppointmentListState,
   useCheckInAppointment,
+  useLateArrivalAppointment,
   useOpenConsult,
   useReadyForNext,
 } from "./hooks/useAppointmentList";
@@ -19,4 +20,7 @@ export {
   canOpenConsultFromMenu,
   isAppointmentFollowUp,
   isFollowUpAwaitingTimeSlot,
+  isTreatAsNoShow,
+  isWaitlistVisit,
+  shouldShowCheckIn,
 } from "./lib/appointmentGates";

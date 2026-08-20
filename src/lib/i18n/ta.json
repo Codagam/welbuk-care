@@ -14,7 +14,19 @@
     "searchPlaceholder": "சந்திப்புகளைத் தேடு…",
     "empty": "சந்திப்புகள் இல்லை",
     "errorLoading": "சந்திப்புகளை ஏற்ற முடியவில்லை",
-    "permissionDenied": "சந்திப்புகளைப் பார்க்க உங்களுக்கு அனுமதி இல்லை."
+    "permissionDenied": "சந்திப்புகளைப் பார்க்க உங்களுக்கு அனுமதி இல்லை.",
+    "checkIn": "செக்-இன்",
+    "checkInConfirmTitle": "செக்-இன்",
+    "checkInConfirmMessage": "{{name}}-ஐ செக்-இன் செய்ய உறுதியா?",
+    "checkInSuccess": "நோயாளி செக்-இன் செய்யப்பட்டார்",
+    "failedToCheckIn": "செக்-இன் தோல்வி",
+    "consult": "ஆலோசனை",
+    "comingSoon": "விரைவில்",
+    "setFollowUpSlot": "நேர இடம் அமை",
+    "fitInNextSlot": "அடுத்த இடத்தில் பொருத்து",
+    "fitInSuccess": "சந்திப்பு மறுஅட்டவணை செய்யப்பட்டது",
+    "failedToFitIn": "அடுத்த இடத்தில் பொருத்த முடியவில்லை",
+    "cancel": "ரத்து"
   },
   "care": {
     "title": "கவனிப்பு",

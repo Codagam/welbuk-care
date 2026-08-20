@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Text, View } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/ui";
 import { fullName } from "@/features/patients/utils";
@@ -19,7 +20,8 @@ import {
   isAppointmentOnToday,
   isFollowUpAwaitingTimeSlot,
   isPreConsultVitalStatus,
-  normalizeStatusToken,
+  isTreatAsNoShow,
+  shouldShowCheckIn,
 } from "../lib/appointmentGates";
 import { statusStyle } from "../lib/statusStyles";
 import { formatTokenOrClass } from "../lib/tokenSeries";
@@ -27,6 +29,7 @@ import { formatTokenOrClass } from "../lib/tokenSeries";
 export type AppointmentPrimaryAction =
   | "check-in"
   | "open-consult"
+  | "fit-in-slot"
   | "coming-soon"
   | "awaiting-slot"
   | "none";
@@ -35,22 +38,21 @@ export function resolvePrimaryAction(
   appointment: Appointment,
   options: { canUpdate: boolean; canOpenConsult: boolean }
 ): AppointmentPrimaryAction {
-  const status = normalizeStatusToken(appointment.status);
-  const onToday = isAppointmentOnToday(appointment);
-  const awaitingSlot = isFollowUpAwaitingTimeSlot(appointment);
+  if (isFollowUpAwaitingTimeSlot(appointment)) return "awaiting-slot";
 
-  if (awaitingSlot) return "awaiting-slot";
+  if (isTreatAsNoShow(appointment)) {
+    return options.canUpdate ? "fit-in-slot" : "none";
+  }
 
   if (
     isPreConsultVitalStatus(appointment.status) &&
     (appointment.appointmentDate || appointment.startTime)
   ) {
     if (isAppointmentInFuture(appointment)) return "coming-soon";
-    if (!onToday) return "none";
-    if (status === "SCHEDULED" && options.canUpdate) return "check-in";
+    if (!isAppointmentOnToday(appointment)) return "none";
+    if (shouldShowCheckIn(appointment) && options.canUpdate) return "check-in";
   }
 
-  // After check-in (WAITING+) — or other openable rows — chevron opens consult
   if (options.canOpenConsult && canOpenAppointmentFromList(appointment)) {
     return "open-consult";
   }
@@ -62,23 +64,30 @@ type Props = {
   appointment: Appointment;
   opening?: boolean;
   checkingIn?: boolean;
+  fittingIn?: boolean;
+  checkInBlocked?: boolean;
   canOpenConsult?: boolean;
   canUpdateAppointment?: boolean;
   showPatientPhone?: boolean;
   onCheckIn?: () => void;
   onOpenConsult?: () => void;
+  onFitInNextSlot?: () => void;
 };
 
 function AppointmentCardInner({
   appointment,
   opening,
   checkingIn,
+  fittingIn,
+  checkInBlocked = false,
   canOpenConsult = true,
   canUpdateAppointment = false,
   showPatientPhone = false,
   onCheckIn,
   onOpenConsult,
+  onFitInNextSlot,
 }: Props) {
+  const { t } = useTranslation();
   const s = statusStyle(appointment.status);
   const patientName = appointment.patient
     ? fullName(appointment.patient)
@@ -110,7 +119,8 @@ function AppointmentCardInner({
   });
   const doctorLine = [doctorName, specialty].filter(Boolean).join(" · ");
   const reason = appointment.reason?.trim() || "";
-  const primaryBusy = opening || checkingIn;
+  const rowBusy = opening || checkingIn || fittingIn;
+  const checkInDisabled = rowBusy || checkInBlocked;
   const isToday = isAppointmentOnToday(appointment);
 
   return (
@@ -251,27 +261,31 @@ function AppointmentCardInner({
           <View className="flex-row items-center justify-end border-t border-neutral-100 pt-3">
             {primaryAction === "check-in" ? (
               <Button
-                label="Check-in"
-                variant="primary"
+                label={t("appointments.checkIn")}
+                variant="outline"
                 size="md"
                 loading={checkingIn}
-                disabled={primaryBusy}
+                disabled={checkInDisabled}
                 onPress={onCheckIn}
                 icon={
                   checkingIn ? null : (
-                    <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={16}
+                      color="#FD006A"
+                    />
                   )
                 }
-                style={{ height: 40, minWidth: 128 }}
-                className="rounded-xl"
+                style={{ height: 44, minWidth: 128 }}
+                className="rounded-xl border-brand"
               />
             ) : primaryAction === "open-consult" ? (
               <Button
-                label="Consult"
+                label={t("appointments.consult")}
                 variant="primary"
                 size="md"
                 loading={opening}
-                disabled={primaryBusy}
+                disabled={rowBusy}
                 onPress={onOpenConsult}
                 icon={
                   opening ? null : (
@@ -282,21 +296,41 @@ function AppointmentCardInner({
                     />
                   )
                 }
-                style={{ height: 40, minWidth: 128 }}
+                style={{ height: 44, minWidth: 128 }}
                 className="rounded-xl"
               />
+            ) : primaryAction === "fit-in-slot" ? (
+              <Button
+                label={t("appointments.fitInNextSlot")}
+                variant="outline"
+                size="md"
+                loading={fittingIn}
+                disabled={rowBusy}
+                onPress={onFitInNextSlot}
+                icon={
+                  fittingIn ? null : (
+                    <Ionicons
+                      name="arrow-forward-circle-outline"
+                      size={16}
+                      color="#FD006A"
+                    />
+                  )
+                }
+                style={{ height: 44, minWidth: 148 }}
+                className="rounded-xl border-brand"
+              />
             ) : primaryAction === "coming-soon" ? (
-              <View className="flex-row items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2">
-                <Ionicons name="hourglass-outline" size={16} color="#9ca3af" />
+              <View className="flex-row items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                <Ionicons name="calendar-outline" size={16} color="#9ca3af" />
                 <Text className="text-[11px] font-semibold text-neutral-400">
-                  Coming soon
+                  {t("appointments.comingSoon")}
                 </Text>
               </View>
             ) : (
-              <View className="flex-row items-center gap-1.5 rounded-xl bg-brand/10 px-3 py-2">
+              <View className="flex-row items-center gap-1.5 rounded-xl bg-brand/10 px-3 py-2.5">
                 <Ionicons name="calendar-outline" size={16} color="#FD006A" />
                 <Text className="text-[11px] font-semibold text-brand">
-                  Set time slot
+                  {t("appointments.setFollowUpSlot")}
                 </Text>
               </View>
             )}

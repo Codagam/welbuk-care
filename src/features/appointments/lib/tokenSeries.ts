@@ -24,6 +24,12 @@ export function tokenSeriesOrDefault(
   return "PRIOR";
 }
 
+/** Walk-in / emergency queue class — patient is already at the desk. */
+export function isWaitlistSeries(series?: TokenSeries | string | null): boolean {
+  const s = tokenSeriesOrDefault(series);
+  return s === "WALK_IN" || s === "EMERGENCY";
+}
+
 export function formatSeriesToken(
   tokenNumber: number | null | undefined,
   series?: TokenSeries | string | null
