@@ -1,10 +1,9 @@
-import type { ReactNode } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 
-import { Screen } from "@/ui";
 import { HeaderActions } from "@/features/header";
 import {
   stripDoctorNamePrefix,
@@ -16,6 +15,7 @@ import {
   useAuthStore,
   useAuthUser,
 } from "@/lib/auth/store";
+import { Screen } from "@/ui";
 
 const APP_VERSION = "1.0.0";
 
@@ -254,7 +254,7 @@ export default function SettingsScreen() {
                 label={t("settings.contactSupport")}
                 subtitle={t("settings.contactSupportHint")}
                 last
-                onPress={() => console.log("settings: contact support")}
+                onPress={() => Linking.openURL("https://practice.welbuk.com/login")}
               />
             </MenuCard>
           </View>
@@ -265,13 +265,13 @@ export default function SettingsScreen() {
               <MenuRow
                 icon="document-text-outline"
                 label={t("settings.terms")}
-                onPress={() => console.log("settings: terms & conditions")}
+                onPress={() => Linking.openURL("https://practice.welbuk.com/terms")}
               />
               <MenuRow
                 icon="shield-checkmark-outline"
                 label={t("settings.privacy")}
                 last
-                onPress={() => console.log("settings: privacy policy")}
+                onPress={() => Linking.openURL("https://practice.welbuk.com/privacy")}
               />
             </MenuCard>
           </View>
