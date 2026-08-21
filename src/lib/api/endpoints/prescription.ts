@@ -34,6 +34,20 @@ export function finalizePrescription(body: {
   });
 }
 
+/** Persist composer list without issuing (Practice Save Draft). */
+export function savePrescriptionDraftApi(body: {
+  consultationId: string;
+  appointmentId?: string;
+  patientId?: string;
+  prescriptions: PrescriptionItemInput[];
+}): Promise<{ prescriptions?: Prescription[] }> {
+  return api({
+    path: "/api/consult/prescription/draft",
+    method: "PUT",
+    body,
+  });
+}
+
 export function patchPrescriptionAttachmentUrls(
   consultationId: string,
   attachmentUrls: string[]

@@ -81,7 +81,7 @@ export function AppointmentListScreen() {
   const totalCount = q.data?.pages[0]?.totalCount ?? 0;
 
   const greetName = userGreetingName(user);
-  const doctorSubtitle = greetName ? `Welcome, ${greetName}` : null;
+  const welcomeSubtitle = greetName ? `Welcome, ${greetName}` : null;
 
   const onReadyForNext = async () => {
     if (!facilityId) {
@@ -237,9 +237,9 @@ export function AppointmentListScreen() {
             <Text className="text-sm text-white/80" numberOfLines={2}>
               {subtitleParts.join(" · ")}
             </Text>
-            {isDoctorLogin && doctorSubtitle ? (
+            {welcomeSubtitle ? (
               <Text className="text-xs text-white/65" numberOfLines={1}>
-                {doctorSubtitle}
+                {welcomeSubtitle}
               </Text>
             ) : null}
           </View>

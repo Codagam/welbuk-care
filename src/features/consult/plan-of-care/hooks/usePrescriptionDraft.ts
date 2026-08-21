@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -10,7 +10,12 @@ import {
   updatePrescriptionTemplate,
   validateConsultPrescription,
 } from "@/lib/api/endpoints/prescription";
-import { searchDrugs, type DrugCatalogItem } from "@/lib/api/endpoints/drugs";
+import {
+  getDrugCatalogOptions,
+  quickAddDrug,
+  searchDrugs,
+  type DrugCatalogItem,
+} from "@/lib/api/endpoints/drugs";
 import { uploadFile } from "@/lib/api/endpoints/recording";
 import { useFacilityId } from "@/lib/auth/store";
 import { refetchConsultIfCompletedLock } from "@/features/consult/consultLock";
@@ -52,6 +57,36 @@ export function useDrugCatalog(enabled = true) {
         sortBy: "brandName",
         sortOrder: "asc",
       }).then((r) => r.drugs),
+  });
+}
+
+export function useDrugCatalogOptions(enabled = true) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["drug-catalog-options", "dosageType", facilityId],
+    enabled: enabled && !!facilityId,
+    staleTime: 30 * 60_000,
+    queryFn: () => getDrugCatalogOptions(facilityId!, "dosageType"),
+  });
+}
+
+export function useQuickAddDrug() {
+  const facilityId = useFacilityId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      brandName: string;
+      genericName: string;
+      dosageForm: string;
+      strength: string;
+      category?: string;
+    }) => {
+      if (!facilityId) throw new Error("No facility selected");
+      return quickAddDrug({ facilityId, ...body });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["drug-catalog"] });
+    },
   });
 }
 

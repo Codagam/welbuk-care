@@ -1,4 +1,4 @@
-import * as DocumentPicker from "expo-document-picker";
+﻿import * as DocumentPicker from "expo-document-picker";
 import { useMemo, useState } from "react";
 import {
   Alert,
@@ -8,9 +8,12 @@ import {
   View,
 } from "react-native";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import { useCardFocusHighlight } from "@/features/consult/useCardFocusHighlight";
 import type { DrugCatalogItem } from "@/lib/api/endpoints/drugs";
 import { ApiError, describeError, isConsultCompletedLock } from "@/lib/api/errors";
+import { useFacilityId } from "@/lib/auth/store";
 import { AppModal, Button, Segmented, TextField } from "@/ui";
 
 import { formatAllergyMatchSummaryLine } from "../allergy";
@@ -30,6 +33,7 @@ import {
   dosePatternAfterCatalogDrugPick,
   validatePrescriptionItem,
 } from "../validation";
+import { QuickAddDrugDialog } from "./QuickAddDrugDialog";
 
 const TIMING = ["BF", "AF"] as const;
 
@@ -71,6 +75,9 @@ export function PrescriptionCard({
   locked?: boolean;
 }) {
   const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
+  const facilityId = useFacilityId();
+  const qc = useQueryClient();
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   return (
     <View
@@ -111,6 +118,16 @@ export function PrescriptionCard({
             compact={tabletLayout}
             locked={locked}
           />
+          {facilityId ? (
+            <Button
+              label="+ Add medicine"
+              variant="outline"
+              size="md"
+              disabled={locked}
+              onPress={() => setQuickAddOpen(true)}
+              className="h-12 justify-center"
+            />
+          ) : null}
           <AttachBar
             consultationId={consultationId}
             attachedImages={attachedImages}
@@ -120,6 +137,16 @@ export function PrescriptionCard({
           />
         </View>
       </View>
+
+      {facilityId ? (
+        <QuickAddDrugDialog
+          open={quickAddOpen}
+          onClose={() => setQuickAddOpen(false)}
+          onCreated={() => {
+            void qc.invalidateQueries({ queryKey: ["drug-catalog"] });
+          }}
+        />
+      ) : null}
 
       {allergyWarnings.length > 0 ? (
         <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
@@ -144,7 +171,7 @@ export function PrescriptionCard({
               }`}
             >
               {allergyOverrideAck ? (
-                <Text className="text-[10px] font-bold text-white">✓</Text>
+                <Text className="text-[10px] font-bold text-white">Γ£ô</Text>
               ) : null}
             </View>
             <Text className="flex-1 text-xs text-amber-900">
@@ -214,7 +241,7 @@ export function PrescriptionCard({
                       locked ? "opacity-40" : "active:bg-neutral-100"
                     }`}
                   >
-                    <Text className="text-red-500">✕</Text>
+                    <Text className="text-red-500">Γ£ò</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -237,7 +264,7 @@ export function PrescriptionCard({
                         l.duration ? `${l.duration} days` : null,
                       ]
                         .filter(Boolean)
-                        .join(" · ")}
+                        .join(" ┬╖ ")}
                     </Text>
                   </View>
                   <Pressable
@@ -247,7 +274,7 @@ export function PrescriptionCard({
                       locked ? "opacity-40" : "active:bg-neutral-100"
                     }`}
                   >
-                    <Text className="text-red-500">✕</Text>
+                    <Text className="text-red-500">Γ£ò</Text>
                   </Pressable>
                 </View>
               )
@@ -360,7 +387,7 @@ function AddMedicineForm({
             <Text className="text-xs text-neutral-500">
               {[d.genericName, d.dosageForm, d.strength]
                 .filter(Boolean)
-                .join(" · ")}
+                .join(" ┬╖ ")}
             </Text>
           </Pressable>
         ))}
@@ -384,7 +411,7 @@ function AddMedicineForm({
       }}
       onBlur={onFieldBlur}
       onPressIn={() => setShowHints(true)}
-      placeholder="Tap to pick medicine…"
+      placeholder="Tap to pick medicine"
     />
   );
 
@@ -431,7 +458,7 @@ function AddMedicineForm({
                 }}
                 onBlur={onFieldBlur}
                 onPressIn={() => setShowHints(true)}
-                placeholder="Tap to pick medicine…"
+                placeholder="Tap to pick medicine"
               />
             </View>
             <View className="w-28 gap-1.5">
@@ -845,7 +872,7 @@ function AttachBar({
                 onPress={() => void onRemove(img.id)}
                 disabled={locked}
               >
-                <Text className="text-red-500">✕</Text>
+                <Text className="text-red-500">Γ£ò</Text>
               </Pressable>
             </View>
           ))}
