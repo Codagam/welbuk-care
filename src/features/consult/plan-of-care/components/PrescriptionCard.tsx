@@ -171,7 +171,7 @@ export function PrescriptionCard({
               }`}
             >
               {allergyOverrideAck ? (
-                <Text className="text-[10px] font-bold text-white">Γ£ô</Text>
+                <Text className="text-[10px] font-bold text-white">✓</Text>
               ) : null}
             </View>
             <Text className="flex-1 text-xs text-amber-900">
@@ -241,7 +241,7 @@ export function PrescriptionCard({
                       locked ? "opacity-40" : "active:bg-neutral-100"
                     }`}
                   >
-                    <Text className="text-red-500">Γ£ò</Text>
+                    <Text className="text-red-500">✕</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -264,7 +264,7 @@ export function PrescriptionCard({
                         l.duration ? `${l.duration} days` : null,
                       ]
                         .filter(Boolean)
-                        .join(" ┬╖ ")}
+                        .join(" · ")}
                     </Text>
                   </View>
                   <Pressable
@@ -274,7 +274,7 @@ export function PrescriptionCard({
                       locked ? "opacity-40" : "active:bg-neutral-100"
                     }`}
                   >
-                    <Text className="text-red-500">Γ£ò</Text>
+                    <Text className="text-red-500">✕</Text>
                   </Pressable>
                 </View>
               )
@@ -387,7 +387,7 @@ function AddMedicineForm({
             <Text className="text-xs text-neutral-500">
               {[d.genericName, d.dosageForm, d.strength]
                 .filter(Boolean)
-                .join(" ┬╖ ")}
+                .join(" · ")}
             </Text>
           </Pressable>
         ))}
@@ -872,7 +872,7 @@ function AttachBar({
                 onPress={() => void onRemove(img.id)}
                 disabled={locked}
               >
-                <Text className="text-red-500">Γ£ò</Text>
+                <Text className="text-red-500">✕</Text>
               </Pressable>
             </View>
           ))}
