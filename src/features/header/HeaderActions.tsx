@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { NotificationQueue } from "@/features/notifications/NotificationQueue";
 import { useFacilityId } from "@/lib/auth/store";
 
 import { FacilityQrDialog, FacilityQrTriggerButton } from "./FacilityQrDialog";
@@ -24,7 +25,7 @@ function AttendIconButton({ light }: { light?: boolean }) {
 }
 
 /**
- * Sticky header actions: Attend icon (placeholder) → Facility QR.
+ * Sticky header actions: Attend → Notifications (unread) → Facility QR.
  * Hidden when no facility is selected.
  */
 export function HeaderActions({ light = true }: { light?: boolean }) {
@@ -37,6 +38,7 @@ export function HeaderActions({ light = true }: { light?: boolean }) {
     <>
       <View className="flex-row items-center gap-0.5">
         <AttendIconButton light={light} />
+        <NotificationQueue light={light} />
         <FacilityQrTriggerButton
           light={light}
           onPress={() => setQrOpen(true)}

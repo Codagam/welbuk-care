@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import {
-  Modal,
   Platform,
   Pressable,
   Text,
   View,
 } from "react-native";
 import DateTimePicker from "@expo/ui/community/datetime-picker";
+
+import { AppModal } from "./AppModal";
 
 export type TimeFieldProps = {
   label?: string;
@@ -90,7 +91,7 @@ export function TimeField({
       ) : null}
 
       {Platform.OS === "ios" ? (
-        <Modal
+        <AppModal
           visible={open}
           transparent
           animationType="fade"
@@ -124,7 +125,7 @@ export function TimeField({
               />
             </Pressable>
           </Pressable>
-        </Modal>
+        </AppModal>
       ) : null}
     </View>
   );

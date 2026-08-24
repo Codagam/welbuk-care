@@ -12,6 +12,7 @@ type Props = {
   onTreat: (entry: DiagnosisDetailsEntry) => void;
   onDelete: (id: string) => void;
   deleting?: boolean;
+  locked?: boolean;
 };
 
 function earliestDate(e: DiagnosisDetailsEntry): string {
@@ -29,6 +30,7 @@ export function FindingsTable({
   onEdit,
   onTreat,
   onDelete,
+  locked = false,
 }: Props) {
   const doneIds = doneDiagnosisEntryIds(planItems);
 
@@ -113,17 +115,19 @@ export function FindingsTable({
                   variant="outline"
                   size="md"
                   onPress={() => onEdit(e.toothId)}
+                  disabled={locked}
                 />
                 <Button
                   label="Treat"
                   size="md"
                   onPress={() => onTreat(e)}
-                  disabled={treatDisabled}
+                  disabled={treatDisabled || locked}
                 />
                 <Pressable
                   onPress={() => onDelete(e.id)}
+                  disabled={locked}
                   style={{ flexShrink: 0 }}
-                  className="justify-center px-3 py-2"
+                  className={`justify-center px-3 py-2 ${locked ? "opacity-40" : ""}`}
                 >
                   <Text numberOfLines={1} className="text-sm text-red-500">
                     Delete

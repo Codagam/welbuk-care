@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -12,7 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 
-import { Button, DateField, TextField } from "@/ui";
+import { AppModal, Button, DateField, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { createPatientLabReport } from "@/lib/api/endpoints/consult-data";
 import { uploadFile } from "@/lib/api/endpoints/recording";
@@ -345,7 +344,7 @@ export function ConsultUploadDialog({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={open}
       animationType="slide"
       presentationStyle="pageSheet"
@@ -650,6 +649,6 @@ export function ConsultUploadDialog({
           ) : null}
         </ScrollView>
       </View>
-    </Modal>
+    </AppModal>
   );
 }

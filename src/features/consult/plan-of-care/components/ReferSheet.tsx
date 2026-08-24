@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
-import { Button, Segmented, TextField } from "@/ui";
+import { AppModal, Button, Segmented, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { createReferral } from "@/lib/api/endpoints/referral";
 import { useFacilityId, useActiveFacility } from "@/lib/auth/store";
@@ -99,7 +99,7 @@ export function ReferSheet({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={open}
       animationType="slide"
       presentationStyle="fullScreen"
@@ -176,6 +176,6 @@ export function ReferSheet({
           <Button label="Submit referral" onPress={onSubmit} loading={saving} />
         </ScrollView>
       </View>
-    </Modal>
+    </AppModal>
   );
 }

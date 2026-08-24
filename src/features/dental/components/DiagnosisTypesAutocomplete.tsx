@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchAllDiagnosisTypes } from "@/lib/api/endpoints/dental";
+import { AppModal } from "@/ui";
 import type { DiagnosisOption } from "../types";
 import { slugFromLabel, uniqueValueFromSlug } from "../utils";
 
@@ -296,7 +296,7 @@ export function DiagnosisTypesAutocomplete({
         />
       </View>
 
-      <Modal
+      <AppModal
         visible={isOpen && !disabled}
         transparent
         animationType="fade"
@@ -341,7 +341,7 @@ export function DiagnosisTypesAutocomplete({
             </View>
           </View>
         </View>
-      </Modal>
+      </AppModal>
     </View>
   );
 }

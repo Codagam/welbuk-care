@@ -124,7 +124,8 @@ export function buildSearchParams(
     queryParams.startDate = bounds.startDate;
     queryParams.endDate = bounds.endDate;
   } else if (filters.filtersCleared) {
-    // Clear All: no date restriction
+    // Clear All: today + future (Care spec — not unbounded history)
+    queryParams.startDate = todayISO;
   } else if (dateValue) {
     const selectedDate = parseFilterDate(dateValue);
     if (selectedDate) {

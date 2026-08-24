@@ -34,11 +34,14 @@ export function SectionChrome({
   const titleEl = (
     <View className="min-w-0 flex-1 flex-row items-center gap-2">
       {icon ? <Ionicons name={icon} size={16} color="#FD006A" /> : null}
-      <Text className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+      <Text
+        className="min-w-0 shrink text-sm font-semibold text-brand"
+        numberOfLines={1}
+      >
         {title}
       </Text>
       {badge != null && badge > 0 ? (
-        <View className="rounded-full bg-brand/10 px-2 py-0.5">
+        <View className="shrink-0 rounded-full bg-brand/10 px-2 py-0.5">
           <Text className="text-[10px] font-semibold text-brand">{badge}</Text>
         </View>
       ) : null}

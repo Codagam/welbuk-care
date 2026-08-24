@@ -27,11 +27,14 @@ function NotesShell({
       }`}
     >
       <View className="flex-row items-center gap-2">
-        <Text className="text-base font-semibold tracking-tight text-brand">
+        <Text
+          className="min-w-0 shrink text-base font-semibold tracking-tight text-brand"
+          numberOfLines={1}
+        >
           {title}
         </Text>
         {badge ? (
-          <View className="rounded-md bg-brand-50 px-2 py-0.5">
+          <View className="shrink-0 rounded-md bg-brand-50 px-2 py-0.5">
             <Text className="text-[10px] font-semibold uppercase tracking-wide text-brand">
               {badge}
             </Text>
@@ -47,11 +50,13 @@ export function DoctorNotesCard({
   consultationId,
   initialNotes,
   fill,
+  locked = false,
 }: {
   consultationId: string;
   initialNotes?: string | null;
   /** Stretch to match sibling column height on tablet */
   fill?: boolean;
+  locked?: boolean;
 }) {
   const save = useSaveSummary(consultationId);
   const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
@@ -97,6 +102,7 @@ export function DoctorNotesCard({
         style={{ minHeight: fill ? 160 : 120 }}
         onFocus={onFocus}
         onBlur={onBlur}
+        editable={!locked}
       />
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {done ? <Text className="text-sm text-emerald-600">Saved.</Text> : null}
@@ -107,7 +113,7 @@ export function DoctorNotesCard({
             size="md"
             onPress={onSave}
             loading={save.isPending}
-            disabled={!dirty}
+            disabled={!dirty || locked}
           />
         </View>
         <View className="flex-1">
@@ -129,11 +135,13 @@ export function ConversationSummaryCard({
   initialSummary,
   isAIGenerated,
   fill,
+  locked = false,
 }: {
   consultationId: string;
   initialSummary?: string | null;
   isAIGenerated?: boolean;
   fill?: boolean;
+  locked?: boolean;
 }) {
   const save = useSaveSummary(consultationId);
   const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
@@ -184,6 +192,7 @@ export function ConversationSummaryCard({
         style={{ minHeight: fill ? 160 : 120 }}
         onFocus={onFocus}
         onBlur={onBlur}
+        editable={!locked}
       />
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
       {done ? <Text className="text-sm text-emerald-600">Saved.</Text> : null}
@@ -194,7 +203,7 @@ export function ConversationSummaryCard({
             size="md"
             onPress={onSave}
             loading={save.isPending}
-            disabled={!dirty}
+            disabled={!dirty || locked}
           />
         </View>
         <View className="flex-1">

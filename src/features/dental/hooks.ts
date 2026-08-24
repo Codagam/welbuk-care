@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { refetchConsultIfCompletedLock } from "@/features/consult/consultLock";
 import {
   getDental,
   patchDentalPlan,
@@ -42,6 +43,7 @@ export function useSaveDentalExam(consultationId: string) {
       }),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["dental", consultationId] }),
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 
@@ -52,6 +54,7 @@ export function useSaveDentalPlan(consultationId: string) {
       patchDentalPlan(consultationId, items),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["dental", consultationId] }),
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 

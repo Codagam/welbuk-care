@@ -1,4 +1,4 @@
-/** Client-side mirror of Practice validatePrescriptionItem (message only). */
+﻿/** Client-side mirror of Practice validatePrescriptionItem (message only). */
 
 export type ValidateRxInput = {
   name: string;

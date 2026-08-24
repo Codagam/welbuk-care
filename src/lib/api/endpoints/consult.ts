@@ -39,6 +39,30 @@ export function getConsultation(id: string): Promise<ConsultLoadResponse> {
   return api({ path: `/api/consult/${id}` });
 }
 
+export type ReopenConsultationResponse = {
+  ok: true;
+  alreadyOpen: boolean;
+  status: string;
+  reopenedAt?: string;
+  reopenCount?: number;
+  reopenReason?: string | null;
+};
+
+/**
+ * Unlock a COMPLETED consultation. Reason must be ≥ 3 whitespace-separated
+ * words (enforced client + server). Idempotent if already not COMPLETED.
+ */
+export function reopenConsultation(
+  id: string,
+  reason: string
+): Promise<ReopenConsultationResponse> {
+  return api({
+    path: `/api/consult/${id}/reopen`,
+    method: "POST",
+    body: { reason: reason.trim() },
+  });
+}
+
 /** Walk-in / triple-id path — also returns `patient` for the header. */
 export function createConsultation(body: {
   patientId: string;

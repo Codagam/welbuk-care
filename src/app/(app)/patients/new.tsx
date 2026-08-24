@@ -19,7 +19,7 @@ export default function NewPatientScreen() {
               onSaved={(p) =>
                 router.replace({
                   pathname: "/patients/[id]",
-                  params: { id: p.id },
+                  params: { id: String(p.patientId ?? p.id) },
                 })
               }
             />

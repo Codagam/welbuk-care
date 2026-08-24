@@ -53,3 +53,29 @@ export interface PatientWriteInput {
   parentOrGuardianName?: string;
   consentGiven: true;
 }
+
+/** Questionnaire JSON stored on PatientQuestionnaire (chart medical history). */
+export interface QuestionnaireField {
+  selectedValue?: string | string[];
+  inputValue?: string;
+  conditionDates?: Record<string, string>;
+  otherConditionDate?: string;
+}
+
+export interface PatientQuestionnaire {
+  id?: string;
+  patientId?: string;
+  medicalHistory?: Record<string, unknown> | null;
+  allergies?: Record<string, QuestionnaireField> | null;
+  CurrentMedications?: Record<string, QuestionnaireField> | null;
+  lifestyle?: unknown;
+  currentStep?: number | null;
+  completed?: boolean | null;
+}
+
+export type QuestionnaireStepPayload =
+  | Record<string, unknown>
+  | {
+      allergies?: Record<string, QuestionnaireField>;
+      CurrentMedications?: Record<string, QuestionnaireField>;
+    };

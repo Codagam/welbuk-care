@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -12,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import { useFacilityId } from "@/lib/auth/store";
@@ -27,6 +25,11 @@ import {
 } from "../labReports";
 import type { DoctorNote, LabReportItem } from "../types";
 import { ConsultUploadDialog } from "./ConsultUploadDialog";
+import {
+  ImagePreviewWithFullView,
+  FileViewerActions,
+  ModalSafeArea,
+} from "./ImagePreview";
 import { SectionChrome } from "./SectionChrome";
 
 type LocalFile = { storageUrl: string; localUri: string };
@@ -38,6 +41,7 @@ export function ReportsPanel({
   labReports,
   doctorNotes,
   onRefresh,
+  locked = false,
 }: {
   consultationId: string;
   patientId?: string;
@@ -45,6 +49,7 @@ export function ReportsPanel({
   labReports: LabReportItem[];
   doctorNotes: DoctorNote[];
   onRefresh?: () => void;
+  locked?: boolean;
 }) {
   const facilityId = useFacilityId();
   const summaryQ = useSummary(consultationId);
@@ -201,18 +206,27 @@ export function ReportsPanel({
       <SectionChrome title="Reports">
         <View className="gap-2.5">
           <View className="flex-row items-center justify-between gap-2">
-            <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
+            <View className="min-w-0 flex-1 flex-row items-center gap-2">
               <Ionicons name="folder-outline" size={16} color="#FD006A" />
-              <Text className="text-sm font-semibold text-neutral-900">
+              <Text
+                className="shrink text-sm font-semibold text-neutral-900"
+                numberOfLines={1}
+              >
                 Visit files
               </Text>
               {attachedUrls.length > 0 ? (
-                <Text className="text-xs font-medium text-brand">
+                <Text
+                  className="shrink-0 text-xs font-medium text-brand"
+                  numberOfLines={1}
+                >
                   {attachedUrls.length} visit file
                   {attachedUrls.length !== 1 ? "s" : ""}
                 </Text>
               ) : (
-                <Text className="text-xs text-neutral-500">
+                <Text
+                  className="min-w-0 shrink text-xs text-neutral-500"
+                  numberOfLines={1}
+                >
                   No visit files yet
                 </Text>
               )}
@@ -223,7 +237,7 @@ export function ReportsPanel({
               size="md"
               className="shrink-0"
               onPress={() => setUploadOpen(true)}
-              disabled={!consultationId}
+              disabled={!consultationId || locked}
               icon={<Ionicons name="add" size={16} color="#fff" />}
             />
           </View>
@@ -273,7 +287,7 @@ export function ReportsPanel({
         icon="document-text-outline"
         badge={labReports.length}
         collapsible
-        defaultOpen={false}
+        defaultOpen
       >
         {labReports.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
@@ -306,15 +320,13 @@ export function ReportsPanel({
                     {labReportHasViewableFiles(item.reportPayload) ? (
                       <Pressable
                         onPress={() => void openLabReport(item)}
-                        className="h-7 flex-row items-center gap-1 rounded-md bg-brand px-2"
+                        className="h-7 w-7 items-center justify-center rounded-md bg-brand/10"
+                        accessibilityLabel={`View ${item.test || "lab report"}`}
                       >
-                        <Ionicons name="document-text" size={12} color="#fff" />
-                        <Text className="text-xs font-medium text-white">
-                          View
-                        </Text>
+                        <Ionicons name="eye-outline" size={16} color="#FD006A" />
                       </Pressable>
                     ) : null}
-                    {item.canDelete ? (
+                    {item.canDelete && !locked ? (
                       <Pressable
                         onPress={() => handleDeleteLab(item)}
                         disabled={deleteLab.isPending}
@@ -352,7 +364,7 @@ export function ReportsPanel({
         icon="calendar-outline"
         badge={doctorNotes.length}
         collapsible
-        defaultOpen={false}
+        defaultOpen
       >
         {doctorNotes.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
@@ -400,13 +412,13 @@ export function ReportsPanel({
       />
 
       {/* Visit file preview */}
-      <Modal
+      <AppModal
         visible={previewOpen}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setPreviewOpen(false)}
       >
-        <View className="flex-1 bg-white">
+        <ModalSafeArea>
           <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
             <Text className="text-sm font-medium text-neutral-900">
               {attachedUrls.length > 1
@@ -442,7 +454,7 @@ export function ReportsPanel({
             ) : (
               <View />
             )}
-            {canDeleteCurrent ? (
+            {canDeleteCurrent && !locked ? (
               <Button
                 label="Delete"
                 variant="danger"
@@ -452,24 +464,46 @@ export function ReportsPanel({
               />
             ) : null}
           </View>
-          <View className="flex-1 items-center justify-center p-4">
+          <ScrollView
+            contentContainerStyle={{
+              padding: 16,
+              flexGrow: 1,
+              justifyContent: "center",
+            }}
+          >
             {previewLoading ? (
               <ActivityIndicator color="#FD006A" />
             ) : previewLocalUri && currentUrl && isImageUrl(currentUrl) ? (
-              <Image
-                source={{ uri: previewLocalUri }}
-                style={{ width: "100%", height: 420, borderRadius: 8 }}
-                resizeMode="contain"
+              <ImagePreviewWithFullView
+                uri={previewLocalUri}
+                title={
+                  attachedUrls.length > 1
+                    ? `Visit file ${previewIndex + 1} of ${attachedUrls.length}`
+                    : "Visit file"
+                }
+                fileName={
+                  currentUrl.split("/").pop()?.split("?")[0] || "visit-file"
+                }
+                height={360}
               />
             ) : previewLocalUri && currentUrl ? (
-              <Button
-                label={
-                  isReportAttachmentPdf(currentUrl)
-                    ? "Open PDF"
-                    : "Open file"
-                }
-                onPress={() => void Linking.openURL(previewLocalUri)}
-              />
+              <View className="items-center gap-3">
+                <Button
+                  label={
+                    isReportAttachmentPdf(currentUrl)
+                      ? "Open PDF"
+                      : "Open file"
+                  }
+                  onPress={() => void Linking.openURL(previewLocalUri)}
+                />
+                <FileViewerActions
+                  localUri={previewLocalUri}
+                  fileName={
+                    currentUrl.split("/").pop()?.split("?")[0] || "visit-file"
+                  }
+                  title="Visit file"
+                />
+              </View>
             ) : currentUrl ? (
               <Button
                 label="Retry"
@@ -477,18 +511,18 @@ export function ReportsPanel({
                 onPress={() => setPreviewReload((n) => n + 1)}
               />
             ) : null}
-          </View>
-        </View>
-      </Modal>
+          </ScrollView>
+        </ModalSafeArea>
+      </AppModal>
 
       {/* Lab / content view */}
-      <Modal
+      <AppModal
         visible={viewOpen}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setViewOpen(false)}
       >
-        <View className="flex-1 bg-white">
+        <ModalSafeArea>
           <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
             <Text className="text-base font-semibold text-neutral-900">
               {patientName ? `${patientName} — report` : "Lab report"}
@@ -510,32 +544,43 @@ export function ReportsPanel({
               <Text className="text-sm text-neutral-700">{viewNote}</Text>
             ) : null}
             {viewFiles.map((file) => {
+              const name =
+                file.storageUrl.split("/").pop()?.split("?")[0] || "report";
               if (isImageUrl(file.storageUrl)) {
                 return (
-                  <Image
+                  <ImagePreviewWithFullView
                     key={file.storageUrl}
-                    source={{ uri: file.localUri }}
-                    style={{ width: "100%", height: 320, borderRadius: 8 }}
-                    resizeMode="contain"
+                    uri={file.localUri}
+                    title={
+                      patientName ? `${patientName} — report` : "Lab report"
+                    }
+                    fileName={name}
+                    height={320}
                   />
                 );
               }
               return (
-                <Button
-                  key={file.storageUrl}
-                  label={
-                    isReportAttachmentPdf(file.storageUrl)
-                      ? "Open PDF"
-                      : "Open attachment"
-                  }
-                  variant="outline"
-                  onPress={() => void Linking.openURL(file.localUri)}
-                />
+                <View key={file.storageUrl} className="items-center gap-3">
+                  <Button
+                    label={
+                      isReportAttachmentPdf(file.storageUrl)
+                        ? "Open PDF"
+                        : "Open attachment"
+                    }
+                    variant="outline"
+                    onPress={() => void Linking.openURL(file.localUri)}
+                  />
+                  <FileViewerActions
+                    localUri={file.localUri}
+                    fileName={name}
+                    title="Lab report"
+                  />
+                </View>
               );
             })}
           </ScrollView>
-        </View>
-      </Modal>
+        </ModalSafeArea>
+      </AppModal>
     </View>
   );
 }

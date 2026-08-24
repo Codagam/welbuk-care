@@ -1,18 +1,20 @@
-import * as DocumentPicker from "expo-document-picker";
+﻿import * as DocumentPicker from "expo-document-picker";
 import { useMemo, useState } from "react";
 import {
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import { useCardFocusHighlight } from "@/features/consult/useCardFocusHighlight";
 import type { DrugCatalogItem } from "@/lib/api/endpoints/drugs";
-import { ApiError, describeError } from "@/lib/api/errors";
-import { Button, Segmented, TextField } from "@/ui";
+import { ApiError, describeError, isConsultCompletedLock } from "@/lib/api/errors";
+import { useFacilityId } from "@/lib/auth/store";
+import { AppModal, Button, Segmented, TextField } from "@/ui";
 
 import { formatAllergyMatchSummaryLine } from "../allergy";
 import {
@@ -31,6 +33,7 @@ import {
   dosePatternAfterCatalogDrugPick,
   validatePrescriptionItem,
 } from "../validation";
+import { QuickAddDrugDialog } from "./QuickAddDrugDialog";
 
 const TIMING = ["BF", "AF"] as const;
 
@@ -47,6 +50,7 @@ export function PrescriptionCard({
   onAllergyOverrideChange,
   drugs,
   tabletLayout = false,
+  locked = false,
 }: {
   consultationId: string;
   prescriptions: PlanPrescription[];
@@ -68,8 +72,12 @@ export function PrescriptionCard({
   drugs: DrugCatalogItem[];
   /** Wider table / toolbar layout for tablets */
   tabletLayout?: boolean;
+  locked?: boolean;
 }) {
   const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
+  const facilityId = useFacilityId();
+  const qc = useQueryClient();
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   return (
     <View
@@ -108,15 +116,37 @@ export function PrescriptionCard({
             hasAttachments={attachedImages.length > 0}
             onApply={onApplyTemplate}
             compact={tabletLayout}
+            locked={locked}
           />
+          {facilityId ? (
+            <Button
+              label="+ Add medicine"
+              variant="outline"
+              size="md"
+              disabled={locked}
+              onPress={() => setQuickAddOpen(true)}
+              className="h-12 justify-center"
+            />
+          ) : null}
           <AttachBar
             consultationId={consultationId}
             attachedImages={attachedImages}
             onAttachedImagesChange={onAttachedImagesChange}
             compact={tabletLayout}
+            locked={locked}
           />
         </View>
       </View>
+
+      {facilityId ? (
+        <QuickAddDrugDialog
+          open={quickAddOpen}
+          onClose={() => setQuickAddOpen(false)}
+          onCreated={() => {
+            void qc.invalidateQueries({ queryKey: ["drug-catalog"] });
+          }}
+        />
+      ) : null}
 
       {allergyWarnings.length > 0 ? (
         <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
@@ -130,6 +160,7 @@ export function PrescriptionCard({
           ))}
           <Pressable
             onPress={() => onAllergyOverrideChange(!allergyOverrideAck)}
+            disabled={locked}
             className="mt-1 flex-row items-center gap-2"
           >
             <View
@@ -205,7 +236,10 @@ export function PrescriptionCard({
                   </Text>
                   <Pressable
                     onPress={() => onRemove(l.id)}
-                    className="h-9 w-9 items-center justify-center rounded-full active:bg-neutral-100"
+                    disabled={locked}
+                    className={`h-9 w-9 items-center justify-center rounded-full ${
+                      locked ? "opacity-40" : "active:bg-neutral-100"
+                    }`}
                   >
                     <Text className="text-red-500">✕</Text>
                   </Pressable>
@@ -235,7 +269,10 @@ export function PrescriptionCard({
                   </View>
                   <Pressable
                     onPress={() => onRemove(l.id)}
-                    className="h-8 w-8 items-center justify-center rounded-full active:bg-neutral-100"
+                    disabled={locked}
+                    className={`h-8 w-8 items-center justify-center rounded-full ${
+                      locked ? "opacity-40" : "active:bg-neutral-100"
+                    }`}
                   >
                     <Text className="text-red-500">✕</Text>
                   </Pressable>
@@ -251,8 +288,9 @@ export function PrescriptionCard({
         onAdd={onAdd}
         drugs={drugs}
         tabletLayout={tabletLayout}
-        onFieldFocus={onFocus}
-        onFieldBlur={onBlur}
+        onFieldFocus={() => onFocus(undefined as never)}
+        onFieldBlur={() => onBlur(undefined as never)}
+        locked={locked}
       />
     </View>
   );
@@ -265,6 +303,7 @@ function AddMedicineForm({
   tabletLayout = false,
   onFieldFocus,
   onFieldBlur,
+  locked = false,
 }: {
   existingNames: string[];
   onAdd: (item: Omit<PlanPrescription, "id"> & { id?: string }) => void;
@@ -272,6 +311,7 @@ function AddMedicineForm({
   tabletLayout?: boolean;
   onFieldFocus?: () => void;
   onFieldBlur?: () => void;
+  locked?: boolean;
 }) {
   const [name, setName] = useState("");
   const [dose, setDose] = useState("1-0-1");
@@ -298,7 +338,7 @@ function AddMedicineForm({
   };
 
   const onSave = () => {
-    if (!canAdd) return;
+    if (locked || !canAdd) return;
     setError(null);
     const duplicate = existingNames.some(
       (n) => n.trim().toLowerCase() === name.trim().toLowerCase()
@@ -371,7 +411,7 @@ function AddMedicineForm({
       }}
       onBlur={onFieldBlur}
       onPressIn={() => setShowHints(true)}
-      placeholder="Tap to pick medicine…"
+      placeholder="Tap to pick medicine"
     />
   );
 
@@ -381,14 +421,19 @@ function AddMedicineForm({
       size="md"
       variant="primary"
       onPress={onSave}
-      disabled={!canAdd}
+      disabled={!canAdd || locked}
       className="h-12 min-h-[48px] justify-center py-0"
       style={{ height: 48 }}
     />
   );
 
   return (
-    <View className="gap-3 rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-4">
+    <View
+      className={`gap-3 rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-4 ${
+        locked ? "opacity-50" : ""
+      }`}
+      pointerEvents={locked ? "none" : "auto"}
+    >
       <Text className="text-sm font-semibold text-brand">
         Add medicine
       </Text>
@@ -413,7 +458,7 @@ function AddMedicineForm({
                 }}
                 onBlur={onFieldBlur}
                 onPressIn={() => setShowHints(true)}
-                placeholder="Tap to pick medicine…"
+                placeholder="Tap to pick medicine"
               />
             </View>
             <View className="w-28 gap-1.5">
@@ -499,6 +544,7 @@ function TemplateBar({
   hasAttachments,
   onApply,
   compact = false,
+  locked = false,
 }: {
   consultationId: string;
   prescriptions: PlanPrescription[];
@@ -512,6 +558,7 @@ function TemplateBar({
     }>
   ) => void;
   compact?: boolean;
+  locked?: boolean;
 }) {
   const templatesQ = usePrescriptionTemplates(consultationId);
   const saveTpl = useSaveTemplate(consultationId);
@@ -523,7 +570,7 @@ function TemplateBar({
   const [error, setError] = useState<string | null>(null);
 
   const templates = templatesQ.data ?? [];
-  const disabled = hasAttachments || prescriptions.length === 0;
+  const disabled = locked || hasAttachments || prescriptions.length === 0;
 
   const medsPayload = () =>
     prescriptions.map((p) => ({
@@ -534,6 +581,7 @@ function TemplateBar({
     }));
 
   const applySelected = (name: string) => {
+    if (locked) return;
     setSelected(name);
     setPickerOpen(false);
     if (!name) return;
@@ -563,6 +611,10 @@ function TemplateBar({
       setNameOpen(false);
       setSelected(name);
     } catch (e) {
+      if (isConsultCompletedLock(e)) {
+        setError(describeError(e));
+        return;
+      }
       if (e instanceof ApiError && e.status === 409) {
         Alert.alert(
           "Template exists",
@@ -600,9 +652,10 @@ function TemplateBar({
     <View className={compact ? "flex-row flex-wrap items-center gap-2" : "gap-2"}>
       <Pressable
         onPress={() => setPickerOpen(true)}
+        disabled={locked}
         className={`h-12 justify-center rounded-xl border border-neutral-300 bg-white px-3 ${
           compact ? "min-w-[160px]" : "flex-1"
-        }`}
+        } ${locked ? "opacity-50" : ""}`}
       >
         <Text className="text-sm text-neutral-700" numberOfLines={1}>
           {selected || "No template selected"}
@@ -648,7 +701,7 @@ function TemplateBar({
         </Text>
       ) : null}
 
-      <Modal
+      <AppModal
         visible={pickerOpen}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -683,9 +736,9 @@ function TemplateBar({
             ))}
           </ScrollView>
         </View>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         visible={nameOpen}
         animationType="fade"
         transparent
@@ -725,7 +778,7 @@ function TemplateBar({
             </View>
           </View>
         </View>
-      </Modal>
+      </AppModal>
     </View>
   );
 }
@@ -735,17 +788,20 @@ function AttachBar({
   attachedImages,
   onAttachedImagesChange,
   compact = false,
+  locked = false,
 }: {
   consultationId: string;
   attachedImages: AttachedRxImage[];
   onAttachedImagesChange: (images: AttachedRxImage[]) => void;
   compact?: boolean;
+  locked?: boolean;
 }) {
   const upload = useAttachPrescription(consultationId);
   const patch = usePatchRxAttachments(consultationId);
   const [error, setError] = useState<string | null>(null);
 
   const onPick = async () => {
+    if (locked) return;
     setError(null);
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -796,6 +852,7 @@ function AttachBar({
         size="md"
         onPress={onPick}
         loading={upload.isPending || patch.isPending}
+        disabled={locked}
         className="h-12 justify-center"
       />
       {attachedImages.length > 0 ? (
@@ -811,7 +868,10 @@ function AttachBar({
               >
                 {img.url.split("/").pop() || "image"}
               </Text>
-              <Pressable onPress={() => void onRemove(img.id)}>
+              <Pressable
+                onPress={() => void onRemove(img.id)}
+                disabled={locked}
+              >
                 <Text className="text-red-500">✕</Text>
               </Pressable>
             </View>

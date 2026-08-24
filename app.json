@@ -7,6 +7,12 @@
     "icon": "./assets/images/icon.png",
     "scheme": "welbukcare",
     "userInterfaceStyle": "light",
+    "platforms": ["ios", "android"],
+    "androidStatusBar": {
+      "backgroundColor": "#FD006A",
+      "barStyle": "light-content",
+      "translucent": true
+    },
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false
@@ -22,13 +28,10 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.VIBRATE"
       ],
       "package": "com.codagam_gobi.welbukcare"
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -45,8 +48,16 @@
       "expo-localization",
       "@react-native-community/datetimepicker",
       "expo-image",
-      "expo-status-bar",
-      "expo-web-browser"
+      [
+        "expo-status-bar",
+        {
+          "style": "light",
+          "hidden": false
+        }
+      ],
+      "expo-web-browser",
+      "expo-asset",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

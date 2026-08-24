@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -7,40 +7,48 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import { setStatusBarStyle } from "expo-status-bar";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import { userDisplayName } from "@/lib/auth/roles";
+import { userGreetingName } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
+import {
+  useCanAccessConsult,
+  useCanWrite,
+} from "@/features/permissions";
 import { AppointmentCard } from "./AppointmentCard";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
 import {
   useAppointmentList,
   useAppointmentListState,
+  useCheckInAppointment,
+  useLateArrivalAppointment,
   useOpenConsult,
   useReadyForNext,
 } from "../hooks/useAppointmentList";
 import { canOpenAppointmentFromList } from "../lib/appointmentGates";
 import type { Appointment } from "../types";
 
-function doctorWelcomeName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "";
-  return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
+function patientDisplayName(appt: Appointment): string {
+  if (!appt.patient) return "this patient";
+  return [appt.patient.firstName, appt.patient.lastName]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function AppointmentListScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const facility = useActiveFacility();
   const facilityId = useFacilityId();
   const user = useAuthUser();
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const [fittingInId, setFittingInId] = useState<string | null>(null);
 
   const {
     search,
@@ -56,17 +64,15 @@ export function AppointmentListScreen() {
 
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
+  const checkIn = useCheckInAppointment();
+  const lateArrival = useLateArrivalAppointment();
   const readyForNext = useReadyForNext();
+  const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
+    useCanAccessConsult();
+  const canUpdateAppointment = useCanWrite("appointment");
 
-  /** Same gate as Practice consult list — linked doctor account only. */
   const isDoctorLogin = Boolean(user?.doctorId);
-
-  useFocusEffect(
-    useCallback(() => {
-      setStatusBarStyle("light");
-      return () => setStatusBarStyle("dark");
-    }, [])
-  );
+  const canOpenConsult = canAccessConsult && !consultAccessLoading;
 
   const appointments = useMemo(
     () => q.data?.pages.flatMap((p) => p.data ?? []) ?? [],
@@ -74,32 +80,29 @@ export function AppointmentListScreen() {
   );
   const totalCount = q.data?.pages[0]?.totalCount ?? 0;
 
-  const greetName = userDisplayName(user);
-  const welcomeTitle = greetName
-    ? `Welcome, ${doctorWelcomeName(greetName)}`
-    : "Welcome";
+  const greetName = userGreetingName(user);
+  const welcomeSubtitle = greetName ? `Welcome, ${greetName}` : null;
 
   const onReadyForNext = async () => {
     if (!facilityId) {
-      Alert.alert("Select a facility", "Choose a facility before notifying reception.");
+      Alert.alert(
+        "Select a facility",
+        "Choose a facility before notifying reception."
+      );
       return;
     }
     try {
       await readyForNext.mutateAsync();
-      Alert.alert("Front desk notified", "Reception has been told you are ready for the next patient.");
+      Alert.alert(
+        "Front desk notified",
+        "Reception has been told you are ready for the next patient."
+      );
     } catch (err) {
       Alert.alert("Could not notify front desk", describeError(err));
     }
   };
 
-  const onOpen = async (appt: Appointment) => {
-    if (!canOpenAppointmentFromList(appt)) {
-      Alert.alert(
-        "Consult unavailable",
-        "Only today's appointments can be opened. Scheduled visits become available on the day of the visit; follow-up fees and time slots must be completed first."
-      );
-      return;
-    }
+  const navigateToConsult = async (appt: Appointment) => {
     setOpeningId(appt.id);
     try {
       const consult = await open.mutateAsync(appt.id);
@@ -118,27 +121,95 @@ export function AppointmentListScreen() {
     }
   };
 
+  const onOpenConsult = async (appt: Appointment) => {
+    if (consultAccessLoading) return;
+    if (!canOpenConsult) {
+      Alert.alert(
+        "You don't have permission",
+        "Your role can't open consultations. Only doctors can consult a patient. Ask a facility administrator if you need access."
+      );
+      return;
+    }
+    if (!canOpenAppointmentFromList(appt)) {
+      Alert.alert(
+        "Consult unavailable",
+        "Check in the patient first when the visit is still Scheduled. Walk-ins and waiting visits can open directly. Follow-up fees and time slots must be completed first."
+      );
+      return;
+    }
+    await navigateToConsult(appt);
+  };
+
+  const performCheckIn = async (appt: Appointment) => {
+    if (checkingInId !== null) return;
+    setCheckingInId(appt.id);
+    try {
+      await checkIn.mutateAsync(appt.id);
+      Alert.alert(t("appointments.checkInSuccess"));
+    } catch (err) {
+      Alert.alert(t("appointments.failedToCheckIn"), describeError(err));
+    } finally {
+      setCheckingInId(null);
+    }
+  };
+
+  const onCheckIn = (appt: Appointment) => {
+    if (checkingInId !== null) return;
+    const name = patientDisplayName(appt);
+    Alert.alert(
+      t("appointments.checkInConfirmTitle"),
+      t("appointments.checkInConfirmMessage", { name }),
+      [
+        { text: t("appointments.cancel"), style: "cancel" },
+        {
+          text: t("appointments.checkIn"),
+          onPress: () => void performCheckIn(appt),
+        },
+      ]
+    );
+  };
+
+  const performFitInNextSlot = async (appt: Appointment) => {
+    if (fittingInId !== null) return;
+    setFittingInId(appt.id);
+    try {
+      await lateArrival.mutateAsync(appt.id);
+      Alert.alert(t("appointments.fitInSuccess"));
+    } catch (err) {
+      Alert.alert(t("appointments.failedToFitIn"), describeError(err));
+    } finally {
+      setFittingInId(null);
+    }
+  };
+
+  const onFitInNextSlot = (appt: Appointment) => {
+    if (fittingInId !== null) return;
+    void performFitInNextSlot(appt);
+  };
+
   const permissionDenied =
     q.isError &&
     /permission|access denied|appointment\.read/i.test(describeError(q.error));
 
-  const appointmentMeta =
+  const subtitleParts = [
+    facility?.name ? `at ${facility.name}` : null,
     totalCount > 0
-      ? `${totalCount} appointment${totalCount === 1 ? "" : "s"} today`
-      : "Today's schedule";
+      ? `${totalCount} appointment${totalCount === 1 ? "" : "s"}`
+      : "No appointments yet",
+  ].filter(Boolean);
 
   return (
     <Screen edges={["left", "right", "bottom"]}>
-      <View
-        className="bg-brand"
-        style={{ paddingTop: Math.max(insets.top, 12) }}
-      >
-        {/* Utility row — facility + tools */}
+      <View className="bg-brand pt-3">
         <View className="flex-row items-center justify-between gap-3 px-5 pb-3 pt-2">
           <View className="min-w-0 flex-1 flex-row items-center gap-2">
             {facility?.name ? (
               <>
-                <Ionicons name="business-outline" size={16} color="rgba(255,255,255,0.85)" />
+                <Ionicons
+                  name="business-outline"
+                  size={16}
+                  color="rgba(255,255,255,0.85)"
+                />
                 <Text
                   className="min-w-0 flex-1 text-sm font-medium text-white/90"
                   numberOfLines={1}
@@ -155,18 +226,22 @@ export function AppointmentListScreen() {
 
         <View className="mx-5 h-px bg-white/20" />
 
-        {/* Primary row — greeting + Next Patient */}
         <View className="flex-row items-start justify-between gap-4 px-5 py-4">
           <View className="min-w-0 flex-1 gap-1">
             <Text
               className="text-[22px] font-semibold leading-7 text-brand-foreground"
               numberOfLines={2}
             >
-              {welcomeTitle}
+              Today&apos;s appointments
             </Text>
-            <Text className="text-sm text-white/80" numberOfLines={1}>
-              {appointmentMeta}
+            <Text className="text-sm text-white/80" numberOfLines={2}>
+              {subtitleParts.join(" · ")}
             </Text>
+            {welcomeSubtitle ? (
+              <Text className="text-xs text-white/65" numberOfLines={1}>
+                {welcomeSubtitle}
+              </Text>
+            ) : null}
           </View>
 
           {isDoctorLogin ? (
@@ -217,8 +292,8 @@ export function AppointmentListScreen() {
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-center text-base font-medium text-red-500">
             {permissionDenied
-              ? "You don’t have permission to view appointments."
-              : "Error loading appointments"}
+              ? t("appointments.permissionDenied")
+              : t("appointments.errorLoading")}
           </Text>
           <Text className="mt-2 text-center text-sm text-neutral-500">
             {permissionDenied
@@ -235,12 +310,21 @@ export function AppointmentListScreen() {
             <AppointmentCard
               appointment={item}
               opening={openingId === item.id}
-              onPress={() => onOpen(item)}
+              checkingIn={checkingInId === item.id}
+              fittingIn={fittingInId === item.id}
+              checkInBlocked={
+                checkingInId !== null && checkingInId !== item.id
+              }
+              canOpenConsult={canOpenConsult}
+              canUpdateAppointment={canUpdateAppointment}
+              onCheckIn={() => onCheckIn(item)}
+              onOpenConsult={() => void onOpenConsult(item)}
+              onFitInNextSlot={() => onFitInNextSlot(item)}
             />
           )}
           ListEmptyComponent={
             <Text className="mt-10 text-center text-sm text-neutral-500">
-              No appointments found
+              {t("appointments.empty")}
             </Text>
           }
           ListFooterComponent={

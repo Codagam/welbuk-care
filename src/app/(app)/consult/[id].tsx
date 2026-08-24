@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
+import { ConsultLockBanner } from "@/features/consult/components/ConsultLockBanner";
 import { SectionNavigator } from "@/features/consult/components/SectionNavigator";
 import { PlanOfCareSection } from "@/features/consult/plan-of-care/PlanOfCareSection";
 import {
@@ -31,11 +32,17 @@ import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
 import { EyeSection } from "@/features/eye/sections/EyeSection";
 import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
+import { NotificationQueue } from "@/features/notifications/NotificationQueue";
 import { Screen, TopBar } from "@/ui";
 
 const SCROLL_MARGIN = 12;
 /** Must match ScrollView contentContainerStyle.paddingTop */
 const CONTENT_PAD_TOP = 16;
+/** Must match the section stack `gap` on the consult column. */
+const SECTION_GAP = 32;
+/** Line below the top of the scroll viewport used to pick the active chip. */
+const ACTIVE_LINE = 80;
+const BOTTOM_SNAP = 48;
 
 function isDentalType(consultationType?: string | null): boolean {
   const t = (consultationType ?? "").toLowerCase();
@@ -92,6 +99,8 @@ export default function ConsultScreen() {
     consultation,
     appointment,
     doctorId: consultDoctorId,
+    lock,
+    isLocked,
   } = useConsultPatientHeader(id);
   const headerName = header?.name || "Consultation";
   const dental = isDentalType(facility?.consultationType);
@@ -110,12 +119,56 @@ export default function ConsultScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
   const sectionY = useRef<Record<string, number>>({});
+  const sectionH = useRef<Record<string, number>>({});
   const [activeId, setActiveId] = useState<string>(
     () => navItems[0]?.id ?? CONSULT_SECTION_IDS.consultation
   );
   const scrollingToRef = useRef<string | null>(null);
   const [stickyFooter, setStickyFooter] = useState<ReactNode>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  const recomputeSectionTops = useCallback(() => {
+    let y = 0;
+    let known = true;
+    for (const item of navItems) {
+      if (!known) {
+        delete sectionY.current[item.id];
+        continue;
+      }
+      sectionY.current[item.id] = y;
+      const h = sectionH.current[item.id];
+      if (h == null) {
+        known = false;
+      } else {
+        y += h + SECTION_GAP;
+      }
+    }
+  }, [navItems]);
+
+  const lastScrollRef = useRef({ y: 0, viewportH: 0, contentH: 0 });
+
+  const syncActiveFromScroll = useCallback(() => {
+    if (scrollingToRef.current) return;
+    const { y, viewportH, contentH } = lastScrollRef.current;
+    const marker = y + ACTIVE_LINE - CONTENT_PAD_TOP;
+    let next = navItems[0]?.id ?? "";
+    for (const item of navItems) {
+      const top = sectionY.current[item.id];
+      if (top != null && top <= marker) next = item.id;
+    }
+    const lastId = navItems[navItems.length - 1]?.id;
+    const canScroll = contentH > viewportH + 8;
+    if (
+      lastId &&
+      canScroll &&
+      y + viewportH >= contentH - BOTTOM_SNAP
+    ) {
+      next = lastId;
+    }
+    if (next) {
+      setActiveId((prev) => (prev === next ? prev : next));
+    }
+  }, [navItems]);
 
   useEffect(() => {
     const showEvt =
@@ -130,9 +183,14 @@ export default function ConsultScreen() {
     };
   }, []);
 
-  const onSectionLayout = useCallback((sectionId: string, y: number) => {
-    sectionY.current[sectionId] = y;
-  }, []);
+  const onSectionLayout = useCallback(
+    (sectionId: string, _y: number, height: number) => {
+      sectionH.current[sectionId] = height;
+      recomputeSectionTops();
+      syncActiveFromScroll();
+    },
+    [recomputeSectionTops, syncActiveFromScroll]
+  );
 
   const scrollToSection = useCallback((sectionId: string) => {
     const y = sectionY.current[sectionId];
@@ -152,19 +210,15 @@ export default function ConsultScreen() {
 
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (scrollingToRef.current) return;
-      const y = e.nativeEvent.contentOffset.y;
-      const marker = y + 80 - CONTENT_PAD_TOP;
-      let next = navItems[0]?.id ?? "";
-      for (const item of navItems) {
-        const top = sectionY.current[item.id];
-        if (top != null && top <= marker) next = item.id;
-      }
-      if (next) {
-        setActiveId((prev) => (prev === next ? prev : next));
-      }
+      const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+      lastScrollRef.current = {
+        y: contentOffset.y,
+        viewportH: layoutMeasurement.height,
+        contentH: contentSize.height,
+      };
+      syncActiveFromScroll();
     },
-    [navItems]
+    [syncActiveFromScroll]
   );
 
   const content = (
@@ -179,14 +233,18 @@ export default function ConsultScreen() {
         subtitle="Identity, vitals, intake, records, conversation, and reports"
         onLayoutY={onSectionLayout}
       >
-        <PatientDetailsSection
-          consultationId={id}
-          patientId={resolvedPatientId}
-          header={header}
-          headerLoading={headerLoading}
-          headerError={headerError ? headerErr : null}
-          appointment={appointment}
-        />
+        {(open) => (
+          <PatientDetailsSection
+            consultationId={id}
+            patientId={resolvedPatientId}
+            header={header}
+            headerLoading={headerLoading}
+            headerError={headerError ? headerErr : null}
+            appointment={appointment}
+            showExtended={open}
+            locked={isLocked}
+          />
+        )}
       </ConsultSectionCard>
 
       {dental ? (
@@ -207,7 +265,11 @@ export default function ConsultScreen() {
           subtitle="Eye exam and findings"
           onLayoutY={onSectionLayout}
         >
-          <EyeSection consultationId={id} appointmentId={appointmentId} />
+          <EyeSection
+            consultationId={id}
+            appointmentId={appointmentId}
+            locked={isLocked}
+          />
         </ConsultSectionCard>
       ) : null}
 
@@ -217,7 +279,7 @@ export default function ConsultScreen() {
         subtitle="SOAP notes and diagnosis codes"
         onLayoutY={onSectionLayout}
       >
-        <NotesSection consultationId={id} />
+        <NotesSection consultationId={id} locked={isLocked} />
       </ConsultSectionCard>
 
       <ConsultSectionCard
@@ -236,6 +298,7 @@ export default function ConsultScreen() {
           doctorId={consultDoctorId ?? user?.id}
           doctorName={user?.name ?? user?.email}
           onStickyFooter={setStickyFooter}
+          locked={isLocked}
         />
       </ConsultSectionCard>
     </View>
@@ -243,7 +306,17 @@ export default function ConsultScreen() {
 
   return (
     <Screen>
-      <TopBar title={headerName} subtitle="Consultation" />
+      <TopBar
+        variant="brand"
+        backLabel="Back"
+        titleCentered
+        title={`Consulting for ${headerName}`}
+        right={<NotificationQueue light />}
+      />
+
+      {isLocked ? (
+        <ConsultLockBanner consultationId={id} lock={lock} />
+      ) : null}
 
       <SectionNavigator
         sections={navItems}
@@ -262,6 +335,7 @@ export default function ConsultScreen() {
             appointmentId={appointmentId}
             facilityId={facility?.id}
             defaultDoctorId={consultDoctorId ?? user?.id ?? ""}
+            locked={isLocked}
           >
             <View className="flex-1">
               <ScrollView
@@ -271,6 +345,10 @@ export default function ConsultScreen() {
                 keyboardDismissMode="interactive"
                 automaticallyAdjustKeyboardInsets
                 onScroll={onScroll}
+                onContentSizeChange={(_w, h) => {
+                  lastScrollRef.current.contentH = h;
+                  syncActiveFromScroll();
+                }}
                 scrollEventThrottle={16}
                 contentContainerStyle={{
                   paddingHorizontal: 16,
@@ -292,6 +370,10 @@ export default function ConsultScreen() {
               keyboardDismissMode="interactive"
               automaticallyAdjustKeyboardInsets
               onScroll={onScroll}
+              onContentSizeChange={(_w, h) => {
+                lastScrollRef.current.contentH = h;
+                syncActiveFromScroll();
+              }}
               scrollEventThrottle={16}
               contentContainerStyle={{
                 paddingHorizontal: 16,

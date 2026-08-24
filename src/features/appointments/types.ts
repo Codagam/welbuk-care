@@ -52,6 +52,8 @@ export interface Appointment {
   followUpSourceConsultationId?: string | null;
   tentativeCreatedAt?: string | null;
   dropsAt?: string | null;
+  tokenNumber?: number | null;
+  tokenSeries?: "PRIOR" | "WALK_IN" | "EMERGENCY" | null;
   doctor?: AppointmentDoctor | null;
   patient?: AppointmentPatient | null;
   facility?: AppointmentFacility | null;
@@ -99,7 +101,7 @@ export interface AppointmentListFilters {
   doctor: string;
   reason: string;
   status: string;
-  /** True after user taps “Clear filters” (no date window). */
+  /** True after user taps “Clear filters” (today + future window). */
   filtersCleared: boolean;
 }
 

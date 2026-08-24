@@ -23,6 +23,7 @@ export function DentalDiagnosisPanel() {
     useState<DiagnosisDetailsEntry | null>(null);
 
   const onTreat = (entry: DiagnosisDetailsEntry) => {
+    if (dental.locked) return;
     const existing = dental.planItems.filter(
       (p) => p.diagnosisEntryId === entry.id
     );
@@ -51,15 +52,18 @@ export function DentalDiagnosisPanel() {
             Dental Chart
           </Text>
         </View>
-        <TeethChart
-          teethStates={dental.chartTeethStates}
-          selectedTooth={dental.selectedTooth}
-          treatedTeeth={dental.treatedToothIds}
-          onToothPress={dental.openTooth}
-        />
+        <View pointerEvents={dental.locked ? "none" : "auto"}>
+          <TeethChart
+            teethStates={dental.chartTeethStates}
+            selectedTooth={dental.selectedTooth}
+            treatedTeeth={dental.treatedToothIds}
+            onToothPress={dental.openTooth}
+          />
+        </View>
         <Text className="text-center text-xs text-neutral-400">
-          Tap a tooth to record findings. Gold = diagnosed · green = treated ·
-          faded = missing.
+          {dental.locked
+            ? "This consultation is completed. Reopen it to edit the chart."
+            : "Tap a tooth to record findings. Gold = diagnosed · green = treated · faded = missing."}
         </Text>
       </View>
 
@@ -73,6 +77,7 @@ export function DentalDiagnosisPanel() {
           onEdit={dental.openTooth}
           onTreat={onTreat}
           onDelete={(id) => void dental.deleteFinding(id)}
+          locked={dental.locked}
         />
       </View>
 

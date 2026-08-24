@@ -97,7 +97,7 @@ export function PatientRecordsCard({
         title="Patient Records"
         emptyBorder
         collapsible
-        defaultOpen={false}
+        defaultOpen
       >
         <Text className="text-xs italic text-neutral-500">
           No patient records
@@ -115,7 +115,7 @@ export function PatientRecordsCard({
   let shown = 0;
 
   return (
-    <SectionChrome title="Patient Records" collapsible defaultOpen={false}>
+    <SectionChrome title="Patient Records" collapsible defaultOpen>
       <View className="gap-0">
         {history.length > 0 ? (
           <RecordGroup

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useLayoutEffect,
   useMemo,
   useRef,
@@ -23,6 +23,8 @@ import {
 import { useDentalFlushOptional } from "@/features/dental/DentalConsultContext";
 import { describeError } from "@/lib/api/errors";
 import { useAuthUser, useFacilityId } from "@/lib/auth/store";
+
+import { CONSULT_LOCKED_COMPLETE_REASON } from "@/features/consult/consultLock";
 
 import { CompleteBar } from "./components/CompleteBar";
 import { CompleteFooter } from "./components/CompleteFooter";
@@ -72,6 +74,7 @@ export function PlanOfCareSection({
   doctorId,
   doctorName,
   onStickyFooter,
+  locked = false,
 }: {
   consultationId: string;
   appointmentId?: string;
@@ -84,6 +87,7 @@ export function PlanOfCareSection({
   doctorName?: string;
   /** Renders the Complete CTA as a sticky screen footer (UI placement only). */
   onStickyFooter?: (footer: ReactNode | null) => void;
+  locked?: boolean;
 }) {
   const { width } = useWindowDimensions();
   /** Tablet / landscape: notes share a horizontal row */
@@ -156,7 +160,12 @@ export function PlanOfCareSection({
 
     const proceed = async () => {
       try {
-        if (flushDental) {
+        if (locked) {
+          setError(CONSULT_LOCKED_COMPLETE_REASON);
+          return;
+        }
+        // Flush would 409 on a completed consult ΓÇö skip when already locked.
+        if (flushDental && !locked) {
           const ok = await flushDental();
           if (!ok) {
             setError("Could not flush dental chart/plan before complete.");
@@ -173,7 +182,7 @@ export function PlanOfCareSection({
           allergyOverrideAck: allergy.allergyOverrideAck,
         });
         const doneLabel = res.consultationNumber
-          ? `Completed · ${res.consultationNumber}`
+          ? `Completed ┬╖ ${res.consultationNumber}`
           : "Visit completed.";
         setDone(doneLabel);
         goToQueueAfterComplete(doneLabel);
@@ -196,10 +205,12 @@ export function PlanOfCareSection({
     await proceed();
   };
 
-  const completeDisabled = allergy.allergyPrintBlocked;
-  const completeDisabledReason = completeDisabled
-    ? "Acknowledge allergy warnings to unlock Complete."
-    : null;
+  const completeDisabled = allergy.allergyPrintBlocked || locked;
+  const completeDisabledReason = locked
+    ? CONSULT_LOCKED_COMPLETE_REASON
+    : completeDisabled
+      ? "Acknowledge allergy warnings to unlock Complete."
+      : null;
 
   const runCompleteRef = useRef(runComplete);
   runCompleteRef.current = runComplete;
@@ -224,6 +235,7 @@ export function PlanOfCareSection({
     completeDisabledReason,
     error,
     done,
+    locked,
   ]);
 
   return (
@@ -231,10 +243,11 @@ export function PlanOfCareSection({
       <CompleteBar
         followUpSummaryLine={followUpLine}
         onFollowUp={() => setFollowUpOpen(true)}
+        locked={locked}
       />
 
       {draft.isLoading || summaryQ.isLoading ? (
-        <Text className="text-sm text-neutral-400">Loading plan of care…</Text>
+        <Text className="text-sm text-neutral-400">Loading plan of careΓÇª</Text>
       ) : null}
 
       {/* 1. Prescription */}
@@ -252,12 +265,17 @@ export function PlanOfCareSection({
           onAllergyOverrideChange={allergy.setAllergyOverrideAck}
           drugs={drugsQ.data ?? []}
           tabletLayout={tablet}
+          locked={locked}
         />
       </View>
 
-      {/* 2. Labs — full width, never shares a row with notes */}
+      {/* 2. Labs ΓÇö full width, never shares a row with notes */}
       <View style={styles.block}>
-        <LabsCard labReports={labReports} onRefer={() => setReferOpen(true)} />
+        <LabsCard
+          labReports={labReports}
+          patientName={patientName || patientLine}
+          onRefer={() => setReferOpen(true)}
+        />
       </View>
 
       {/* 3. Doctor Notes + Conversation Summary */}
@@ -268,6 +286,7 @@ export function PlanOfCareSection({
               consultationId={consultationId}
               initialNotes={summaryQ.data?.doctorNotes}
               fill
+              locked={locked}
             />
           </View>
           <View style={styles.notesCol}>
@@ -276,6 +295,7 @@ export function PlanOfCareSection({
               initialSummary={summaryQ.data?.summary}
               isAIGenerated={!!summaryQ.data?.isAIGenerated}
               fill
+              locked={locked}
             />
           </View>
         </View>
@@ -284,11 +304,13 @@ export function PlanOfCareSection({
           <DoctorNotesCard
             consultationId={consultationId}
             initialNotes={summaryQ.data?.doctorNotes}
+            locked={locked}
           />
           <ConversationSummaryCard
             consultationId={consultationId}
             initialSummary={summaryQ.data?.summary}
             isAIGenerated={!!summaryQ.data?.isAIGenerated}
+            locked={locked}
           />
         </View>
       )}
@@ -324,7 +346,7 @@ export function PlanOfCareSection({
         onClose={() => setReferOpen(false)}
         patientId={patientId}
         patientName={patientName || patientLine}
-        patientAge={patientAge ?? "—"}
+        patientAge={patientAge ?? "ΓÇö"}
         patientGender={patientGender}
         patientPhone={patientPhone}
         doctorId={resolvedDoctorId}
@@ -335,7 +357,7 @@ export function PlanOfCareSection({
   );
 }
 
-/** Explicit RN styles — NativeWind `gap` alone can become CSS flex-row on web and overlay Labs on notes. */
+/** Explicit RN styles ΓÇö NativeWind `gap` alone can become CSS flex-row on web and overlay Labs on notes. */
 const styles = StyleSheet.create({
   stack: {
     width: "100%",

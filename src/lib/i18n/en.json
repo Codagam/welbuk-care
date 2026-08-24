@@ -4,7 +4,7 @@
     "patients": "Patients",
     "care": "Care",
     "home": "Home",
-    "more": "More"
+    "more": "Settings"
   },
   "queue": {
     "title": "Today's queue",
@@ -14,7 +14,19 @@
     "searchPlaceholder": "Search appointments…",
     "empty": "No appointments found",
     "errorLoading": "Error loading appointments",
-    "permissionDenied": "You don’t have permission to view appointments."
+    "permissionDenied": "You don’t have permission to view appointments.",
+    "checkIn": "Check-in",
+    "checkInConfirmTitle": "Check-in",
+    "checkInConfirmMessage": "Are you sure you want to check in {{name}}?",
+    "checkInSuccess": "Patient checked in",
+    "failedToCheckIn": "Failed to check in",
+    "consult": "Consult",
+    "comingSoon": "Coming soon",
+    "setFollowUpSlot": "Set time slot",
+    "fitInNextSlot": "Fit in next slot",
+    "fitInSuccess": "Appointment re-slotted",
+    "failedToFitIn": "Could not fit into next slot",
+    "cancel": "Cancel"
   },
   "care": {
     "title": "Care",
@@ -26,5 +38,23 @@
   "common": {
     "signOut": "Sign out",
     "switchFacility": "Switch facility"
+  },
+  "settings": {
+    "title": "Settings",
+    "signedIn": "Signed in",
+    "account": "Account",
+    "activeFacility": "Active facility",
+    "practice": "practice",
+    "support": "Support",
+    "helpFaq": "Help & FAQ",
+    "helpFaqHint": "Guides and common questions",
+    "contactSupport": "Contact support",
+    "contactSupportHint": "Get help from our team",
+    "legal": "Legal",
+    "terms": "Terms & Conditions",
+    "privacy": "Privacy Policy",
+    "about": "About",
+    "appVersion": "App version",
+    "noFacility": "No facility selected"
   }
 }

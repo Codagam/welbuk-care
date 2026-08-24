@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Button, TextField } from "@/ui";
+import { AppModal, Button, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { useSaveVitals } from "../hooks";
 import {
@@ -80,7 +80,7 @@ export function VitalsEditSheet({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={open}
       animationType="slide"
       presentationStyle="pageSheet"
@@ -163,6 +163,6 @@ export function VitalsEditSheet({
           />
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }

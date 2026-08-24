@@ -4,13 +4,47 @@
  */
 
 import type { Appointment } from "../types";
+import { resolveOverdueState } from "./appointmentLifecycle";
 import { localCalendarYmd } from "./buildSearchParams";
+import {
+  isWaitlistSeries,
+  isWalkInAppointmentType,
+  tokenSeriesOrDefault,
+} from "./tokenSeries";
 
 export function normalizeStatusToken(value: unknown): string {
   return String(value ?? "")
     .trim()
     .toUpperCase()
     .replace(/[\s-]+/g, "_");
+}
+
+const PRE_ARRIVAL_STATUSES = new Set([
+  "TENTATIVE",
+  "PENDING_PAYMENT",
+  "SCHEDULED",
+  "CONFIRMED",
+]);
+
+function isPreArrivalStatus(status?: string | null): boolean {
+  return PRE_ARRIVAL_STATUSES.has(normalizeStatusToken(status));
+}
+
+/**
+ * Pre-arrival visit past its slot + grace — treat as NO_SHOW for desk actions.
+ * EMERGENCY is never auto no-show.
+ */
+export function isAutoNoShowCandidate(
+  entry: {
+    status?: string | null;
+    startTime?: string | null;
+    tokenSeries?: string | null;
+  },
+  now: Date = new Date()
+): boolean {
+  if (entry.tokenSeries === "EMERGENCY") return false;
+  if (!isPreArrivalStatus(entry.status)) return false;
+  return resolveOverdueState(entry, now).overdue;
 }
 
 export function appointmentPaymentStatusIsPaid(
@@ -89,11 +123,80 @@ export function isPreConsultVitalStatus(status: unknown): boolean {
   return (
     s === "SCHEDULED" ||
     s === "CONFIRMED" ||
+    s === "WAITING" ||
     s === "RESCHEDULE" ||
-    s === "IN_PROGRESS" ||
-    s === "NO_SHOW" ||
     s === "TENTATIVE"
   );
+}
+
+/** Walk-in / emergency — patient is already at the desk; skip Check-in. */
+export function isWaitlistVisit(
+  appointment: Pick<Appointment, "appointmentType" | "tokenSeries">
+): boolean {
+  if (isWalkInAppointmentType(appointment.appointmentType)) return true;
+  return isWaitlistSeries(tokenSeriesOrDefault(appointment.tokenSeries));
+}
+
+/** Stored or auto-derived NO_SHOW — Check-in is replaced by Fit in next slot. */
+export function isTreatAsNoShow(
+  appointment: Pick<Appointment, "status" | "startTime" | "tokenSeries">
+): boolean {
+  if (appointment.tokenSeries === "EMERGENCY") return false;
+  const status = normalizeStatusToken(appointment.status);
+  if (status === "NO_SHOW") return true;
+  return isAutoNoShowCandidate({
+    status,
+    startTime: appointment.startTime ?? null,
+    tokenSeries: appointment.tokenSeries ?? null,
+  });
+}
+
+/**
+ * Desk Check-in CTA — booked PRIOR visit today, status SCHEDULED only.
+ * Walk-in / emergency / CONFIRMED / WAITING never get Check-in.
+ */
+export function shouldShowCheckIn(appointment: Appointment): boolean {
+  if (isFollowUpAwaitingTimeSlot(appointment)) return false;
+  if (isTreatAsNoShow(appointment)) return false;
+  if (!isAppointmentOnToday(appointment)) return false;
+  if (normalizeStatusToken(appointment.status) !== "SCHEDULED") return false;
+  if (isWaitlistVisit(appointment)) return false;
+  if (!appointment.appointmentDate && !appointment.startTime) return false;
+  return true;
+}
+
+/**
+ * Open appointment / consult from the list (vitals recorded inside consult).
+ * Booked SCHEDULED must Check-in first; walk-ins and post-arrival statuses may open.
+ */
+export function canOpenAppointmentFromList(
+  appointment: Appointment
+): boolean {
+  const followUpFeeDueAfterSlot = isFollowUpFeeDueAfterSlotSet(appointment);
+  if (followUpFeeDueAfterSlot) return false;
+  if (isFollowUpAwaitingTimeSlot(appointment)) return false;
+  if (isTreatAsNoShow(appointment)) return false;
+  if (!isAppointmentOnToday(appointment)) return false;
+
+  const appointmentStatus = normalizeStatusToken(appointment.status);
+  if (
+    appointmentStatus === "WAITING" ||
+    appointmentStatus === "IN_PROGRESS" ||
+    appointmentStatus === "COMPLETED"
+  ) {
+    return true;
+  }
+
+  if (!isPreConsultVitalStatus(appointment.status)) return false;
+  if (!appointment.appointmentDate && !appointment.startTime) return false;
+  if (isAppointmentInFuture(appointment)) return false;
+
+  // Booked PRIOR still on SCHEDULED must use Check-in before opening.
+  if (appointmentStatus === "SCHEDULED" && !isWaitlistVisit(appointment)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function canOpenConsultFromMenu(appointment: Appointment): boolean {
@@ -106,36 +209,6 @@ export function canOpenConsultFromMenu(appointment: Appointment): boolean {
     !followUpFeeDueAfterSlot &&
     isAppointmentOnToday(appointment)
   );
-}
-
-/**
- * Primary row open action — web "Add Vital" (pre-vital, today) plus ⋮ "Open Consult".
- * @see practice/Welbuk_/components/appointments/list.tsx
- */
-export function canOpenAppointmentFromList(
-  appointment: Appointment
-): boolean {
-  const followUpFeeDueAfterSlot = isFollowUpFeeDueAfterSlotSet(appointment);
-  if (followUpFeeDueAfterSlot) return false;
-  if (isFollowUpAwaitingTimeSlot(appointment)) return false;
-  if (!isAppointmentOnToday(appointment)) return false;
-
-  const appointmentStatus = normalizeStatusToken(appointment.status);
-  if (
-    appointmentStatus === "WAITING" ||
-    appointmentStatus === "IN_PROGRESS" ||
-    appointmentStatus === "COMPLETED"
-  ) {
-    return true;
-  }
-
-  if (isPreConsultVitalStatus(appointment.status)) {
-    if (!appointment.appointmentDate && !appointment.startTime) return false;
-    if (isAppointmentInFuture(appointment)) return false;
-    return true;
-  }
-
-  return false;
 }
 
 export function canDownloadAppointmentInvoice(

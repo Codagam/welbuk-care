@@ -4,7 +4,7 @@
     "patients": "நோயாளிகள்",
     "care": "கவனிப்பு",
     "home": "முகப்பு",
-    "more": "மேலும்"
+    "more": "அமைப்புகள்"
   },
   "queue": {
     "title": "இன்றைய வரிசை",
@@ -14,7 +14,19 @@
     "searchPlaceholder": "சந்திப்புகளைத் தேடு…",
     "empty": "சந்திப்புகள் இல்லை",
     "errorLoading": "சந்திப்புகளை ஏற்ற முடியவில்லை",
-    "permissionDenied": "சந்திப்புகளைப் பார்க்க உங்களுக்கு அனுமதி இல்லை."
+    "permissionDenied": "சந்திப்புகளைப் பார்க்க உங்களுக்கு அனுமதி இல்லை.",
+    "checkIn": "செக்-இன்",
+    "checkInConfirmTitle": "செக்-இன்",
+    "checkInConfirmMessage": "{{name}}-ஐ செக்-இன் செய்ய உறுதியா?",
+    "checkInSuccess": "நோயாளி செக்-இன் செய்யப்பட்டார்",
+    "failedToCheckIn": "செக்-இன் தோல்வி",
+    "consult": "ஆலோசனை",
+    "comingSoon": "விரைவில்",
+    "setFollowUpSlot": "நேர இடம் அமை",
+    "fitInNextSlot": "அடுத்த இடத்தில் பொருத்து",
+    "fitInSuccess": "சந்திப்பு மறுஅட்டவணை செய்யப்பட்டது",
+    "failedToFitIn": "அடுத்த இடத்தில் பொருத்த முடியவில்லை",
+    "cancel": "ரத்து"
   },
   "care": {
     "title": "கவனிப்பு",
@@ -26,5 +38,23 @@
   "common": {
     "signOut": "வெளியேறு",
     "switchFacility": "வசதியை மாற்று"
+  },
+  "settings": {
+    "title": "அமைப்புகள்",
+    "signedIn": "உள்நுழைந்துள்ளீர்கள்",
+    "account": "கணக்கு",
+    "activeFacility": "செயலில் உள்ள வசதி",
+    "practice": "பயிற்சி",
+    "support": "ஆதரவு",
+    "helpFaq": "உதவி & FAQ",
+    "helpFaqHint": "வழிகாட்டிகள் மற்றும் பொதுவான கேள்விகள்",
+    "contactSupport": "ஆதரவைத் தொடர்பு கொள்ள",
+    "contactSupportHint": "எங்கள் குழுவிடமிருந்து உதவி பெறுங்கள்",
+    "legal": "சட்டம்",
+    "terms": "விதிமுறைகள் மற்றும் நிபந்தனைகள்",
+    "privacy": "தனியுரிமைக் கொள்கை",
+    "about": "பற்றி",
+    "appVersion": "பயன்பாட்டு பதிப்பு",
+    "noFacility": "வசதி தேர்ந்தெடுக்கப்படவில்லை"
   }
 }

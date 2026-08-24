@@ -1,9 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -11,13 +9,18 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import type { PatientDocumentItem } from "@/lib/api/endpoints/documents";
 import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import { isImageUrl } from "../labReports";
 import { usePatientDocuments } from "../hooks";
 import { DocumentUploadSheet } from "./DocumentUploadSheet";
+import {
+  ImagePreviewWithFullView,
+  FileViewerActions,
+  ModalSafeArea,
+} from "./ImagePreview";
 import { SectionChrome } from "./SectionChrome";
 
 function formatDocDate(value?: string | Date | null): string {
@@ -196,13 +199,13 @@ export function DocumentsCard({ patientId }: { patientId: string }) {
         onSuccess={() => void docsQ.refetch()}
       />
 
-      <Modal
+      <AppModal
         visible={viewOpen}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setViewOpen(false)}
       >
-        <View className="flex-1 bg-white">
+        <ModalSafeArea>
           <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
             <Text
               className="mr-3 flex-1 text-base font-semibold text-neutral-900"
@@ -223,21 +226,29 @@ export function DocumentsCard({ patientId }: { patientId: string }) {
                 </Text>
               </View>
             ) : viewLocalUri && viewIsImage ? (
-              <Image
-                source={{ uri: viewLocalUri }}
-                style={{ width: "100%", height: 420, borderRadius: 8 }}
-                resizeMode="contain"
+              <ImagePreviewWithFullView
+                uri={viewLocalUri}
+                title={viewTitle}
+                fileName={viewTitle.replace(/[^\w.\-()+ ]+/g, "_")}
+                height={360}
               />
             ) : viewLocalUri ? (
-              <Button
-                label="Open file"
-                variant="outline"
-                onPress={() => void Linking.openURL(viewLocalUri)}
-              />
+              <View className="items-center gap-3">
+                <Button
+                  label="Open file"
+                  variant="outline"
+                  onPress={() => void Linking.openURL(viewLocalUri)}
+                />
+                <FileViewerActions
+                  localUri={viewLocalUri}
+                  fileName={viewTitle.replace(/[^\w.\-()+ ]+/g, "_")}
+                  title={viewTitle}
+                />
+              </View>
             ) : null}
           </ScrollView>
-        </View>
-      </Modal>
+        </ModalSafeArea>
+      </AppModal>
     </View>
   );
 }

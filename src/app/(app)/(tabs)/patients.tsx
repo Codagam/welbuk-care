@@ -7,10 +7,14 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Screen, TextField } from "@/ui";
-// import { Button } from "@/ui"; // used by "+ New" when re-enabled
 import { describeError } from "@/lib/api/errors";
+import {
+  useCanAccessInpatient,
+  useInpatientAvailability,
+} from "@/features/permissions/hooks";
 import { usePatientSearch } from "@/features/patients/hooks";
 import type { Patient } from "@/features/patients/types";
 import {
@@ -20,26 +24,54 @@ import {
   normalizeGender,
 } from "@/features/patients/utils";
 
+function routeId(patient: Patient): string {
+  // Prefer display patientId (web parity); Mongo id still works with crud GET.
+  return String(patient.patientId ?? patient.id);
+}
+
 export default function PatientsScreen() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const q = usePatientSearch(search);
+  const { canAccess: canAccessInpatient, isLoading: inpatientAccessLoading } =
+    useCanAccessInpatient();
+  const {
+    available: inpatientAvailable,
+    isLoading: inpatientAvailabilityLoading,
+  } = useInpatientAvailability();
+
+  const showInpatients =
+    !inpatientAccessLoading &&
+    !inpatientAvailabilityLoading &&
+    canAccessInpatient &&
+    inpatientAvailable;
 
   const patients = q.data?.pages.flatMap((p) => p.patients) ?? [];
   const total = q.data?.pages[0]?.totalCount ?? 0;
+  const permissionDenied =
+    q.isError &&
+    /permission|access denied|patient\.read/i.test(describeError(q.error));
 
   return (
     <Screen>
-      <View className="gap-3 border-b border-neutral-200 bg-white px-6 pb-4 pt-6">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-neutral-900">Patients</Text>
-          {/* New patient hidden for now
-          <Button
-            label="+ New"
-            size="md"
-            onPress={() => router.push("/patients/new")}
-          />
-          */}
+      <View className="gap-2 border-b border-neutral-200 bg-white px-4 pb-3 pt-4">
+        <View className="flex-row items-center justify-between gap-3">
+          <Text className="text-xl font-semibold tracking-tight text-neutral-900">
+            Patients
+          </Text>
+          {showInpatients ? (
+            <Pressable
+              onPress={() => router.push("/inpatient")}
+              accessibilityRole="button"
+              accessibilityLabel="View inpatients"
+              className="flex-row items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 active:bg-brand-100"
+            >
+              <Ionicons name="bed-outline" size={16} color="#FD006A" />
+              <Text className="text-sm font-semibold text-brand-700">
+                Inpatients
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
         <TextField
           placeholder="Search name, phone, ABHA…"
@@ -60,23 +92,30 @@ export default function PatientsScreen() {
           <ActivityIndicator color="#FD006A" />
         </View>
       ) : q.isError ? (
-        <View className="flex-1 items-center justify-center px-6">
+        <View className="flex-1 items-center justify-center px-4">
           <Text className="text-center text-sm text-red-500">
-            {describeError(q.error)}
+            {permissionDenied
+              ? "You do not have permission to view patients."
+              : describeError(q.error)}
           </Text>
         </View>
       ) : (
         <FlatList
           data={patients}
           keyExtractor={(p) => p.id}
-          contentContainerStyle={{ padding: 16, gap: 8 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 24,
+            gap: 8,
+          }}
           renderItem={({ item }) => (
             <PatientRow
               patient={item}
               onPress={() =>
                 router.push({
                   pathname: "/patients/[id]",
-                  params: { id: item.id },
+                  params: { id: routeId(item) },
                 })
               }
             />
@@ -112,6 +151,7 @@ function PatientRow({
 }) {
   const age = calcAge(patient.dob);
   const meta = [
+    `#${patient.patientId}`,
     normalizeGender(patient.gender),
     age != null ? `${age}y` : null,
     patient.phone,
