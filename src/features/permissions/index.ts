@@ -11,6 +11,7 @@ export {
   useSectionAccess,
   useFacilityEntitlements,
   useCanAccessInpatient,
+  useInpatientAvailability,
   useCanAccessConsult,
 } from "./hooks";
 export { NoAccess, SectionAccessLoading } from "./NoAccess";

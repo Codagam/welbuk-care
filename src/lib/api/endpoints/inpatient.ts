@@ -19,6 +19,30 @@ import type {
   AuditEditor,
 } from "@/features/inpatient/types";
 
+/**
+ * Public IPD availability probe (no PHI).
+ * GET /api/inpatient-availability?facilityId=
+ * `available` is true only when site-wide AND facility `inPatientEnable` are on.
+ */
+export type InpatientAvailability = {
+  available: boolean;
+  siteEnabled: boolean;
+  facilityEnabled: boolean;
+};
+
+export async function fetchInpatientAvailability(
+  facilityId: string,
+  signal?: AbortSignal
+): Promise<InpatientAvailability> {
+  return api<InpatientAvailability>({
+    path: "/api/inpatient-availability",
+    query: { facilityId },
+    skipAuth: true,
+    skipAuthRedirect: true,
+    signal,
+  });
+}
+
 /** GET /api/inpatient/admissions?facilityId= */
 export async function listInpatientAdmissions(
   facilityId: string,

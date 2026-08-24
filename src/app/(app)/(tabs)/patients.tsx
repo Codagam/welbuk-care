@@ -11,7 +11,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Screen, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import { useCanAccessInpatient } from "@/features/permissions/hooks";
+import {
+  useCanAccessInpatient,
+  useInpatientAvailability,
+} from "@/features/permissions/hooks";
 import { usePatientSearch } from "@/features/patients/hooks";
 import type { Patient } from "@/features/patients/types";
 import {
@@ -32,6 +35,16 @@ export default function PatientsScreen() {
   const q = usePatientSearch(search);
   const { canAccess: canAccessInpatient, isLoading: inpatientAccessLoading } =
     useCanAccessInpatient();
+  const {
+    available: inpatientAvailable,
+    isLoading: inpatientAvailabilityLoading,
+  } = useInpatientAvailability();
+
+  const showInpatients =
+    !inpatientAccessLoading &&
+    !inpatientAvailabilityLoading &&
+    canAccessInpatient &&
+    inpatientAvailable;
 
   const patients = q.data?.pages.flatMap((p) => p.patients) ?? [];
   const total = q.data?.pages[0]?.totalCount ?? 0;
@@ -46,7 +59,7 @@ export default function PatientsScreen() {
           <Text className="text-xl font-semibold tracking-tight text-neutral-900">
             Patients
           </Text>
-          {!inpatientAccessLoading && canAccessInpatient ? (
+          {showInpatients ? (
             <Pressable
               onPress={() => router.push("/inpatient")}
               accessibilityRole="button"

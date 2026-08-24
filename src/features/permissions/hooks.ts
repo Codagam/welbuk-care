@@ -5,6 +5,7 @@ import {
   fetchFacilityEntitlements,
   isFeatureEnabled,
 } from "@/lib/api/endpoints/entitlements";
+import { fetchInpatientAvailability } from "@/lib/api/endpoints/inpatient";
 import { fetchPermissions } from "@/lib/api/endpoints/permissions";
 import {
   isFacilityAdminUser,
@@ -204,6 +205,32 @@ const INPATIENT_PERMISSIONS = [
   "inpatient.update",
   "inpatient.delete",
 ] as const;
+
+/**
+ * Site + facility IPD switches via public probe.
+ * Fail closed when the facility is missing or the request errors.
+ */
+export function useInpatientAvailability(facilityId?: string | null) {
+  const activeFacilityId = useFacilityId();
+  const resolvedFacilityId = facilityId ?? activeFacilityId;
+
+  const q = useQuery({
+    queryKey: ["inpatient-availability", resolvedFacilityId],
+    enabled: Boolean(resolvedFacilityId),
+    staleTime: 60_000,
+    queryFn: ({ signal }) =>
+      fetchInpatientAvailability(resolvedFacilityId!, signal),
+  });
+
+  return {
+    available: q.data?.available === true,
+    siteEnabled: q.data?.siteEnabled === true,
+    facilityEnabled: q.data?.facilityEnabled === true,
+    isLoading: Boolean(resolvedFacilityId) && q.isPending,
+    isError: q.isError,
+    refetch: q.refetch,
+  };
+}
 
 /**
  * Web sidebar parity for Inpatient / IPD:
