@@ -17,7 +17,7 @@ type Props = {
    * collapsed (e.g. patient vitals stay, records hide).
    */
   children: ReactNode | ((open: boolean) => ReactNode);
-  onLayoutY?: (id: string, y: number) => void;
+  onLayoutY?: (id: string, y: number, height: number) => void;
   /** Show chevron toggle on the brand header. Defaults to true. */
   collapsible?: boolean;
   /** Start expanded. Defaults to true. */
@@ -40,7 +40,7 @@ export function ConsultSectionCard({
   const [open, setOpen] = useState(defaultOpen);
 
   const onLayout = (e: LayoutChangeEvent) => {
-    onLayoutY?.(id, e.nativeEvent.layout.y);
+    onLayoutY?.(id, e.nativeEvent.layout.y, e.nativeEvent.layout.height);
   };
 
   const body =
