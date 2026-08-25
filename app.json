@@ -23,6 +23,7 @@
         "backgroundColor": "#FD006A",
         "foregroundImage": "./assets/images/icon.png"
       },
+      "package": "practice.welbuk.com",
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -63,7 +64,15 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "expo-status-bar": {
+        "style": "light",
+        "hidden": false
+      },
+      "eas": {
+        "projectId": "40f727fc-b284-4a57-b371-86af2ff1875d"
+      }
+    },
+    "owner": "codagam_gobi"
   }
 }
