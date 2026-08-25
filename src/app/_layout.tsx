@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { api } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
 import { useAuthStore } from "@/lib/auth/store";
 import { queryClient } from "@/lib/query";
 import { AppModal, AppStatusBar, Button } from "@/ui";
@@ -93,6 +94,10 @@ function UpdateVersionAlert() {
           storeUrl: (isIOS ? payload.appStoreUrl : payload.playStoreUrl) || "",
         });
       } catch (err) {
+        // No CARE row configured yet in the backend — expected until an
+        // admin creates one, not a real failure. Stay quiet.
+        if (err instanceof ApiError && err.code === "NOT_FOUND") return;
+
         // Never block app startup for update checks.
         console.error("[Version] Check failed:", err);
       }
