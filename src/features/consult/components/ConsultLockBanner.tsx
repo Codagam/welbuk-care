@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   Alert,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -116,11 +115,7 @@ export function ConsultLockBanner({
             keyboardDismissMode="on-drag"
             contentContainerStyle={{ padding: 20, paddingTop: 16 }}
           >
-            <Pressable
-              onPress={Keyboard.dismiss}
-              accessible={false}
-              style={{ gap: 12 }}
-            >
+            <View style={{ gap: 12 }}>
               <Text className="text-sm text-neutral-600">
                 It becomes editable again. The reason, your name and the time are
                 recorded on the consultation.
@@ -157,7 +152,7 @@ export function ConsultLockBanner({
                   disabled={!ready}
                 />
               </View>
-            </Pressable>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </AppModal>

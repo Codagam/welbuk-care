@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Keyboard, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { AppModal, Button, TextField } from "@/ui";
@@ -101,11 +101,7 @@ export function VitalsEditSheet({
           keyboardDismissMode="on-drag"
           contentContainerStyle={{ padding: 16 }}
         >
-          <Pressable
-            onPress={Keyboard.dismiss}
-            accessible={false}
-            style={{ gap: 12 }}
-          >
+          <View style={{ gap: 12 }}>
             <Text className="mb-1 text-sm text-neutral-500">
               Units are applied automatically (temp °F, height cm, weight kg).
             </Text>
@@ -114,21 +110,21 @@ export function VitalsEditSheet({
               value={form.temperature}
               onChangeText={set("temperature", sanitizeTemperature)}
               placeholder="98.6"
-              keyboardType="decimal-pad"
+              keyboardType="numeric"
             />
             <TextField
               label="Height (cm)"
               value={form.height}
               onChangeText={set("height", sanitizeDecimal)}
               placeholder="170"
-              keyboardType="decimal-pad"
+              keyboardType="numeric"
             />
             <TextField
               label="Weight (kg)"
               value={form.weight}
               onChangeText={set("weight", sanitizeDecimal)}
               placeholder="70"
-              keyboardType="decimal-pad"
+              keyboardType="numeric"
             />
             <TextField
               label="Blood pressure"
@@ -169,7 +165,7 @@ export function VitalsEditSheet({
                 loading={save.isPending}
               />
             </View>
-          </Pressable>
+          </View>
         </ScrollView>
       </View>
     </AppModal>
