@@ -39,7 +39,11 @@ export default function SelectFacilityScreen() {
   return (
     <Screen bgClassName="bg-white">
       {canGoBack ? (
-        <TopBar title="Switch facility" subtitle={activeFacility?.name} />
+        <TopBar
+          title="Switch facility"
+          subtitle={activeFacility?.name}
+          backLabel="Back"
+        />
       ) : null}
 
       <ScrollView
