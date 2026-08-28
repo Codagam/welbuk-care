@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 
 import { HeaderActions } from "@/features/header";
 import {
@@ -142,6 +142,21 @@ export default function SettingsScreen() {
     user?.globalRole ||
     user?.role ||
     null;
+
+  const confirmSignOut = () => {
+    Alert.alert(
+      t("common.signOutConfirmTitle"),
+      t("common.signOutConfirmMessage"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("common.signOut"),
+          style: "destructive",
+          onPress: () => signOut(),
+        },
+      ]
+    );
+  };
 
   return (
     <Screen edges={["left", "right", "bottom"]}>
@@ -295,7 +310,7 @@ export default function SettingsScreen() {
               label={t("common.signOut")}
               destructive
               last
-              onPress={() => signOut()}
+              onPress={confirmSignOut}
             />
           </MenuCard>
         </View>

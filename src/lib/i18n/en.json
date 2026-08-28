@@ -37,7 +37,10 @@
   },
   "common": {
     "signOut": "Sign out",
-    "switchFacility": "Switch facility"
+    "switchFacility": "Switch facility",
+    "cancel": "Cancel",
+    "signOutConfirmTitle": "Sign out?",
+    "signOutConfirmMessage": "You'll need to sign in again to use the app."
   },
   "settings": {
     "title": "Settings",

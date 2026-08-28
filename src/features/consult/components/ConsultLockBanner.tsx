@@ -1,9 +1,11 @@
 import { useState } from "react";
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from "react-native";
@@ -109,44 +111,54 @@ export function ConsultLockBanner({
             </Pressable>
           </View>
 
-          <View className="flex-1 gap-3 px-5 pt-4">
-            <Text className="text-sm text-neutral-600">
-              It becomes editable again. The reason, your name and the time are
-              recorded on the consultation.
-            </Text>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ padding: 20, paddingTop: 16 }}
+          >
+            <Pressable
+              onPress={Keyboard.dismiss}
+              accessible={false}
+              style={{ gap: 12 }}
+            >
+              <Text className="text-sm text-neutral-600">
+                It becomes editable again. The reason, your name and the time are
+                recorded on the consultation.
+              </Text>
 
-            <TextField
-              label="Why is it being reopened? *"
-              value={reason}
-              onChangeText={setReason}
-              placeholder="e.g. dosage corrected after pharmacy query"
-              multiline
-              editable={!saving}
-              style={{ minHeight: 96, textAlignVertical: "top" }}
-            />
-            <Text className="text-xs text-neutral-500">
-              {ready
-                ? "This is stored on the consultation."
-                : `A few words at least — ${remaining} more.`}
-            </Text>
-          </View>
+              <TextField
+                label="Why is it being reopened? *"
+                value={reason}
+                onChangeText={setReason}
+                placeholder="e.g. dosage corrected after pharmacy query"
+                multiline
+                editable={!saving}
+                style={{ minHeight: 96, textAlignVertical: "top" }}
+              />
+              <Text className="text-xs text-neutral-500">
+                {ready
+                  ? "This is stored on the consultation."
+                  : `A few words at least — ${remaining} more.`}
+              </Text>
 
-          <View className="flex-row gap-3 border-t border-neutral-200 px-4 py-3">
-            <Button
-              label="Cancel"
-              variant="ghost"
-              className="flex-1"
-              onPress={closeSheet}
-              disabled={saving}
-            />
-            <Button
-              label={saving ? "Reopening…" : "Reopen"}
-              className="flex-1"
-              onPress={() => void submit()}
-              loading={saving}
-              disabled={!ready}
-            />
-          </View>
+              <View className="mt-2 flex-row gap-3">
+                <Button
+                  label="Cancel"
+                  variant="outline"
+                  className="flex-1"
+                  onPress={closeSheet}
+                  disabled={saving}
+                />
+                <Button
+                  label={saving ? "Reopening…" : "Reopen"}
+                  className="flex-1"
+                  onPress={() => void submit()}
+                  loading={saving}
+                  disabled={!ready}
+                />
+              </View>
+            </Pressable>
+          </ScrollView>
         </KeyboardAvoidingView>
       </AppModal>
     </>

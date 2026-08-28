@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Keyboard, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { AppModal, Button, TextField } from "@/ui";
@@ -98,70 +98,79 @@ export function VitalsEditSheet({
 
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, gap: 12 }}
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{ padding: 16 }}
         >
-          <Text className="mb-1 text-sm text-neutral-500">
-            Units are applied automatically (temp °F, height cm, weight kg).
-          </Text>
-          <TextField
-            label="Temperature (°F)"
-            value={form.temperature}
-            onChangeText={set("temperature", sanitizeTemperature)}
-            placeholder="98.6"
-            keyboardType="decimal-pad"
-          />
-          <TextField
-            label="Height (cm)"
-            value={form.height}
-            onChangeText={set("height", sanitizeDecimal)}
-            placeholder="170"
-            keyboardType="decimal-pad"
-          />
-          <TextField
-            label="Weight (kg)"
-            value={form.weight}
-            onChangeText={set("weight", sanitizeDecimal)}
-            placeholder="70"
-            keyboardType="decimal-pad"
-          />
-          <TextField
-            label="Blood pressure"
-            value={form.bloodPressure}
-            onChangeText={set("bloodPressure", sanitizeBloodPressure)}
-            placeholder="120/80"
-          />
-          <TextField
-            label="SpO₂ (%)"
-            value={form.spO2}
-            onChangeText={set("spO2", sanitizeInteger)}
-            placeholder="98"
-            keyboardType="number-pad"
-          />
-          <TextField
-            label="Blood sugar (mg/dL)"
-            value={form.bloodSugar}
-            onChangeText={set("bloodSugar", sanitizeBloodSugar)}
-            placeholder="110"
-            keyboardType="number-pad"
-          />
-          {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
-        </ScrollView>
+          <Pressable
+            onPress={Keyboard.dismiss}
+            accessible={false}
+            style={{ gap: 12 }}
+          >
+            <Text className="mb-1 text-sm text-neutral-500">
+              Units are applied automatically (temp °F, height cm, weight kg).
+            </Text>
+            <TextField
+              label="Temperature (°F)"
+              value={form.temperature}
+              onChangeText={set("temperature", sanitizeTemperature)}
+              placeholder="98.6"
+              keyboardType="decimal-pad"
+            />
+            <TextField
+              label="Height (cm)"
+              value={form.height}
+              onChangeText={set("height", sanitizeDecimal)}
+              placeholder="170"
+              keyboardType="decimal-pad"
+            />
+            <TextField
+              label="Weight (kg)"
+              value={form.weight}
+              onChangeText={set("weight", sanitizeDecimal)}
+              placeholder="70"
+              keyboardType="decimal-pad"
+            />
+            <TextField
+              label="Blood pressure"
+              value={form.bloodPressure}
+              onChangeText={set("bloodPressure", sanitizeBloodPressure)}
+              placeholder="120/80"
+            />
+            <TextField
+              label="SpO₂ (%)"
+              value={form.spO2}
+              onChangeText={set("spO2", sanitizeInteger)}
+              placeholder="98"
+              keyboardType="number-pad"
+            />
+            <TextField
+              label="Blood sugar (mg/dL)"
+              value={form.bloodSugar}
+              onChangeText={set("bloodSugar", sanitizeBloodSugar)}
+              placeholder="110"
+              keyboardType="number-pad"
+            />
+            {error ? (
+              <Text className="text-sm text-red-500">{error}</Text>
+            ) : null}
 
-        <View className="flex-row gap-3 border-t border-neutral-200 px-4 py-3">
-          <Button
-            label="Cancel"
-            variant="outline"
-            className="flex-1"
-            onPress={onClose}
-            disabled={save.isPending}
-          />
-          <Button
-            label="Save"
-            className="flex-1"
-            onPress={onSave}
-            loading={save.isPending}
-          />
-        </View>
+            <View className="mt-2 flex-row gap-3">
+              <Button
+                label="Cancel"
+                variant="outline"
+                className="flex-1"
+                onPress={onClose}
+                disabled={save.isPending}
+              />
+              <Button
+                label="Save"
+                className="flex-1"
+                onPress={onSave}
+                loading={save.isPending}
+              />
+            </View>
+          </Pressable>
+        </ScrollView>
       </View>
     </AppModal>
   );
