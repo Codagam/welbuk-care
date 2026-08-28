@@ -5,7 +5,7 @@ import {
   Text,
   View,
 } from "react-native";
-import DateTimePicker from "@expo/ui/community/datetime-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { AppModal } from "./AppModal";
 
@@ -75,7 +75,7 @@ export function DateField({
   const max = maximumDate ? parseYmd(maximumDate) : undefined;
   const display = value?.trim() ? formatDisplay(value) : "";
 
-  const handleValueChange = (_event: unknown, selected: Date) => {
+  const handleValueChange = (_event: unknown, selected?: Date) => {
     setOpen(false);
     if (selected) onChange(formatYmd(selected));
   };
@@ -108,11 +108,10 @@ export function DateField({
         <DateTimePicker
           value={parsed}
           mode="date"
-          presentation="dialog"
+          display="default"
           minimumDate={min}
           maximumDate={max}
-          onValueChange={handleValueChange}
-          onDismiss={() => setOpen(false)}
+          onChange={handleValueChange}
         />
       ) : null}
 
@@ -145,10 +144,15 @@ export function DateField({
                 display="spinner"
                 minimumDate={min}
                 maximumDate={max}
-                onValueChange={(_event, selected) => {
+                onChange={(_event, selected) => {
                   if (selected) onChange(formatYmd(selected));
                 }}
-                style={{ alignSelf: "center" }}
+                style={{
+                  alignSelf: "center",
+                  width: "100%",
+                  maxWidth: 340,
+                  height: 216,
+                }}
               />
             </Pressable>
           </Pressable>

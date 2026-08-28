@@ -5,7 +5,7 @@ import {
   Text,
   View,
 } from "react-native";
-import DateTimePicker from "@expo/ui/community/datetime-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { AppModal } from "./AppModal";
 
@@ -50,7 +50,7 @@ export function TimeField({
   const parsed = useMemo(() => parseHHmm(value), [value]);
   const display = value?.trim() || "";
 
-  const handleValueChange = (_event: unknown, selected: Date) => {
+  const handleValueChange = (_event: unknown, selected?: Date) => {
     setOpen(false);
     if (selected) onChange(formatHHmm(selected));
   };
@@ -83,10 +83,9 @@ export function TimeField({
         <DateTimePicker
           value={parsed}
           mode="time"
-          presentation="dialog"
+          display="default"
           is24Hour
-          onValueChange={handleValueChange}
-          onDismiss={() => setOpen(false)}
+          onChange={handleValueChange}
         />
       ) : null}
 
@@ -118,10 +117,15 @@ export function TimeField({
                 mode="time"
                 display="spinner"
                 is24Hour
-                onValueChange={(_event, selected) => {
+                onChange={(_event, selected) => {
                   if (selected) onChange(formatHHmm(selected));
                 }}
-                style={{ alignSelf: "center" }}
+                style={{
+                  alignSelf: "center",
+                  width: "100%",
+                  maxWidth: 340,
+                  height: 216,
+                }}
               />
             </Pressable>
           </Pressable>
