@@ -1,4 +1,5 @@
-﻿import {
+﻿﻿import { useRouter } from "expo-router";
+import {
   useLayoutEffect,
   useMemo,
   useRef,
@@ -12,7 +13,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 
 import {
   useInvalidatePatientHistory,
@@ -164,7 +164,7 @@ export function PlanOfCareSection({
           setError(CONSULT_LOCKED_COMPLETE_REASON);
           return;
         }
-        // Flush would 409 on a completed consult ΓÇö skip when already locked.
+        // Flush would 409 on a completed consult — skip when already locked.
         if (flushDental && !locked) {
           const ok = await flushDental();
           if (!ok) {
@@ -182,7 +182,7 @@ export function PlanOfCareSection({
           allergyOverrideAck: allergy.allergyOverrideAck,
         });
         const doneLabel = res.consultationNumber
-          ? `Completed ┬╖ ${res.consultationNumber}`
+          ? `Completed · ${res.consultationNumber}`
           : "Visit completed.";
         setDone(doneLabel);
         goToQueueAfterComplete(doneLabel);
@@ -247,7 +247,7 @@ export function PlanOfCareSection({
       />
 
       {draft.isLoading || summaryQ.isLoading ? (
-        <Text className="text-sm text-neutral-400">Loading plan of careΓÇª</Text>
+        <Text className="text-sm text-neutral-400">Loading plan of care…</Text>
       ) : null}
 
       {/* 1. Prescription */}
@@ -269,7 +269,7 @@ export function PlanOfCareSection({
         />
       </View>
 
-      {/* 2. Labs ΓÇö full width, never shares a row with notes */}
+      {/* 2. Labs — full width, never shares a row with notes */}
       <View style={styles.block}>
         <LabsCard
           labReports={labReports}
@@ -346,7 +346,7 @@ export function PlanOfCareSection({
         onClose={() => setReferOpen(false)}
         patientId={patientId}
         patientName={patientName || patientLine}
-        patientAge={patientAge ?? "ΓÇö"}
+        patientAge={patientAge ?? "—"}
         patientGender={patientGender}
         patientPhone={patientPhone}
         doctorId={resolvedDoctorId}
@@ -357,7 +357,7 @@ export function PlanOfCareSection({
   );
 }
 
-/** Explicit RN styles ΓÇö NativeWind `gap` alone can become CSS flex-row on web and overlay Labs on notes. */
+/** Explicit RN styles — NativeWind `gap` alone can become CSS flex-row on web and overlay Labs on notes. */
 const styles = StyleSheet.create({
   stack: {
     width: "100%",
