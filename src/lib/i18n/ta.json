@@ -37,7 +37,10 @@
   },
   "common": {
     "signOut": "வெளியேறு",
-    "switchFacility": "வசதியை மாற்று"
+    "switchFacility": "வசதியை மாற்று",
+    "cancel": "ரத்து செய்",
+    "signOutConfirmTitle": "வெளியேறவா?",
+    "signOutConfirmMessage": "செயலியைப் பயன்படுத்த மீண்டும் உள்நுழைய வேண்டும்."
   },
   "settings": {
     "title": "அமைப்புகள்",
