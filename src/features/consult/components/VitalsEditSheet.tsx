@@ -1,9 +1,17 @@
-import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
-import { AppModal, Button, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
+import { AppModal, Button, TextField } from "@/ui";
 import { useSaveVitals } from "../hooks";
 import {
   buildVitalsPayload,
@@ -45,6 +53,17 @@ export function VitalsEditSheet({
   );
   const [error, setError] = useState<string | null>(null);
 
+  // iOS: numeric ("decimal-pad" / "number-pad") keyboards refuse to appear on the
+  // first tap inside a `presentationStyle="pageSheet"` modal until a standard
+  // keyboard has been shown once in that sheet. Prime it with a hidden input when
+  // the sheet opens so the first real tap always brings the keypad up.
+  const primerRef = useRef<TextInput>(null);
+  const primeKeyboard = () => {
+    if (Platform.OS !== "ios") return;
+    primerRef.current?.focus();
+    setTimeout(() => primerRef.current?.blur(), 350);
+  };
+
   useEffect(() => {
     if (!open) return;
     setForm(initialVitalsToForm(initialVitals));
@@ -85,8 +104,19 @@ export function VitalsEditSheet({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      onShow={primeKeyboard}
     >
-      <View className="flex-1 bg-white">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        className="flex-1 bg-white"
+      >
+        <TextInput
+          ref={primerRef}
+          keyboardType="decimal-pad"
+          style={{ position: "absolute", height: 0, width: 0, opacity: 0 }}
+          pointerEvents="none"
+          caretHidden
+        />
         <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
           <Text className="text-lg font-semibold text-neutral-900">
             Edit vitals
@@ -110,21 +140,25 @@ export function VitalsEditSheet({
               value={form.temperature}
               onChangeText={set("temperature", sanitizeTemperature)}
               placeholder="98.6"
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
+              returnKeyType={(Platform.OS === 'ios') ? 'done' : 'next'}
+
             />
             <TextField
               label="Height (cm)"
               value={form.height}
               onChangeText={set("height", sanitizeDecimal)}
               placeholder="170"
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
+              returnKeyType={(Platform.OS === 'ios') ? 'done' : 'next'}
             />
             <TextField
               label="Weight (kg)"
               value={form.weight}
               onChangeText={set("weight", sanitizeDecimal)}
               placeholder="70"
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
+              returnKeyType={(Platform.OS === 'ios') ? 'done' : 'next'}
             />
             <TextField
               label="Blood pressure"
@@ -138,6 +172,7 @@ export function VitalsEditSheet({
               onChangeText={set("spO2", sanitizeInteger)}
               placeholder="98"
               keyboardType="number-pad"
+              returnKeyType={(Platform.OS === 'ios') ? 'done' : 'next'}
             />
             <TextField
               label="Blood sugar (mg/dL)"
@@ -167,7 +202,7 @@ export function VitalsEditSheet({
             </View>
           </View>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </AppModal>
   );
 }
