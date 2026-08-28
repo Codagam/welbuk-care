@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { Redirect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -20,6 +20,13 @@ export default function SelectFacilityScreen() {
 
   const facilities = session?.facilities ?? [];
 
+  const confirmSignOut = () => {
+    Alert.alert("Sign out?", "You'll need to sign in again to use the app.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign out", style: "destructive", onPress: () => signOut() },
+    ]);
+  };
+
   const choose = async (id: string) => {
     await setActiveFacility(id);
     if (router.canGoBack()) {
@@ -32,7 +39,11 @@ export default function SelectFacilityScreen() {
   return (
     <Screen bgClassName="bg-white">
       {canGoBack ? (
-        <TopBar title="Switch facility" subtitle={activeFacility?.name} />
+        <TopBar
+          title="Switch facility"
+          subtitle={activeFacility?.name}
+          backLabel="Back"
+        />
       ) : null}
 
       <ScrollView
@@ -135,7 +146,7 @@ export default function SelectFacilityScreen() {
             ) : null}
           </View>
 
-          <Button label="Sign out" variant="ghost" onPress={() => signOut()} />
+          <Button label="Sign out" variant="ghost" onPress={confirmSignOut} />
         </View>
       </ScrollView>
     </Screen>

@@ -1,4 +1,5 @@
-﻿import {
+﻿﻿import { useRouter } from "expo-router";
+import {
   useLayoutEffect,
   useMemo,
   useRef,
@@ -12,7 +13,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 
 import {
   useInvalidatePatientHistory,
