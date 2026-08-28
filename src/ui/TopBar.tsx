@@ -36,7 +36,11 @@ export function TopBar({
       hitSlop={8}
       className={
         backLabel
-          ? "min-h-9 justify-center px-1 active:opacity-70"
+          ? `flex-row items-center justify-center rounded-md px-4 py-2.5 ${
+              brand
+                ? "border border-white/40 active:bg-white/15"
+                : "bg-brand active:bg-brand-600"
+            }`
           : brand
             ? "h-9 w-9 items-center justify-center rounded-full active:bg-white/15"
             : "h-9 w-9 items-center justify-center rounded-full active:bg-neutral-100"
@@ -44,9 +48,7 @@ export function TopBar({
     >
       {backLabel ? (
         <Text
-          className={`text-base font-semibold ${
-            brand ? "text-white" : "text-neutral-700"
-          }`}
+          className="text-base font-semibold text-white"
         >
           {backLabel}
         </Text>

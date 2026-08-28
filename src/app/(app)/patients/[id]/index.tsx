@@ -1,28 +1,25 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   RefreshControl,
   ScrollView,
   Text,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { useQueryClient } from "@tanstack/react-query";
 
-import { Button, Screen, TopBar } from "@/ui";
+import { DocumentsCard } from "@/features/consult/components/DocumentsCard";
+import { usePatient } from "@/features/patients/hooks";
+import { QuestionnaireSheet } from "@/features/patients/QuestionnaireSheet";
+import { AppointmentsCard } from "@/features/patients/sections/AppointmentsCard";
+import { LabReportsCard } from "@/features/patients/sections/LabReportsCard";
+import { MedicalHistoryCard } from "@/features/patients/sections/MedicalHistoryCard";
+import { PatientHeaderCard } from "@/features/patients/sections/PatientHeaderCard";
+import { ReferralsCard } from "@/features/patients/sections/ReferralsCard";
 import { describeError } from "@/lib/api/errors";
 import { useFacilityId } from "@/lib/auth/store";
-import { usePatient } from "@/features/patients/hooks";
-import { PatientHeaderCard } from "@/features/patients/sections/PatientHeaderCard";
-import { AppointmentsCard } from "@/features/patients/sections/AppointmentsCard";
-import { MedicalHistoryCard } from "@/features/patients/sections/MedicalHistoryCard";
-import { ReferralsCard } from "@/features/patients/sections/ReferralsCard";
-import { LabReportsCard } from "@/features/patients/sections/LabReportsCard";
-import { DocumentsCard } from "@/features/consult/components/DocumentsCard";
-import { QuestionnaireSheet } from "@/features/patients/QuestionnaireSheet";
-import { UnlinkPatientDialog } from "@/features/patients/UnlinkPatientDialog";
+import { Button, Screen, TopBar } from "@/ui";
 
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,8 +29,6 @@ export default function PatientDetailScreen() {
   const q = usePatient(id);
 
   const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
-  const [unlinkOpen, setUnlinkOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const mongoId = q.data?.id;
   const routeId = id ?? "";
@@ -53,47 +48,25 @@ export default function PatientDetailScreen() {
   return (
     <Screen>
       <TopBar
-        title="Patient"
+        title=""
+        backLabel="Back"
         right={
           q.data ? (
-            <View className="flex-row items-center gap-2">
-              <Button
-                label="Edit"
-                size="md"
-                variant="primary"
-                onPress={() =>
-                  router.push({
-                    pathname: "/patients/[id]/edit",
-                    params: { id: routeId },
-                  })
-                }
-              />
-              <Pressable
-                onPress={() => setMenuOpen((v) => !v)}
-                hitSlop={10}
-                className="h-10 w-10 items-center justify-center rounded-full border border-neutral-200"
-                accessibilityLabel="More actions"
-              >
-                <Ionicons name="ellipsis-vertical" size={18} color="#404040" />
-              </Pressable>
-            </View>
+            <Button
+              label="Edit"
+              size="md"
+              variant="primary"
+              className="rounded-md"
+              onPress={() =>
+                router.push({
+                  pathname: "/patients/[id]/edit",
+                  params: { id: routeId },
+                })
+              }
+            />
           ) : undefined
         }
       />
-
-      {menuOpen && q.data ? (
-        <View className="absolute right-4 top-16 z-20 min-w-[180px] rounded-xl border border-neutral-200 bg-white shadow-lg">
-          <Pressable
-            onPress={() => {
-              setMenuOpen(false);
-              setUnlinkOpen(true);
-            }}
-            className="px-4 py-3 active:bg-neutral-50"
-          >
-            <Text className="text-sm text-red-600">Remove from facility</Text>
-          </Pressable>
-        </View>
-      ) : null}
 
       {q.isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -154,21 +127,13 @@ export default function PatientDetailScreen() {
       )}
 
       {q.data && mongoId ? (
-        <>
-          <QuestionnaireSheet
-            open={questionnaireOpen}
-            onOpenChange={setQuestionnaireOpen}
-            patientId={routeId || mongoId}
-            mongoPatientId={mongoId}
-            onSaved={() => void refreshAll()}
-          />
-          <UnlinkPatientDialog
-            open={unlinkOpen}
-            onOpenChange={setUnlinkOpen}
-            patient={q.data}
-            onUnlinked={() => router.replace("/(app)/(tabs)/patients")}
-          />
-        </>
+        <QuestionnaireSheet
+          open={questionnaireOpen}
+          onOpenChange={setQuestionnaireOpen}
+          patientId={routeId || mongoId}
+          mongoPatientId={mongoId}
+          onSaved={() => void refreshAll()}
+        />
       ) : null}
     </Screen>
   );
