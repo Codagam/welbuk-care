@@ -7,7 +7,10 @@
     "icon": "./assets/images/icon.png",
     "scheme": "welbukcare",
     "userInterfaceStyle": "light",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "androidStatusBar": {
       "backgroundColor": "#FD006A",
       "barStyle": "light-content",
@@ -15,7 +18,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "requireFullScreen": false
+      "requireFullScreen": false,
+      "bundleIdentifier": "practice.welbuk.com",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
@@ -63,7 +70,14 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "expo-status-bar": {
+        "style": "light",
+        "hidden": false
+      },
+      "eas": {
+        "projectId": "40f727fc-b284-4a57-b371-86af2ff1875d"
+      }
     }
   }
 }
