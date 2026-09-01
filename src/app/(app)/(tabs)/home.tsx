@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,7 +18,11 @@ import {
 } from "@/lib/auth/store";
 import { Screen } from "@/ui";
 
-const APP_VERSION = "1.0.0";
+/** Marketing version from app.json (read at runtime, not hardcoded). */
+const APP_VERSION =
+  Constants.expoConfig?.version ??
+  Constants.expoConfig?.extra?.version ??
+  "1.0.0";
 
 function initialsFromName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
