@@ -7,10 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "welbukcare",
     "userInterfaceStyle": "light",
-    "platforms": [
-      "ios",
-      "android"
-    ],
+    "platforms": ["ios", "android"],
     "androidStatusBar": {
       "backgroundColor": "#FD006A",
       "barStyle": "light-content",
@@ -18,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "requireFullScreen": false,
+      "requireFullScreen": true,
       "bundleIdentifier": "practice.welbuk.com",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false

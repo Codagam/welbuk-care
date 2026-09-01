@@ -4,7 +4,7 @@ import "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 import { QueryClientProvider } from "@tanstack/react-query";
 import Constants from "expo-constants";
-import { Stack } from "expo-router";
+import { Stack, type ErrorBoundaryProps } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useMemo, useState } from "react";
 import { Linking, Platform, Pressable, Text, View } from "react-native";
@@ -175,6 +175,99 @@ function UpdateVersionAlert() {
         </View>
       </View>
     </AppModal>
+  );
+}
+
+/**
+ * Root error boundary (wired automatically by expo-router). Catches render-time
+ * crashes anywhere below and shows a recoverable screen instead of unmounting
+ * the whole tree to a white screen in production.
+ *
+ * Uses inline styles on purpose — this must render even if NativeWind / theming
+ * is implicated in the crash. Event-handler and async errors are handled
+ * elsewhere via try/catch + describeError; this covers the render path.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    // TODO(sentry): Sentry.captureException(error) once the DSN is configured.
+    console.error("[ErrorBoundary]", error);
+  }, [error]);
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        backgroundColor: "#ffffff",
+      }}
+    >
+      <View
+        style={{
+          height: 64,
+          width: 64,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 20,
+          backgroundColor: "#FD006A",
+          marginBottom: 16,
+        }}
+      >
+        <Ionicons name="warning-outline" size={30} color="#ffffff" />
+      </View>
+      <Text
+        style={{
+          fontSize: 18,
+          fontWeight: "600",
+          color: "#111827",
+          textAlign: "center",
+          marginBottom: 8,
+        }}
+      >
+        Something went wrong
+      </Text>
+      <Text
+        style={{
+          fontSize: 14,
+          lineHeight: 20,
+          color: "#6b7280",
+          textAlign: "center",
+          maxWidth: 360,
+          marginBottom: 20,
+        }}
+      >
+        The app hit an unexpected problem. Try again — if it keeps happening,
+        close and reopen the app.
+      </Text>
+      <Pressable
+        onPress={retry}
+        accessibilityRole="button"
+        accessibilityLabel="Try again"
+        style={{
+          backgroundColor: "#FD006A",
+          paddingHorizontal: 24,
+          paddingVertical: 12,
+          borderRadius: 12,
+        }}
+      >
+        <Text style={{ color: "#ffffff", fontSize: 15, fontWeight: "600" }}>
+          Try again
+        </Text>
+      </Pressable>
+      {__DEV__ ? (
+        <Text
+          style={{
+            fontSize: 11,
+            color: "#9ca3af",
+            textAlign: "center",
+            marginTop: 16,
+          }}
+        >
+          {error?.message}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
