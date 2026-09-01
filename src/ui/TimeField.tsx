@@ -55,6 +55,8 @@ export function TimeField({
     if (selected) onChange(formatHHmm(selected));
   };
 
+  const handleDismiss = () => setOpen(false);
+
   return (
     <View className={`gap-1.5 ${containerClassName}`}>
       {label ? (
@@ -85,7 +87,8 @@ export function TimeField({
           mode="time"
           display="default"
           is24Hour
-          onChange={handleValueChange}
+          onValueChange={handleValueChange}
+          onDismiss={handleDismiss}
         />
       ) : null}
 
@@ -117,7 +120,7 @@ export function TimeField({
                 mode="time"
                 display="spinner"
                 is24Hour
-                onChange={(_event, selected) => {
+                onValueChange={(_event, selected) => {
                   if (selected) onChange(formatHHmm(selected));
                 }}
                 style={{

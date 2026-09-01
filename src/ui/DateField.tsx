@@ -80,6 +80,8 @@ export function DateField({
     if (selected) onChange(formatYmd(selected));
   };
 
+  const handleDismiss = () => setOpen(false);
+
   return (
     <View className={`gap-1.5 ${containerClassName}`}>
       {label ? (
@@ -111,7 +113,8 @@ export function DateField({
           display="default"
           minimumDate={min}
           maximumDate={max}
-          onChange={handleValueChange}
+          onValueChange={handleValueChange}
+          onDismiss={handleDismiss}
         />
       ) : null}
 
@@ -144,7 +147,7 @@ export function DateField({
                 display="spinner"
                 minimumDate={min}
                 maximumDate={max}
-                onChange={(_event, selected) => {
+                onValueChange={(_event, selected) => {
                   if (selected) onChange(formatYmd(selected));
                 }}
                 style={{
