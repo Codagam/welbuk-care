@@ -262,14 +262,14 @@ export default function SettingsScreen() {
                 icon="help-circle-outline"
                 label={t("settings.helpFaq")}
                 subtitle={t("settings.helpFaqHint")}
-                onPress={() => console.log("settings: help & faq")}
+                onPress={() => Linking.openURL("https://practice.welbuk.com")}
               />
               <MenuRow
                 icon="chatbubble-ellipses-outline"
                 label={t("settings.contactSupport")}
                 subtitle={t("settings.contactSupportHint")}
                 last
-                onPress={() => Linking.openURL("https://practice.welbuk.com/login")}
+                onPress={() => Linking.openURL("https://practice.welbuk.com")}
               />
             </MenuCard>
           </View>
