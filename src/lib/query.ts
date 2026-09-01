@@ -12,6 +12,8 @@ export const queryClient = new QueryClient({
           if (["UNAUTHORIZED", "FORBIDDEN", "IP_BLOCKED", "PATIENT_MANAGE_REQUIRED", "CONSULT_COMPLETED"].includes(error.code)) {
             return false;
           }
+          // A hung request already cost the full timeout — retry once, not twice.
+          if (error.code === "TIMEOUT") return failureCount < 1;
         }
         return failureCount < 2;
       },

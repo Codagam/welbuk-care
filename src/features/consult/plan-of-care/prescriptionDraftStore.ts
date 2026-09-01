@@ -3,15 +3,59 @@
  * Key mirrors Practice: welbuk-consult-prescriptions-{consultationId}
  *
  * Uses SecureStore (available in Care). Drafts are small (few med lines).
+ *
+ * SecureStore has no "list keys" API, so we keep an index of consultationIds
+ * that currently have a draft — this lets sign-out wipe every draft (drug names
+ * and doses are PHI and Care runs on shared clinic tablets).
  */
 import * as SecureStore from "expo-secure-store";
 
 import type { PlanPrescription } from "./types";
 
 const PREFIX = "welbuk-consult-prescriptions";
+const INDEX_KEY = `${PREFIX}-index`;
 
 function storageKey(consultationId: string): string {
   return `${PREFIX}-${consultationId}`;
+}
+
+async function readIndex(): Promise<string[]> {
+  try {
+    const raw = await SecureStore.getItemAsync(INDEX_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((v): v is string => typeof v === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeIndex(ids: string[]): Promise<void> {
+  try {
+    if (ids.length === 0) {
+      await SecureStore.deleteItemAsync(INDEX_KEY);
+      return;
+    }
+    await SecureStore.setItemAsync(INDEX_KEY, JSON.stringify(ids));
+  } catch {
+    // best-effort
+  }
+}
+
+async function addToIndex(consultationId: string): Promise<void> {
+  const ids = await readIndex();
+  if (!ids.includes(consultationId)) {
+    await writeIndex([...ids, consultationId]);
+  }
+}
+
+async function removeFromIndex(consultationId: string): Promise<void> {
+  const ids = await readIndex();
+  if (ids.includes(consultationId)) {
+    await writeIndex(ids.filter((id) => id !== consultationId));
+  }
 }
 
 export async function loadPrescriptionDraft(
@@ -45,6 +89,7 @@ export async function savePrescriptionDraft(
       storageKey(consultationId),
       JSON.stringify(prescriptions)
     );
+    await addToIndex(consultationId);
   } catch {
     // Best-effort; in-memory state still wins for the session.
   }
@@ -56,9 +101,21 @@ export async function clearPrescriptionDraft(
   if (!consultationId.trim()) return;
   try {
     await SecureStore.deleteItemAsync(storageKey(consultationId));
+    await removeFromIndex(consultationId);
   } catch {
     // ignore
   }
+}
+
+/** Wipe every locally-stored prescription draft. Called on sign-out. */
+export async function clearAllPrescriptionDrafts(): Promise<void> {
+  const ids = await readIndex();
+  await Promise.all(
+    ids.map((id) =>
+      SecureStore.deleteItemAsync(storageKey(id)).catch(() => {})
+    )
+  );
+  await writeIndex([]);
 }
 
 /** Merge API structured lines with local draft (by id; API first). */

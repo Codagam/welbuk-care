@@ -17,6 +17,7 @@ export type ApiErrorCode =
   | "CONFLICT" // 409 generic
   | "VALIDATION" // 400
   | "NETWORK" // fetch failed / offline
+  | "TIMEOUT" // request exceeded the client-side timeout (hung server)
   | "HTTP"; // anything else
 
 export interface ApiErrorInit {
@@ -127,6 +128,8 @@ export function describeError(err: unknown): string {
         );
       case "NETWORK":
         return FRIENDLY_NETWORK;
+      case "TIMEOUT":
+        return "The server took too long to respond. Check your connection and try again.";
       case "NOT_FOUND":
         return friendlyFromMessage(err.message, "We couldn't find what you requested.");
       case "FORBIDDEN":

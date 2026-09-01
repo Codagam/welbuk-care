@@ -62,3 +62,20 @@ export async function fetchProxiedFileToCache(
 
   return { localUri: result.uri };
 }
+
+/**
+ * Delete every file downloaded via the proxy (lab reports, insurance cards,
+ * documents, images). Called on sign-out — Care runs on shared clinic tablets
+ * and these are decrypted PHI at rest.
+ */
+export async function clearProxiedFileCache(): Promise<void> {
+  try {
+    if (!FileSystem.cacheDirectory) return;
+    const info = await FileSystem.getInfoAsync(CACHE_DIR);
+    if (info.exists) {
+      await FileSystem.deleteAsync(CACHE_DIR, { idempotent: true });
+    }
+  } catch {
+    // best-effort
+  }
+}

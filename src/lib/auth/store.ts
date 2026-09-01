@@ -7,10 +7,30 @@ import { create } from "zustand";
 
 import { setTokenProvider, setUnauthorizedHandler } from "@/lib/api/client";
 import { fetchMe } from "@/lib/api/endpoints/auth";
+import { clearProxiedFileCache } from "@/lib/api/fetchProxiedFile";
+import { queryClient } from "@/lib/query";
 import { clearFacilityQrCache } from "@/features/header/facilityQrCache";
+import { clearAllPrescriptionDrafts } from "@/features/consult/plan-of-care/prescriptionDraftStore";
 import { authProvider } from "./practice-provider";
 import { activeFacilityStorage, sessionStorage } from "./secure-storage";
 import type { Facility, LoginInput, Session } from "./types";
+
+/**
+ * Wipe every trace of the previous session from the device. Care runs on shared
+ * clinic tablets, so the next user to sign in must not see cached PHI, draft
+ * prescriptions, or downloaded documents. Best-effort — one failure must not
+ * block sign-out.
+ */
+async function clearLocalData(): Promise<void> {
+  queryClient.clear();
+  await Promise.allSettled([
+    sessionStorage.clear(),
+    activeFacilityStorage.clear(),
+    clearFacilityQrCache(),
+    clearAllPrescriptionDrafts(),
+    clearProxiedFileCache(),
+  ]);
+}
 
 type Status = "loading" | "authed" | "anon";
 
@@ -116,11 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // best-effort
     }
-    await Promise.all([
-      sessionStorage.clear(),
-      activeFacilityStorage.clear(),
-      clearFacilityQrCache(),
-    ]);
+    await clearLocalData();
     set({ session: null, activeFacilityId: null, status: "anon", sessionExpired: false });
   },
 
@@ -171,9 +187,7 @@ setTokenProvider(() => authProvider.resolveToken(useAuthStore.getState().session
 
 setUnauthorizedHandler(() => {
   if (useAuthStore.getState().status === "anon") return;
-  sessionStorage.clear().catch(() => {});
-  activeFacilityStorage.clear().catch(() => {});
-  clearFacilityQrCache().catch(() => {});
+  void clearLocalData();
   useAuthStore.setState({
     session: null,
     activeFacilityId: null,

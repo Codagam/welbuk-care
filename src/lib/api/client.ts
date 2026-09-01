@@ -43,7 +43,16 @@ export interface ApiRequest {
   /** Don't fire the global 401 handler (e.g. the login call handles its own 401). */
   skipAuthRedirect?: boolean;
   signal?: AbortSignal;
+  /**
+   * Abort the request after this many ms and throw a `TIMEOUT` ApiError.
+   * Omit for the default (25s for JSON calls, none for multipart uploads).
+   * Pass `null` to disable, or a number to override.
+   */
+  timeoutMs?: number | null;
 }
+
+/** Default request timeout for JSON calls. Uploads opt out (can run long on 3G). */
+const DEFAULT_TIMEOUT_MS = 25_000;
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
   const base = path.startsWith("http")
@@ -99,15 +108,50 @@ export async function api<T = unknown>(req: ApiRequest): Promise<T> {
     }
   }
 
+  // RN's fetch has no built-in timeout — a server that accepts the connection
+  // but never responds would leave this promise pending forever and freeze the
+  // screen. Abort after `timeoutMs` and forward any caller-supplied signal into
+  // the same controller so either can cancel.
+  const timeoutMs =
+    req.timeoutMs === undefined
+      ? isForm
+        ? null
+        : DEFAULT_TIMEOUT_MS
+      : req.timeoutMs;
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId =
+    timeoutMs != null
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : undefined;
+
+  if (req.signal) {
+    if (req.signal.aborted) controller.abort();
+    else
+      req.signal.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
+  }
+
   let res: Response;
   try {
     res = await fetch(url, {
       method: req.method ?? "GET",
       headers,
       body,
-      signal: req.signal,
+      signal: controller.signal,
     });
   } catch (err) {
+    if (timedOut) {
+      throw new ApiError(
+        "The server took too long to respond. Check your connection and try again.",
+        { status: 0, code: "TIMEOUT", data: { url, timeoutMs } }
+      );
+    }
     if (err instanceof Error && err.name === "AbortError") throw err;
     const underlying =
       err instanceof Error ? err.message : typeof err === "string" ? err : "unknown";
@@ -117,6 +161,8 @@ export async function api<T = unknown>(req: ApiRequest): Promise<T> {
       code: "NETWORK",
       data: { url, underlying, err: String(err) },
     });
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 
   const text = await res.text();
