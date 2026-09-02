@@ -52,12 +52,9 @@ function UpdateVersionAlert() {
 
     const run = async () => {
       try {
-        const localVersionCode = String(
-          Constants.nativeBuildVersion ??
-            // Fallback if native build version is missing for some reason.
-            Constants.expoConfig?.version ??
-            ""
-        ).trim();
+        const localVersionCode =  Constants.expoConfig?.version ??
+        Constants.expoConfig?.extra?.version ?? "";
+        // console.log("Constants.expoConfig", Constants.expoConfig);
 
         if (!localVersionCode) return;
 
@@ -69,6 +66,7 @@ function UpdateVersionAlert() {
           skipAuth: true,
         });
 
+
         const payload = res?.data;
         if (!payload) return;
 
@@ -77,7 +75,6 @@ function UpdateVersionAlert() {
           : payload.androidVersionCode;
         const remoteVersionCode =
           remoteVersionCodeRaw == null ? "" : String(remoteVersionCodeRaw);
-
         // If same version/build => no alert at all.
         if (!remoteVersionCode || remoteVersionCode === localVersionCode) return;
 
