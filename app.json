@@ -7,7 +7,10 @@
     "icon": "./assets/images/icon.png",
     "scheme": "welbukcare",
     "userInterfaceStyle": "light",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "androidStatusBar": {
       "backgroundColor": "#FD006A",
       "barStyle": "light-content",
@@ -29,6 +32,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.VIBRATE",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.VIBRATE"
@@ -80,6 +86,12 @@
       "eas": {
         "projectId": "40f727fc-b284-4a57-b371-86af2ff1875d"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/40f727fc-b284-4a57-b371-86af2ff1875d"
     }
   }
 }
