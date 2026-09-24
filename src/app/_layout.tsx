@@ -6,7 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Linking, Platform, Pressable, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -16,8 +16,10 @@ import { ApiError } from "@/lib/api/errors";
 import { useAuthStore } from "@/lib/auth/store";
 import { queryClient } from "@/lib/query";
 import { AppModal, AppStatusBar, Button } from "@/ui";
+import { AnimatedSplash, splashHasPlayed } from "@/ui/AnimatedSplash";
 
-SplashScreen.preventAutoHideAsync();
+// Module scope: keep the native splash up until AnimatedSplash paints its first frame.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 type VersionResponse = {
   data?: {
@@ -180,20 +182,39 @@ function UpdateVersionAlert() {
 
 export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate);
+  const [hydrated, setHydrated] = useState(false);
+  const [splashDone, setSplashDone] = useState(splashHasPlayed);
 
   useEffect(() => {
-    hydrate().finally(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    });
+    let cancelled = false;
+    // Never block the splash forever — ready even if hydrate throws.
+    hydrate()
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [hydrate]);
+
+  const handleSplashFinish = useCallback(() => setSplashDone(true), []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
           <AppStatusBar />
-          <UpdateVersionAlert />
+          {/* Update prompt waits until the splash is gone. */}
+          {splashDone ? <UpdateVersionAlert /> : null}
           <Stack screenOptions={{ headerShown: false }} />
+          {/* Overlay rendered last, never swapped by an early return. */}
+          {splashDone ? null : (
+            <AnimatedSplash
+              isAppReady={hydrated}
+              onFinish={handleSplashFinish}
+            />
+          )}
         </SafeAreaProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
