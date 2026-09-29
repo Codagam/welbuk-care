@@ -51,6 +51,8 @@ export interface PatientWriteInput {
   address?: string;
   isWhatsAppNumber?: boolean;
   parentOrGuardianName?: string;
+  /** Create only — set after the mobile passed OTP at the desk. */
+  isPhoneVerified?: boolean;
   consentGiven: true;
 }
 

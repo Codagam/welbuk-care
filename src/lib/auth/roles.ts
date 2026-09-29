@@ -84,6 +84,24 @@ export function isNurseRole(user: AuthUser | null | undefined): boolean {
   );
 }
 
+/**
+ * Front-desk receptionist (Practice role slug `receptionist`) — not a doctor or
+ * elevated admin. When `facilityId` has an entry in `rolesByFacility`, only
+ * that facility's roles count.
+ */
+export function isReceptionistRole(
+  user: AuthUser | null | undefined,
+  facilityId?: string | null
+): boolean {
+  if (!user || isDoctorRole(user)) return false;
+  if (isSuperAdminUser(user) || isFacilityAdminUser(user)) return false;
+  const scoped = facilityId ? user.rolesByFacility?.[facilityId] : undefined;
+  const keys = scoped ? scoped.map(normalizeRoleKey) : userRoleKeys(user);
+  return keys.some(
+    (key) => key === "receptionist" || key.includes("receptionist")
+  );
+}
+
 /** Display name for greetings: displayName → name → email local-part. */
 export function userDisplayName(user: AuthUser | null | undefined): string {
   if (!user) return "";

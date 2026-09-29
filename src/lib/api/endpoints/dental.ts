@@ -147,6 +147,7 @@ export type FacilityDoctor = {
   doctorId?: number;
   specialization?: string;
   isDefault?: boolean;
+  slotDurationMinutes?: number;
 };
 
 export function getFacilityDoctors(
@@ -164,6 +165,10 @@ export function getFacilityDoctors(
       specialization:
         typeof x.specialization === "string" ? x.specialization : undefined,
       isDefault: x.isDefault === true,
+      slotDurationMinutes:
+        typeof x.slotDurationMinutes === "number"
+          ? x.slotDurationMinutes
+          : undefined,
     }));
   });
 }

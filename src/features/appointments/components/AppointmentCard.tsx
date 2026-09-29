@@ -11,6 +11,7 @@ import {
   resolveOverdueState,
 } from "../lib/appointmentLifecycle";
 import {
+  canAddVitalsFromList,
   canOpenAppointmentFromList,
   formatAppointmentDate,
   formatDoctorNameForDisplay,
@@ -70,6 +71,12 @@ type Props = {
   canOpenConsult?: boolean;
   canUpdateAppointment?: boolean;
   showPatientPhone?: boolean;
+  /** Receptionist desk: show "Add vital" on eligible visits. */
+  canAddVitals?: boolean;
+  openingVitals?: boolean;
+  /** Receptionist recorded vitals for this visit this session. */
+  vitalsAdded?: boolean;
+  onAddVitals?: () => void;
   onCheckIn?: () => void;
   onOpenConsult?: () => void;
   onFitInNextSlot?: () => void;
@@ -84,6 +91,10 @@ function AppointmentCardInner({
   canOpenConsult = true,
   canUpdateAppointment = false,
   showPatientPhone = false,
+  canAddVitals = false,
+  openingVitals = false,
+  vitalsAdded = false,
+  onAddVitals,
   onCheckIn,
   onOpenConsult,
   onFitInNextSlot,
@@ -120,7 +131,8 @@ function AppointmentCardInner({
   });
   const doctorLine = [doctorName, specialty].filter(Boolean).join(" · ");
   const reason = appointment.reason?.trim() || "";
-  const rowBusy = opening || checkingIn || fittingIn;
+  const rowBusy = opening || checkingIn || fittingIn || openingVitals;
+  const showAddVital = canAddVitals && canAddVitalsFromList(appointment);
   const checkInDisabled = rowBusy || checkInBlocked;
   const isToday = isAppointmentOnToday(appointment);
   const isCompleted =
@@ -208,6 +220,15 @@ function AppointmentCardInner({
               </View>
             </View>
 
+            {canAddVitals && vitalsAdded ? (
+              <View className="flex-row items-center gap-1 self-start rounded-full bg-emerald-50 px-2 py-0.5">
+                <Ionicons name="heart" size={11} color="#059669" />
+                <Text className="text-[11px] font-semibold text-emerald-700">
+                  {t("appointments.vitalsAdded")}
+                </Text>
+              </View>
+            ) : null}
+
             {late.overdue ? (
               <View className="self-start rounded-full bg-red-50 px-2 py-0.5">
                 <Text className="text-[11px] font-semibold text-red-700">
@@ -260,9 +281,30 @@ function AppointmentCardInner({
           </View>
         </View>
 
-        {primaryAction !== "none" ? (
-          <View className="flex-row items-center justify-end border-t border-neutral-100 pt-3">
-            {primaryAction === "check-in" ? (
+        {primaryAction !== "none" || showAddVital ? (
+          <View className="flex-row flex-wrap items-center justify-end gap-2 border-t border-neutral-100 pt-3">
+            {showAddVital ? (
+              <Button
+                label={
+                  vitalsAdded
+                    ? t("appointments.updateVital")
+                    : t("appointments.addVital")
+                }
+                variant="outline"
+                size="md"
+                loading={openingVitals}
+                disabled={rowBusy}
+                onPress={onAddVitals}
+                icon={
+                  openingVitals ? null : (
+                    <Ionicons name="heart-outline" size={16} color="#FD006A" />
+                  )
+                }
+                style={{ height: 44, minWidth: 128 }}
+                className="rounded-xl border-brand"
+              />
+            ) : null}
+            {primaryAction === "none" ? null : primaryAction === "check-in" ? (
               <Button
                 label={t("appointments.checkIn")}
                 variant="outline"

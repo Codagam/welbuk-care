@@ -13,9 +13,13 @@ import { useTranslation } from "react-i18next";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import { userGreetingName } from "@/lib/auth/roles";
+import { isReceptionistRole, userGreetingName } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
+import { VitalsEditSheet } from "@/features/consult/components/VitalsEditSheet";
+import { useRealtimeToastStore } from "@/lib/realtime/toastStore";
+import { useVitalsRecordedStore } from "../vitalsRecordedStore";
+import { useCanBookWalkIn } from "@/features/walk-in";
 import {
   useCanAccessConsult,
   useCanWrite,
@@ -49,6 +53,16 @@ export function AppointmentListScreen() {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [fittingInId, setFittingInId] = useState<string | null>(null);
+  const canBookWalkIn = useCanBookWalkIn();
+  const canAddVitals = isReceptionistRole(user, facilityId);
+  const [openingVitalsId, setOpeningVitalsId] = useState<string | null>(null);
+  const [vitalsTarget, setVitalsTarget] = useState<{
+    consultationId: string;
+    appointmentId: string;
+    patientName: string;
+  } | null>(null);
+  const vitalsRecorded = useVitalsRecordedStore((s) => s.recorded);
+  const markVitalsRecorded = useVitalsRecordedStore((s) => s.markRecorded);
 
   const {
     search,
@@ -140,6 +154,38 @@ export function AppointmentListScreen() {
     await navigateToConsult(appt);
   };
 
+  /** Same as Practice desk: resolve (or create) the visit's consultation, then record vitals on it. */
+  const onAddVitals = async (appt: Appointment) => {
+    if (openingVitalsId !== null) return;
+    setOpeningVitalsId(appt.id);
+    try {
+      const consult = await open.mutateAsync(appt.id);
+      setVitalsTarget({
+        consultationId: consult.id,
+        appointmentId: appt.id,
+        patientName: patientDisplayName(appt),
+      });
+    } catch (err) {
+      Alert.alert(t("appointments.failedToOpenVitals"), describeError(err));
+    } finally {
+      setOpeningVitalsId(null);
+    }
+  };
+
+  /** Receptionist-only confirmation — the sheet only opens behind `canAddVitals`. */
+  const onVitalsSaved = () => {
+    if (!vitalsTarget || !canAddVitals) return;
+    markVitalsRecorded(vitalsTarget.appointmentId);
+    useRealtimeToastStore.getState().show({
+      id: `vitals-${vitalsTarget.appointmentId}-${Date.now()}`,
+      title: t("appointments.vitalsSavedTitle"),
+      body: t("appointments.vitalsSavedBody", {
+        name: vitalsTarget.patientName,
+      }),
+      tone: "success",
+    });
+  };
+
   const performCheckIn = async (appt: Appointment) => {
     if (checkingInId !== null) return;
     setCheckingInId(appt.id);
@@ -197,6 +243,83 @@ export function AppointmentListScreen() {
       ? `${totalCount} appointment${totalCount === 1 ? "" : "s"}`
       : "No appointments yet",
   ].filter(Boolean);
+
+  const listBody = (
+    <View className="flex-1">
+      <AppointmentSearchBar
+        search={search}
+        onSearchChange={setSearch}
+        filters={filters}
+        onFiltersChange={setFilters}
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((o) => !o)}
+        onClearFilters={clearFilters}
+      />
+
+      {q.isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#FD006A" />
+        </View>
+      ) : q.isError ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-center text-base font-medium text-red-500">
+            {permissionDenied
+              ? t("appointments.permissionDenied")
+              : t("appointments.errorLoading")}
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-500">
+            {permissionDenied
+              ? "Ask an admin for appointment.read access."
+              : describeError(q.error)}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={appointments}
+          keyExtractor={(a) => a.id}
+          contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
+          renderItem={({ item }) => (
+            <AppointmentCard
+              appointment={item}
+              opening={openingId === item.id}
+              checkingIn={checkingInId === item.id}
+              fittingIn={fittingInId === item.id}
+              checkInBlocked={
+                checkingInId !== null && checkingInId !== item.id
+              }
+              canOpenConsult={canOpenConsult}
+              canUpdateAppointment={canUpdateAppointment}
+              canAddVitals={canAddVitals}
+              openingVitals={openingVitalsId === item.id}
+              vitalsAdded={canAddVitals && Boolean(vitalsRecorded[item.id])}
+              onAddVitals={() => void onAddVitals(item)}
+              onCheckIn={() => onCheckIn(item)}
+              onOpenConsult={() => void onOpenConsult(item)}
+              onFitInNextSlot={() => onFitInNextSlot(item)}
+            />
+          )}
+          ListEmptyComponent={
+            <Text className="mt-10 text-center text-sm text-neutral-500">
+              {t("appointments.empty")}
+            </Text>
+          }
+          ListFooterComponent={
+            q.isFetchingNextPage ? (
+              <ActivityIndicator className="my-4" color="#FD006A" />
+            ) : null
+          }
+          refreshing={q.isRefetching && !q.isFetchingNextPage}
+          onRefresh={() => q.refetch()}
+          onEndReached={() => {
+            if (q.hasNextPage && !q.isFetchingNextPage) {
+              void q.fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.4}
+        />
+      )}
+    </View>
+  );
 
   return (
     <Screen edges={["left", "right", "bottom"]}>
@@ -270,78 +393,44 @@ export function AppointmentListScreen() {
                 Notify reception when ready
               </Text>
             </View>
+          ) : canBookWalkIn ? (
+            <View className="shrink-0 items-end gap-1.5 pt-0.5">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("walkIn.book")}
+                disabled={!facilityId}
+                onPress={() => router.push("/walk-in")}
+                className={`h-10 min-w-[132px] flex-row items-center justify-center gap-2 rounded-lg bg-white px-4 shadow-sm active:bg-white/90 ${
+                  !facilityId ? "opacity-50" : ""
+                }`}
+              >
+                <Ionicons name="walk-outline" size={18} color="#FD006A" />
+                <Text className="text-sm font-semibold tracking-wide text-brand">
+                  {t("walkIn.book")}
+                </Text>
+              </Pressable>
+              <Text
+                className="text-right text-[11px] leading-4 text-white/65"
+                numberOfLines={1}
+              >
+                {t("walkIn.bookHint")}
+              </Text>
+            </View>
           ) : null}
         </View>
       </View>
 
-      <AppointmentSearchBar
-        search={search}
-        onSearchChange={setSearch}
-        filters={filters}
-        onFiltersChange={setFilters}
-        filtersOpen={filtersOpen}
-        onToggleFilters={() => setFiltersOpen((o) => !o)}
-        onClearFilters={clearFilters}
-      />
+      {listBody}
 
-      {q.isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#FD006A" />
-        </View>
-      ) : q.isError ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-center text-base font-medium text-red-500">
-            {permissionDenied
-              ? t("appointments.permissionDenied")
-              : t("appointments.errorLoading")}
-          </Text>
-          <Text className="mt-2 text-center text-sm text-neutral-500">
-            {permissionDenied
-              ? "Ask an admin for appointment.read access."
-              : describeError(q.error)}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={appointments}
-          keyExtractor={(a) => a.id}
-          contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
-          renderItem={({ item }) => (
-            <AppointmentCard
-              appointment={item}
-              opening={openingId === item.id}
-              checkingIn={checkingInId === item.id}
-              fittingIn={fittingInId === item.id}
-              checkInBlocked={
-                checkingInId !== null && checkingInId !== item.id
-              }
-              canOpenConsult={canOpenConsult}
-              canUpdateAppointment={canUpdateAppointment}
-              onCheckIn={() => onCheckIn(item)}
-              onOpenConsult={() => void onOpenConsult(item)}
-              onFitInNextSlot={() => onFitInNextSlot(item)}
-            />
-          )}
-          ListEmptyComponent={
-            <Text className="mt-10 text-center text-sm text-neutral-500">
-              {t("appointments.empty")}
-            </Text>
-          }
-          ListFooterComponent={
-            q.isFetchingNextPage ? (
-              <ActivityIndicator className="my-4" color="#FD006A" />
-            ) : null
-          }
-          refreshing={q.isRefetching && !q.isFetchingNextPage}
-          onRefresh={() => q.refetch()}
-          onEndReached={() => {
-            if (q.hasNextPage && !q.isFetchingNextPage) {
-              void q.fetchNextPage();
-            }
-          }}
-          onEndReachedThreshold={0.4}
+      {canAddVitals && vitalsTarget ? (
+        <VitalsEditSheet
+          open
+          onClose={() => setVitalsTarget(null)}
+          consultationId={vitalsTarget.consultationId}
+          initialVitals={{}}
+          onSaved={onVitalsSaved}
         />
-      )}
+      ) : null}
     </Screen>
   );
 }
