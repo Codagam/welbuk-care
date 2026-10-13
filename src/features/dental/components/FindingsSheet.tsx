@@ -21,10 +21,16 @@ import type {
     TreatmentProvider,
 } from "../types";
 import {
-    applyDiscount,
+    computeDiscountedFee,
+    discountAmountFromFees,
+    discountCapRupees,
     doneDiagnosisEntryIds,
+    feeMapsFromTreatmentRows,
     feeStringFromCatalogDefault,
+    formatMoneyLikeInput,
+    getEffectiveDiscountCap,
     normalizeFee,
+    originalFeeText,
     randomId,
     toDateOnly,
     todayYmd,
@@ -69,7 +75,8 @@ function emptyDraft(
   problem: string,
   label: string,
   existing?: DiagnosisDetailsEntry,
-  defaultDoctorId = ""
+  defaultDoctorId = "",
+  catalog: TreatmentCatalogItem[] = []
 ): ConditionDraft {
   const today = todayYmd();
   const treatments: SuggestedTreatmentPlanRow[] = (
@@ -77,10 +84,19 @@ function emptyDraft(
   )
     .filter((n) => n && n !== "Other")
     .map((name) => {
+      // `suggestedTreatmentFees` is the NET; the original lives in
+      // `suggestedTreatmentFeeBases` (older saves have none, so original = net).
+      // The discount is rebuilt as original - net, which is exact; the stored
+      // percent is not read back.
       const fee =
         existing?.suggestedTreatmentFees?.[name] != null
-          ? String(existing.suggestedTreatmentFees[name])
+          ? formatMoneyLikeInput(existing.suggestedTreatmentFees[name])
           : "";
+      const baseRaw = existing?.suggestedTreatmentFeeBases?.[name];
+      const feeBase =
+        typeof baseRaw === "number" && Number.isFinite(baseRaw) && baseRaw >= 0
+          ? formatMoneyLikeInput(baseRaw)
+          : fee;
       const date =
         toDateOnly(existing?.suggestedTreatmentNextDates?.[name]) ||
         toDateOnly(existing?.nextAppointmentDate) ||
@@ -89,10 +105,13 @@ function emptyDraft(
         id: randomId(),
         treatmentName: name,
         date,
-        feeBase: fee,
+        feeBase,
         fee,
-        discountPct: "",
-        maxDiscountPercent: null,
+        discountAmount: discountAmountFromFees(feeBase, fee),
+        // Re-read the rate card's cap so it still applies when a saved
+        // finding is edited, not only when a treatment is first added.
+        maxDiscountPercent:
+          catalogByName(catalog, name)?.maxDiscountPercent ?? null,
       };
     });
 
@@ -188,7 +207,8 @@ export function FindingsSheet({
         e.problem,
         labelFor(e.problem),
         e,
-        defaultDoctorId
+        defaultDoctorId,
+        catalog
       );
     }
     setDrafts(next);
@@ -237,7 +257,8 @@ export function FindingsSheet({
           entries.find(
             (e) => e.toothId === toothId && e.problem === opt.value
           ),
-          defaultDoctorId
+          defaultDoctorId,
+          catalog
         ),
     }));
     // Stay collapsed until user taps the arrow
@@ -314,7 +335,7 @@ export function FindingsSheet({
       date,
       feeBase: feeStr,
       fee: feeStr,
-      discountPct: "",
+      discountAmount: "",
       maxDiscountPercent: catalogMaxDiscountPercent ?? null,
     };
     const treatments = [...draft.treatments, row];
@@ -335,20 +356,21 @@ export function FindingsSheet({
     const treatments = draft.treatments.map((t) => {
       if (t.id !== rowId) return t;
       const next = { ...t, ...patch };
-      if (patch.discountPct !== undefined || patch.feeBase !== undefined) {
-        const base = Number(next.feeBase) || 0;
-        const disc = Number(next.discountPct);
-        if (next.discountPct.trim() && Number.isFinite(disc)) {
-          next.fee = String(
-            applyDiscount(base, disc, next.maxDiscountPercent)
-          );
-        } else if (patch.feeBase !== undefined && !next.discountPct.trim()) {
-          next.fee = next.feeBase;
+      if (patch.discountAmount !== undefined || patch.feeBase !== undefined) {
+        // Discount is RUPEES off the original fee, bounded by the rate card's
+        // cap (converted to rupees for this fee) and by the fee itself.
+        const base = originalFeeText(next);
+        const capRupees = discountCapRupees(base, next.maxDiscountPercent);
+        let amount = next.discountAmount;
+        const amt = Number(amount.trim());
+        // Lowering the fee, or typing past the cap, clamps the amount so the
+        // Disc and Net shown always agree.
+        if (amount.trim() && Number.isFinite(amt) && amt > capRupees) {
+          amount = capRupees > 0 ? formatMoneyLikeInput(capRupees) : "";
         }
-      }
-      if (patch.fee !== undefined && patch.discountPct === undefined) {
-        next.feeBase = next.fee;
-        next.discountPct = "";
+        next.feeBase = base;
+        next.discountAmount = amount;
+        next.fee = computeDiscountedFee(base, amount, capRupees);
       }
       return next;
     });
@@ -411,18 +433,28 @@ export function FindingsSheet({
     const built: DiagnosisDetailsEntry[] = selectedProblems.map((problem) => {
       const d =
         drafts[problem] ??
-        emptyDraft(problem, labelFor(problem), undefined, defaultDoctorId);
+        emptyDraft(
+          problem,
+          labelFor(problem),
+          undefined,
+          defaultDoctorId,
+          catalog
+        );
       const suggestedTreatments = d.treatments
         .map((t) => t.treatmentName.trim())
         .filter(Boolean);
-      const suggestedTreatmentFees: Record<string, number> = {};
+      // NET fees (billed once treated), ORIGINAL fees, and the derived,
+      // UNROUNDED discount percent: the same three maps Practice writes.
+      const {
+        suggestedTreatmentFees,
+        suggestedTreatmentFeeBases,
+        suggestedTreatmentDiscountPcts,
+      } = feeMapsFromTreatmentRows(d.treatments);
       const suggestedTreatmentNextDates: Record<string, string> = {};
       let earliest = "";
       for (const t of d.treatments) {
         const name = t.treatmentName.trim();
         if (!name) continue;
-        const feeNum = Number(t.fee);
-        if (Number.isFinite(feeNum)) suggestedTreatmentFees[name] = feeNum;
         const date = toDateOnly(t.date) || todayYmd();
         suggestedTreatmentNextDates[name] = date;
         if (!earliest || date < earliest) earliest = date;
@@ -438,7 +470,13 @@ export function FindingsSheet({
           role: p.role?.trim() || "Primary",
           fee: normalizeFee(Number(p.fee) || 0),
         }));
+      // Start from the saved finding so fields Care does not edit (written by
+      // Practice) survive the save: PUT overwrites the whole document.
+      const saved = d.existingId
+        ? entries.find((e) => e.id === d.existingId)
+        : undefined;
       return {
+        ...saved,
         id: d.existingId ?? randomId(),
         toothId,
         problem,
@@ -448,6 +486,14 @@ export function FindingsSheet({
         suggestedTreatmentFees:
           Object.keys(suggestedTreatmentFees).length > 0
             ? suggestedTreatmentFees
+            : undefined,
+        suggestedTreatmentFeeBases:
+          Object.keys(suggestedTreatmentFeeBases).length > 0
+            ? suggestedTreatmentFeeBases
+            : undefined,
+        suggestedTreatmentDiscountPcts:
+          Object.keys(suggestedTreatmentDiscountPcts).length > 0
+            ? suggestedTreatmentDiscountPcts
             : undefined,
         suggestedTreatmentNextDates:
           Object.keys(suggestedTreatmentNextDates).length > 0
@@ -736,31 +782,53 @@ export function FindingsSheet({
                             />
                             <TextField
                               containerClassName="flex-1"
-                              label="Fees"
-                              value={row.fee}
+                              label="Fees (₹)"
+                              value={originalFeeText(row)}
                               editable={!locked}
                               onChangeText={(v) =>
                                 updateTreatment(problem, row.id, {
-                                  fee: v.replace(/[^0-9.]/g, ""),
-                                })
-                              }
-                              keyboardType="decimal-pad"
-                              placeholder="0"
-                            />
-                            <TextField
-                              containerClassName="w-20"
-                              label="Disc %"
-                              value={row.discountPct}
-                              editable={!locked}
-                              onChangeText={(v) =>
-                                updateTreatment(problem, row.id, {
-                                  discountPct: v.replace(/[^0-9.]/g, ""),
+                                  feeBase: v.replace(/[^0-9.]/g, ""),
                                 })
                               }
                               keyboardType="decimal-pad"
                               placeholder="0"
                             />
                           </View>
+                          <View className="flex-row items-end gap-2">
+                            <TextField
+                              containerClassName="flex-1"
+                              label="Disc (₹)"
+                              value={row.discountAmount}
+                              editable={!locked}
+                              onChangeText={(v) =>
+                                updateTreatment(problem, row.id, {
+                                  discountAmount: v.replace(/[^0-9.]/g, ""),
+                                })
+                              }
+                              keyboardType="decimal-pad"
+                              placeholder="0"
+                            />
+                            <View className="flex-1 pb-3">
+                              <Text className="text-xs text-neutral-500">
+                                Net
+                              </Text>
+                              <Text className="text-base font-semibold text-neutral-900">
+                                ₹{row.fee.trim() ? row.fee : "0"}
+                              </Text>
+                            </View>
+                          </View>
+                          {getEffectiveDiscountCap(row.maxDiscountPercent) <
+                            100 && Number(originalFeeText(row)) > 0 ? (
+                            <Text className="text-xs text-neutral-500">
+                              Max discount ₹
+                              {formatMoneyLikeInput(
+                                discountCapRupees(
+                                  originalFeeText(row),
+                                  row.maxDiscountPercent
+                                )
+                              )}
+                            </Text>
+                          ) : null}
                         </View>
                       ))}
                     </View>

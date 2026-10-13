@@ -199,14 +199,137 @@ export function feeStringFromCatalogDefault(
   return String(Math.round(catalogDefaultFee * 100) / 100);
 }
 
-export function applyDiscount(
-  feeBase: number,
-  discountPct: number,
+/*
+ * Treatment discounts are ENTERED IN RUPEES (mirrors Practice
+ * `components/consult/diagnosis-dialog/utils.ts`). The rate card's
+ * `maxDiscountPercent` stays a percent on the catalogue and is converted to
+ * rupees per row. On save the finding carries net fees, original fees and a
+ * DERIVED, UNROUNDED percent — see `feeMapsFromTreatmentRows`.
+ */
+
+export function formatMoneyLikeInput(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
+export function getEffectiveDiscountCap(
   maxDiscountPercent?: number | null
 ): number {
-  const cap = maxDiscountPercent ?? 100;
-  const d = Math.min(Math.max(discountPct, 0), cap);
-  return Math.round(feeBase * (1 - d / 100) * 100) / 100;
+  if (
+    typeof maxDiscountPercent === "number" &&
+    Number.isFinite(maxDiscountPercent)
+  ) {
+    return Math.min(100, Math.max(0, maxDiscountPercent));
+  }
+  return 100;
+}
+
+/** Original fee text. The discount never overwrites it. */
+export function originalFeeText(row: { feeBase?: string; fee?: string }): string {
+  const base = String(row.feeBase ?? "").trim();
+  return base || String(row.fee ?? "").trim();
+}
+
+/**
+ * Rate-card percent cap → rupees for THIS row, rounded DOWN to the paisa so
+ * the largest allowed amount can never derive a percent above the cap
+ * (15% of ₹333.33 is ₹49.9995 → ₹49.99, not ₹50).
+ */
+export function discountCapRupees(
+  feeBase: string,
+  maxDiscountPercent?: number | null
+): number {
+  const base = Number(String(feeBase ?? "").trim());
+  if (!Number.isFinite(base) || base <= 0) return 0;
+  const pct = getEffectiveDiscountCap(maxDiscountPercent);
+  return Math.floor(base * pct + 1e-6) / 100;
+}
+
+/** Net = original − amount, bounded by the cap and by the fee. Empty → original. */
+export function computeDiscountedFee(
+  feeBase: string,
+  discountAmount: string,
+  capRupees: number
+): string {
+  const base = Number(String(feeBase).trim());
+  if (!Number.isFinite(base) || base < 0) return "";
+  const raw = String(discountAmount ?? "").trim();
+  if (!raw) return formatMoneyLikeInput(base);
+  const discount = Number(raw);
+  if (!Number.isFinite(discount)) return formatMoneyLikeInput(base);
+  const bounded = Math.min(capRupees, base, Math.max(0, discount));
+  return formatMoneyLikeInput(base - bounded);
+}
+
+/** Saved row's discount rebuilt as original − net (exact). "" = no discount. */
+export function discountAmountFromFees(feeBase: string, fee: string): string {
+  const base = Number(String(feeBase ?? "").trim());
+  const net = Number(String(fee ?? "").trim());
+  if (!Number.isFinite(base) || !Number.isFinite(net)) return "";
+  const amount = base - net;
+  return amount > 0.005 ? formatMoneyLikeInput(amount) : "";
+}
+
+/**
+ * The three fee maps written onto a finding. The percent is derived from
+ * (original − net) and deliberately UNROUNDED: Practice recomputes the billed
+ * line as `original × (1 − pct/100)`, so ₹100 off ₹300 stored as 33.33 would
+ * bill ₹200.01.
+ */
+export function feeMapsFromTreatmentRows(
+  rows: {
+    treatmentName?: string;
+    fee?: string;
+    feeBase?: string;
+    discountAmount?: string;
+  }[]
+): {
+  suggestedTreatmentFees: Record<string, number>;
+  suggestedTreatmentFeeBases: Record<string, number>;
+  suggestedTreatmentDiscountPcts: Record<string, number>;
+} {
+  const suggestedTreatmentFees: Record<string, number> = {};
+  const suggestedTreatmentFeeBases: Record<string, number> = {};
+  const suggestedTreatmentDiscountPcts: Record<string, number> = {};
+  for (const row of rows) {
+    const name = String(row.treatmentName ?? "").trim();
+    if (!name) continue;
+    const net = Number(row.fee);
+    if (Number.isFinite(net) && net >= 0) suggestedTreatmentFees[name] = net;
+    const base = Number(originalFeeText(row));
+    if (Number.isFinite(base) && base >= 0) {
+      suggestedTreatmentFeeBases[name] = base;
+    }
+    if (
+      String(row.discountAmount ?? "").trim() &&
+      Number.isFinite(base) &&
+      base > 0 &&
+      Number.isFinite(net) &&
+      net >= 0 &&
+      base - net > 0.005
+    ) {
+      suggestedTreatmentDiscountPcts[name] = ((base - net) / base) * 100;
+    }
+  }
+  return {
+    suggestedTreatmentFees,
+    suggestedTreatmentFeeBases,
+    suggestedTreatmentDiscountPcts,
+  };
+}
+
+/** `{ name: number }` map from loose JSON; drops blank keys and non-finite values. */
+export function parseNamedNumberMap(
+  raw: unknown
+): Record<string, number> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(k).trim();
+    const n = Number(v);
+    if (!key || !Number.isFinite(n) || n < 0) continue;
+    out[key] = n;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export function deriveTeethStates(
@@ -266,8 +389,19 @@ export function mapRawToDiagnosisEntries(
       unknown
     >;
     return {
+      // Keep every field Practice wrote, including ones Care does not know.
+      // `PUT /api/consult/dental` overwrites the whole document, so a field
+      // dropped here is deleted on the next save (this is how Practice-entered
+      // discounts used to vanish).
+      ...e,
       id: typeof e.id === "string" ? e.id : randomId(),
       toothId: typeof e.toothId === "string" ? e.toothId : "",
+      suggestedTreatmentFeeBases: parseNamedNumberMap(
+        e.suggestedTreatmentFeeBases
+      ),
+      suggestedTreatmentDiscountPcts: parseNamedNumberMap(
+        e.suggestedTreatmentDiscountPcts
+      ),
       problem: typeof e.problem === "string" ? e.problem : "",
       note: typeof e.note === "string" ? e.note : undefined,
       fee: typeof e.fee === "number" ? e.fee : undefined,
@@ -342,6 +476,11 @@ export function mapRawToPlanRows(raw: unknown[]): DentalTreatmentPlanRow[] {
         ? (r.findingSummary as DentalTreatmentPlanRow["findingSummary"])
         : null;
     return {
+      // Keep every field Practice wrote (originalFeesByName, discountPctsByName,
+      // discountPct, …). PATCH replaces the whole `treatmentPlanItems` array,
+      // so anything dropped here is erased server-side — and the doctor's
+      // discount voucher disappears with it.
+      ...r,
       id: typeof r.id === "string" ? r.id : randomId(),
       treatmentName:
         typeof r.treatmentName === "string"
@@ -413,9 +552,18 @@ export function mergeSuggestedTreatmentsFromPrior(
       suggestedTreatments: hasSug
         ? entry.suggestedTreatments
         : match.suggestedTreatments,
+      // The three fee maps travel together: net, original and discount
+      // describe one decision, and mixing a current net with a prior original
+      // would invent a discount nobody gave.
       suggestedTreatmentFees: hasFees
         ? entry.suggestedTreatmentFees
         : match.suggestedTreatmentFees,
+      suggestedTreatmentFeeBases: hasFees
+        ? entry.suggestedTreatmentFeeBases
+        : match.suggestedTreatmentFeeBases,
+      suggestedTreatmentDiscountPcts: hasFees
+        ? entry.suggestedTreatmentDiscountPcts
+        : match.suggestedTreatmentDiscountPcts,
       suggestedTreatmentNextDates: hasRowDates
         ? entry.suggestedTreatmentNextDates
         : match.suggestedTreatmentNextDates,
@@ -431,6 +579,8 @@ export function mergeSuggestedTreatmentsFromPrior(
 
 export function entriesToPostBody(entries: DiagnosisDetailsEntry[]) {
   return entries.map((e) => ({
+    // Unknown fields round-trip untouched; the ones Care owns are set below.
+    ...e,
     id: e.id,
     toothId: e.toothId,
     problem: e.problem,
@@ -438,6 +588,9 @@ export function entriesToPostBody(entries: DiagnosisDetailsEntry[]) {
     priority: 1,
     fee: e.fee,
     suggestedTreatmentFees: e.suggestedTreatmentFees ?? undefined,
+    suggestedTreatmentFeeBases: e.suggestedTreatmentFeeBases ?? undefined,
+    suggestedTreatmentDiscountPcts:
+      e.suggestedTreatmentDiscountPcts ?? undefined,
     suggestedTreatmentNextDates: e.suggestedTreatmentNextDates ?? undefined,
     nextAppointmentDate: e.nextAppointmentDate,
     nextAppointmentTime: e.nextAppointmentTime,
@@ -471,6 +624,55 @@ export function feeForTreatmentName(
     return cat.defaultFee;
   }
   return 0;
+}
+
+const nameKey = (v: string) => v.trim().toLowerCase();
+
+/**
+ * Discount % for one treatment on a plan row — Practice
+ * `namedDiscountPercent`. Once `discountPctsByName` has ANY entry it is
+ * authoritative (a name missing from it is undiscounted); the legacy single
+ * `discountPct` is read only when the map is empty, otherwise one treatment's
+ * discount would be broadcast to every treatment sharing the row.
+ */
+function planRowDiscountPercent(
+  row: DentalTreatmentPlanRow,
+  name: string
+): number | null {
+  const map = parseNamedNumberMap(row.discountPctsByName);
+  if (map) {
+    const hit = Object.entries(map).find(([k]) => nameKey(k) === nameKey(name));
+    return hit && hit[1] > 0 ? hit[1] : null;
+  }
+  const legacy = Number(row.discountPct);
+  return Number.isFinite(legacy) && legacy > 0 ? legacy : null;
+}
+
+/**
+ * NET fee per treatment recorded on the plan row itself:
+ * `originalFeesByName × (1 − discount%)`. Practice treats this as the most
+ * authoritative fee for a treated item (`namedBilledFeeFromRow`), ahead of the
+ * finding's map and the catalogue — the catalogue is the GROSS price, so
+ * falling through to it would bill a discounted treatment in full.
+ */
+export function planRowNetFeesByName(
+  row: Pick<
+    DentalTreatmentPlanRow,
+    "originalFeesByName" | "discountPctsByName" | "discountPct"
+  >
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const originals = parseNamedNumberMap(row.originalFeesByName);
+  if (!originals) return out;
+  for (const [name, original] of Object.entries(originals)) {
+    if (!(original > 0)) continue;
+    const pct = planRowDiscountPercent(row as DentalTreatmentPlanRow, name);
+    out[name] =
+      pct != null && pct > 0 && pct < 100
+        ? Math.round(original * (1 - pct / 100) * 100) / 100
+        : original;
+  }
+  return out;
 }
 
 /** Sum of catalog/finding fees for treatments moved to Treated. */
@@ -510,8 +712,13 @@ export function planRowBillableFee(
   catalog?: { name: string; defaultFee?: number }[]
 ): number {
   const providerSum = providerFeeSum(row.providers);
-  const fees =
-    findingFees ?? row.findingSummary?.suggestedTreatmentFees ?? undefined;
+  // Most authoritative last: saved snapshot < live finding < the row's own
+  // net fees. The catalogue (gross) is only reached when none has the name.
+  const fees = {
+    ...(row.findingSummary?.suggestedTreatmentFees ?? {}),
+    ...(findingFees ?? {}),
+    ...planRowNetFeesByName(row),
+  };
   const treatmentSum = selectedActualsTreatmentFee(
     row.selectedActuals,
     fees,

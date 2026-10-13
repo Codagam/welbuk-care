@@ -17,7 +17,16 @@ export type DiagnosisDetailsEntry = {
   note?: string;
   fee?: number;
   suggestedTreatments?: string[];
+  /** NET (after-discount) rupees per treatment — what gets billed once treated. */
   suggestedTreatmentFees?: Record<string, number>;
+  /** ORIGINAL rupees per treatment, before the doctor's discount. */
+  suggestedTreatmentFeeBases?: Record<string, number>;
+  /**
+   * Discount per treatment as a percent, DERIVED from (original − net) and kept
+   * UNROUNDED: Practice rebuilds the billed fee as `original × (1 − pct/100)`,
+   * so a rounded percent bills paise off. Only present when discounted.
+   */
+  suggestedTreatmentDiscountPcts?: Record<string, number>;
   suggestedTreatmentNextDates?: Record<string, string>;
   nextAppointmentDate?: string;
   nextAppointmentTime?: string;
@@ -65,6 +74,12 @@ export type DentalTreatmentPlanRow = {
   } | null;
   selectedActuals?: SelectedActualItem[];
   linkedFollowUpAppointmentId?: string;
+  /** Copied from the finding by the Practice server merge — original fees. */
+  originalFeesByName?: Record<string, number>;
+  /** Copied from the finding by the Practice server merge — discount %. */
+  discountPctsByName?: Record<string, number>;
+  /** Older single-treatment discount %; superseded by `discountPctsByName`. */
+  discountPct?: number;
 };
 
 /** @deprecated alias — prefer DentalTreatmentPlanRow */
@@ -108,9 +123,12 @@ export type SuggestedTreatmentPlanRow = {
   id: string;
   treatmentName: string;
   date: string;
+  /** Original fee (what the Fees box edits). The discount never overwrites it. */
   feeBase: string;
+  /** Net fee = feeBase − discountAmount (read-only in the UI). */
   fee: string;
-  discountPct: string;
+  /** Discount entered in RUPEES, not percent. "" = no discount. */
+  discountAmount: string;
   maxDiscountPercent?: number | null;
 };
 

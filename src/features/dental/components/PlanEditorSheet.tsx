@@ -21,6 +21,7 @@ import {
     normalizeTimeHHmm,
     providerFeeSum,
     randomId,
+    planRowNetFeesByName,
     selectedActualsTreatmentFee,
     toDateOnly,
     todayYmd,
@@ -46,9 +47,11 @@ function feesMapFrom(
   finding?: DiagnosisDetailsEntry | null,
   summary?: DentalTreatmentPlanRow["findingSummary"]
 ): Record<string, number> | undefined {
+  // The summary is hydrated with the row's own net fees layered over the
+  // finding's (see the draft effect), so it is the more specific source.
   return (
-    finding?.suggestedTreatmentFees ??
     summary?.suggestedTreatmentFees ??
+    finding?.suggestedTreatmentFees ??
     undefined
   );
 }
@@ -191,9 +194,15 @@ export function PlanEditorSheet({
     const findingSummary = row.findingSummary
       ? {
           ...row.findingSummary,
-          suggestedTreatmentFees:
-            row.findingSummary.suggestedTreatmentFees ??
-            finding?.suggestedTreatmentFees,
+          // Net fee per treated item, most authoritative last: the saved
+          // snapshot, the live finding, then the row's own
+          // original × (1 − discount%) — the figure Practice bills. Never the
+          // catalogue's gross price when a discounted net is known.
+          suggestedTreatmentFees: {
+            ...(row.findingSummary.suggestedTreatmentFees ?? {}),
+            ...(finding?.suggestedTreatmentFees ?? {}),
+            ...planRowNetFeesByName(row),
+          },
         }
       : row.findingSummary;
     setDraft({
