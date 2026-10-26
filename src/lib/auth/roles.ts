@@ -112,13 +112,15 @@ export function userDisplayName(user: AuthUser | null | undefined): string {
   return email || "";
 }
 
-/** Greeting name: "Dr. …" only when the signed-in role is doctor. */
+const HONORIFIC_PREFIX_RE = /^(?:(?:dr|mr|mrs|ms)\.?(?:\/(?:mr|mrs|ms)\.?)?\s+)+/i;
+
+/** Greeting name: "Dr. …" for doctors, "Mr/Mrs. …" for everyone else. */
 export function userGreetingName(user: AuthUser | null | undefined): string {
   const raw = userDisplayName(user);
   if (!raw) return "";
-  const withoutPrefix = stripDoctorNamePrefix(raw);
+  const withoutPrefix = raw.replace(HONORIFIC_PREFIX_RE, "").trim();
   const name = withoutPrefix || raw;
-  return isDoctorRole(user) ? `Dr. ${name}` : name;
+  return isDoctorRole(user) ? `Dr. ${name}` : `Mr/Mrs. ${name}`;
 }
 
 export function timeOfDayGreeting(): string {
