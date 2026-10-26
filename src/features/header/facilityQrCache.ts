@@ -114,7 +114,7 @@ export async function resolveFacilityQr(input: {
   user: AuthUser | null | undefined;
   facilityId: string;
   facilityName?: string;
-  /** Force network refresh + overwrite cache (e.g. after regenerate). */
+  /** Force network refresh + overwrite cache. */
   forceRefresh?: boolean;
 }): Promise<ResolvedFacilityQr> {
   const identity = buildFacilityQrIdentity(input.user, input.facilityId);
@@ -150,7 +150,7 @@ export async function resolveFacilityQr(input: {
 
   let share = await fetchFacilityWrapperShare(input.facilityId);
   if (!hasFacilityQrImage(share)) {
-    share = await postFacilityWrapperShare(input.facilityId, false);
+    share = await postFacilityWrapperShare(input.facilityId);
   }
   if (!hasFacilityQrImage(share)) {
     throw new Error("No QR code is available for this facility yet.");
@@ -182,16 +182,6 @@ export async function resolveFacilityQr(input: {
     identityKey,
     share,
   };
-}
-
-/** After regenerate — fetch new assets and overwrite the identity-keyed cache. */
-export async function regenerateFacilityQr(input: {
-  user: AuthUser | null | undefined;
-  facilityId: string;
-  facilityName?: string;
-}): Promise<ResolvedFacilityQr> {
-  await postFacilityWrapperShare(input.facilityId, true);
-  return resolveFacilityQr({ ...input, forceRefresh: true });
 }
 
 export async function clearFacilityQrCache(): Promise<void> {
