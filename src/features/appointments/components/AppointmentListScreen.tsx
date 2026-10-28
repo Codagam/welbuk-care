@@ -13,7 +13,11 @@ import { useTranslation } from "react-i18next";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import { isReceptionistRole, userGreetingName } from "@/lib/auth/roles";
+import {
+  isNurseRole,
+  isReceptionistRole,
+  userGreetingName,
+} from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
 import { VitalsEditSheet } from "@/features/consult/components/VitalsEditSheet";
@@ -54,7 +58,9 @@ export function AppointmentListScreen() {
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [fittingInId, setFittingInId] = useState<string | null>(null);
   const canBookWalkIn = useCanBookWalkIn();
-  const canAddVitals = isReceptionistRole(user, facilityId);
+  // Desk vitals popup: receptionist or nurse, without opening the consult screen.
+  const canAddVitals =
+    isReceptionistRole(user, facilityId) || isNurseRole(user);
   const [openingVitalsId, setOpeningVitalsId] = useState<string | null>(null);
   const [vitalsTarget, setVitalsTarget] = useState<{
     consultationId: string;
@@ -172,7 +178,7 @@ export function AppointmentListScreen() {
     }
   };
 
-  /** Receptionist-only confirmation — the sheet only opens behind `canAddVitals`. */
+  /** Receptionist / nurse confirmation — the sheet only opens behind `canAddVitals`. */
   const onVitalsSaved = () => {
     if (!vitalsTarget || !canAddVitals) return;
     markVitalsRecorded(vitalsTarget.appointmentId);

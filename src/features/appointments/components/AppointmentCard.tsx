@@ -71,10 +71,10 @@ type Props = {
   canOpenConsult?: boolean;
   canUpdateAppointment?: boolean;
   showPatientPhone?: boolean;
-  /** Receptionist desk: show "Add vital" on eligible visits. */
+  /** Receptionist / nurse desk: show "Add vitals" on eligible visits. */
   canAddVitals?: boolean;
   openingVitals?: boolean;
-  /** Receptionist recorded vitals for this visit this session. */
+  /** Receptionist / nurse recorded vitals for this visit this session. */
   vitalsAdded?: boolean;
   onAddVitals?: () => void;
   onCheckIn?: () => void;

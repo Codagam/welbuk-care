@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 /**
- * Appointments whose vitals the receptionist recorded from the list this
+ * Appointments whose vitals the receptionist or nurse recorded from the list this
  * session. The appointment-search API carries no vitals flag, so the desk's
  * "Vitals added" chip is driven from here.
  */

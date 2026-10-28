@@ -27,9 +27,9 @@
     "fitInSuccess": "Appointment re-slotted",
     "failedToFitIn": "Could not fit into next slot",
     "cancel": "Cancel",
-    "addVital": "Add vital",
+    "addVital": "Add vitals",
     "failedToOpenVitals": "Could not open vitals",
-    "updateVital": "Update vital",
+    "updateVital": "Update vitals",
     "vitalsAdded": "Vitals added",
     "vitalsSavedTitle": "Vitals added",
     "vitalsSavedBody": "{{name}} is ready for the doctor."
