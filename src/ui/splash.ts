@@ -18,3 +18,4 @@ export const SPLASH_START_FALLBACK_MS = 800;
 // Exit: brief hold at full size, then the overlay fades out.
 export const SPLASH_HOLD_MS = 300;
 export const SPLASH_FADE_OUT_MS = 400;
+//test
