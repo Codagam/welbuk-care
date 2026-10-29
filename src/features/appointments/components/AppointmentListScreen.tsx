@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   Pressable,
   Text,
   View,
@@ -24,11 +25,17 @@ import { VitalsEditSheet } from "@/features/consult/components/VitalsEditSheet";
 import { useRealtimeToastStore } from "@/lib/realtime/toastStore";
 import { useVitalsRecordedStore } from "../vitalsRecordedStore";
 import { useCanBookWalkIn } from "@/features/walk-in";
-import {
-  useCanAccessConsult,
-  useCanWrite,
-} from "@/features/permissions";
+import { useCanAccessConsult } from "@/features/permissions";
 import { AppointmentCard } from "./AppointmentCard";
+import {
+  AppointmentActionsSheet,
+  type AppointmentActionKey,
+} from "./AppointmentActionsSheet";
+import {
+  AppointmentEditSheet,
+  type AppointmentEditMode,
+} from "./AppointmentEditSheet";
+import { CancelAppointmentSheet } from "./CancelAppointmentSheet";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
 import {
   useAppointmentList,
@@ -38,7 +45,12 @@ import {
   useOpenConsult,
   useReadyForNext,
 } from "../hooks/useAppointmentList";
+import {
+  useAppointmentActionPermissions,
+  useDeleteAppointment,
+} from "../hooks/useAppointmentActions";
 import { canOpenAppointmentFromList } from "../lib/appointmentGates";
+import { resolveAppointmentActions } from "../lib/appointmentActions";
 import type { Appointment } from "../types";
 
 function patientDisplayName(appt: Appointment): string {
@@ -89,7 +101,15 @@ export function AppointmentListScreen() {
   const readyForNext = useReadyForNext();
   const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
     useCanAccessConsult();
-  const canUpdateAppointment = useCanWrite("appointment");
+  const actionPerms = useAppointmentActionPermissions();
+  const canUpdateAppointment = actionPerms.canUpdate;
+  const deleteAppointment = useDeleteAppointment();
+  const [actionsTarget, setActionsTarget] = useState<Appointment | null>(null);
+  const [editTarget, setEditTarget] = useState<{
+    appointment: Appointment;
+    mode: AppointmentEditMode;
+  } | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
 
   const isDoctorLogin = Boolean(user?.doctorId);
   const canOpenConsult = canAccessConsult && !consultAccessLoading;
@@ -239,6 +259,46 @@ export function AppointmentListScreen() {
     void performFitInNextSlot(appt);
   };
 
+  const confirmDelete = (appt: Appointment) => {
+    Alert.alert(
+      t("appointments.deleteConfirmTitle"),
+      t("appointments.deleteConfirmMessage", { name: patientDisplayName(appt) }),
+      [
+        { text: t("appointments.cancel"), style: "cancel" },
+        {
+          text: t("appointments.actions.delete"),
+          style: "destructive",
+          onPress: () => {
+            deleteAppointment.mutate(
+              { id: appt.id },
+              {
+                onSuccess: () => Alert.alert(t("appointments.deleteSuccess")),
+                onError: (err) =>
+                  Alert.alert(t("appointments.failedToDelete"), describeError(err)),
+              }
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const onSelectAction = (key: AppointmentActionKey) => {
+    const appt = actionsTarget;
+    setActionsTarget(null);
+    if (!appt) return;
+    // iOS drops a modal (or Alert) presented while another is still
+    // dismissing, so the next step waits for the menu to finish closing.
+    setTimeout(
+      () => {
+        if (key === "cancel") setCancelTarget(appt);
+        else if (key === "delete") confirmDelete(appt);
+        else setEditTarget({ appointment: appt, mode: key });
+      },
+      Platform.OS === "ios" ? 350 : 0
+    );
+  };
+
   const permissionDenied =
     q.isError &&
     /permission|access denied|appointment\.read/i.test(describeError(q.error));
@@ -302,6 +362,8 @@ export function AppointmentListScreen() {
               onCheckIn={() => onCheckIn(item)}
               onOpenConsult={() => void onOpenConsult(item)}
               onFitInNextSlot={() => onFitInNextSlot(item)}
+              actions={resolveAppointmentActions(item, actionPerms)}
+              onOpenActions={() => setActionsTarget(item)}
             />
           )}
           ListEmptyComponent={
@@ -427,6 +489,31 @@ export function AppointmentListScreen() {
       </View>
 
       {listBody}
+
+      {actionsTarget ? (
+        <AppointmentActionsSheet
+          open
+          patientName={patientDisplayName(actionsTarget)}
+          actions={resolveAppointmentActions(actionsTarget, actionPerms)}
+          onSelect={onSelectAction}
+          onClose={() => setActionsTarget(null)}
+        />
+      ) : null}
+
+      {editTarget ? (
+        <AppointmentEditSheet
+          appointment={editTarget.appointment}
+          mode={editTarget.mode}
+          onClose={() => setEditTarget(null)}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelAppointmentSheet
+          appointment={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+        />
+      ) : null}
 
       {canAddVitals && vitalsTarget ? (
         <VitalsEditSheet

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 
@@ -25,6 +25,10 @@ import {
   normalizeStatusToken,
   shouldShowCheckIn,
 } from "../lib/appointmentGates";
+import {
+  hasAnyAppointmentAction,
+  type AppointmentActions,
+} from "../lib/appointmentActions";
 import { statusStyle } from "../lib/statusStyles";
 import { formatTokenOrClass } from "../lib/tokenSeries";
 
@@ -80,6 +84,9 @@ type Props = {
   onCheckIn?: () => void;
   onOpenConsult?: () => void;
   onFitInNextSlot?: () => void;
+  /** Permission- and status-checked edit / reschedule / cancel / delete. */
+  actions?: AppointmentActions;
+  onOpenActions?: () => void;
 };
 
 function AppointmentCardInner({
@@ -98,6 +105,8 @@ function AppointmentCardInner({
   onCheckIn,
   onOpenConsult,
   onFitInNextSlot,
+  actions,
+  onOpenActions,
 }: Props) {
   const { t } = useTranslation();
   const s = statusStyle(appointment.status);
@@ -137,6 +146,8 @@ function AppointmentCardInner({
   const isToday = isAppointmentOnToday(appointment);
   const isCompleted =
     normalizeStatusToken(appointment.status) === "COMPLETED";
+  const showMore =
+    Boolean(onOpenActions) && Boolean(actions) && hasAnyAppointmentAction(actions!);
 
   return (
     <View
@@ -281,8 +292,22 @@ function AppointmentCardInner({
           </View>
         </View>
 
-        {primaryAction !== "none" || showAddVital ? (
+        {primaryAction !== "none" || showAddVital || showMore ? (
           <View className="flex-row flex-wrap items-center justify-end gap-2 border-t border-neutral-100 pt-3">
+            {showMore ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("appointments.actions.more")}
+                disabled={rowBusy}
+                onPress={onOpenActions}
+                hitSlop={6}
+                className={`mr-auto h-11 w-11 items-center justify-center rounded-xl border border-neutral-200 active:bg-neutral-100 ${
+                  rowBusy ? "opacity-50" : ""
+                }`}
+              >
+                <Ionicons name="ellipsis-vertical" size={18} color="#525252" />
+              </Pressable>
+            ) : null}
             {showAddVital ? (
               <Button
                 label={
