@@ -87,6 +87,8 @@ type Props = {
   /** Permission- and status-checked edit / reschedule / cancel / delete. */
   actions?: AppointmentActions;
   onOpenActions?: () => void;
+  /** Briefly outlined after a notification about this visit is tapped. */
+  highlighted?: boolean;
 };
 
 function AppointmentCardInner({
@@ -107,6 +109,7 @@ function AppointmentCardInner({
   onFitInNextSlot,
   actions,
   onOpenActions,
+  highlighted = false,
 }: Props) {
   const { t } = useTranslation();
   const s = statusStyle(appointment.status);
@@ -178,8 +181,12 @@ function AppointmentCardInner({
 
   return (
     <View
-      className={`flex-row overflow-hidden rounded-2xl border bg-white ${
-        muted ? "border-neutral-200" : "border-brand-100"
+      className={`flex-row overflow-hidden rounded-2xl bg-white ${
+        highlighted
+          ? "border-2 border-brand"
+          : muted
+            ? "border border-neutral-200"
+            : "border border-brand-100"
       }`}
       style={{
         shadowColor: muted ? "#0f172a" : "#FD006A",

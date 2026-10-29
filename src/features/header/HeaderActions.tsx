@@ -26,9 +26,16 @@ function AttendIconButton({ light }: { light?: boolean }) {
 
 /**
  * Sticky header actions: Attend → Notifications (unread) → Facility QR.
- * Hidden when no facility is selected.
+ * Hidden when no facility is selected. `showNotifications={false}` drops the
+ * bell where the notifications panel is already docked on screen.
  */
-export function HeaderActions({ light = true }: { light?: boolean }) {
+export function HeaderActions({
+  light = true,
+  showNotifications = true,
+}: {
+  light?: boolean;
+  showNotifications?: boolean;
+}) {
   const facilityId = useFacilityId();
   const [qrOpen, setQrOpen] = useState(false);
 
@@ -38,7 +45,7 @@ export function HeaderActions({ light = true }: { light?: boolean }) {
     <>
       <View className="flex-row items-center gap-0.5">
         <AttendIconButton light={light} />
-        <NotificationQueue light={light} />
+        {showNotifications ? <NotificationQueue light={light} /> : null}
         <FacilityQrTriggerButton
           light={light}
           onPress={() => setQrOpen(true)}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -7,6 +7,7 @@ import {
   Pressable,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,13 @@ import {
 } from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
+import {
+  NotificationPanel,
+  NotificationRail,
+  notificationAppointmentId,
+} from "@/features/notifications/NotificationQueue";
+import { useNotificationPanelCollapsed } from "@/features/notifications/panelPreference";
+import type { StaffNotification } from "@/lib/api/endpoints/notifications";
 import { VitalsEditSheet } from "@/features/consult/components/VitalsEditSheet";
 import { useRealtimeToastStore } from "@/lib/realtime/toastStore";
 import { useVitalsRecordedStore } from "../vitalsRecordedStore";
@@ -119,6 +127,30 @@ export function AppointmentListScreen() {
     [q.data]
   );
   const totalCount = q.data?.pages[0]?.totalCount ?? 0;
+
+  // Landscape tablet: notifications dock beside the list instead of behind the bell.
+  const { width, height } = useWindowDimensions();
+  const splitView = width >= 900 && width > height;
+  const panelWidth = Math.round(Math.min(420, Math.max(320, width * 0.34)));
+  const [panelCollapsed, setPanelCollapsed] = useNotificationPanelCollapsed();
+
+  const listRef = useRef<FlatList<Appointment>>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
+
+  /** Tapping a notification scrolls to the visit it is about, when it is listed. */
+  const onNotificationSelect = (item: StaffNotification) => {
+    const appointmentId = notificationAppointmentId(item);
+    if (!appointmentId) return;
+    const index = appointments.findIndex((a) => a.id === appointmentId);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.2 });
+    setHighlightId(appointmentId);
+  };
 
   const greetName = userGreetingName(user);
   const welcomeSubtitle = greetName ? `Welcome, ${greetName}` : null;
@@ -341,8 +373,24 @@ export function AppointmentListScreen() {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           data={appointments}
           keyExtractor={(a) => a.id}
+          onScrollToIndexFailed={(info) => {
+            // Card heights vary, so a far row may not be measured yet: jump
+            // near it, then retry once it has rendered.
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+            setTimeout(() => {
+              listRef.current?.scrollToIndex({
+                index: info.index,
+                animated: true,
+                viewPosition: 0.2,
+              });
+            }, 250);
+          }}
           contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
           renderItem={({ item }) => (
             <AppointmentCard
@@ -364,6 +412,7 @@ export function AppointmentListScreen() {
               onFitInNextSlot={() => onFitInNextSlot(item)}
               actions={resolveAppointmentActions(item, actionPerms)}
               onOpenActions={() => setActionsTarget(item)}
+              highlighted={highlightId === item.id}
             />
           )}
           ListEmptyComponent={
@@ -412,7 +461,7 @@ export function AppointmentListScreen() {
               <Text className="text-sm text-white/70">No facility selected</Text>
             )}
           </View>
-          <HeaderActions light />
+          <HeaderActions light showNotifications={!splitView} />
         </View>
 
         <View className="mx-5 h-px bg-white/20" />
@@ -488,7 +537,26 @@ export function AppointmentListScreen() {
         </View>
       </View>
 
-      {listBody}
+      {splitView ? (
+        <View className="flex-1 flex-row">
+          {listBody}
+          <View
+            className="border-l border-neutral-200"
+            style={{ width: panelCollapsed ? 60 : panelWidth }}
+          >
+            {panelCollapsed ? (
+              <NotificationRail onExpand={() => setPanelCollapsed(false)} />
+            ) : (
+              <NotificationPanel
+                onSelect={onNotificationSelect}
+                onCollapse={() => setPanelCollapsed(true)}
+              />
+            )}
+          </View>
+        </View>
+      ) : (
+        listBody
+      )}
 
       {actionsTarget ? (
         <AppointmentActionsSheet
