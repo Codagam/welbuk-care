@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Alert, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { describeError } from "@/lib/api/errors";
@@ -8,6 +8,7 @@ import { openConsultForAppointment } from "@/lib/api/endpoints/consult";
 import { useCanAccessConsult } from "@/features/permissions";
 import { Button } from "@/ui";
 import { usePatientAppointments } from "../hooks";
+import { AppAlert } from "@/ui/AppAlert";
 
 function formatTimeLabel(value?: string | null): string {
   if (!value?.trim()) return "";
@@ -60,7 +61,7 @@ export function AppointmentsCard({
     if (!row.id) return;
     if (consultAccessLoading) return;
     if (!canOpenConsult) {
-      Alert.alert(
+      AppAlert.alert(
         "You don't have permission",
         "Your role can't open consultations. Ask a facility administrator if you need access."
       );
@@ -80,7 +81,7 @@ export function AppointmentsCard({
         },
       });
     } catch (e) {
-      Alert.alert("Could not open report", describeError(e));
+      AppAlert.alert("Could not open report", describeError(e));
     } finally {
       setOpeningId(null);
     }

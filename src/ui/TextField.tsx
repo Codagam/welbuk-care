@@ -1,8 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { Text, TextInput, type TextInputProps, View } from "react-native";
 
+import { FieldLabel } from "./FieldLabel";
+
 export interface TextFieldProps extends TextInputProps {
   label?: string;
+  /** Shows a red `*` after the label. */
+  required?: boolean;
   error?: string;
   containerClassName?: string;
   labelClassName?: string;
@@ -12,6 +16,7 @@ export interface TextFieldProps extends TextInputProps {
 
 export function TextField({
   label,
+  required,
   error,
   containerClassName = "",
   labelClassName = "text-neutral-700",
@@ -33,7 +38,11 @@ export function TextField({
   return (
     <View className={`gap-1.5 ${containerClassName}`}>
       {label ? (
-        <Text className={`text-sm font-medium ${labelClassName}`}>{label}</Text>
+        <FieldLabel
+          label={label}
+          required={required}
+          className={labelClassName}
+        />
       ) : null}
       <View className="relative justify-center">
         <TextInput

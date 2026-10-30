@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -18,6 +17,7 @@ import type {
   WardVitalFieldKey,
 } from "../types";
 import { formatDateTime } from "../utils";
+import { AppAlert } from "@/ui/AppAlert";
 
 const VITAL_FIELDS: { key: WardVitalFieldKey; label: string; unit: string }[] = [
   { key: "bloodPressure", label: "BP", unit: "mmHg" },
@@ -81,7 +81,12 @@ export function WardRecordPanel({
       if (t) payload[k] = t;
     }
     if (Object.keys(payload).length === 0) {
-      Alert.alert("Enter at least one reading.");
+      AppAlert.alert(
+        "No readings entered",
+        "Enter at least one reading before saving.",
+        undefined,
+        { tone: "warning" }
+      );
       return;
     }
     try {
@@ -89,7 +94,7 @@ export function WardRecordPanel({
       setDraft({});
       setEntering(false);
     } catch (err) {
-      Alert.alert("Could not save", describeError(err));
+      AppAlert.alert("Could not save", describeError(err));
     }
   };
 
@@ -100,7 +105,7 @@ export function WardRecordPanel({
       await saveNote.mutateAsync({ body, kind: noteKind });
       setNoteText("");
     } catch (err) {
-      Alert.alert("Could not save the note", describeError(err));
+      AppAlert.alert("Could not save the note", describeError(err));
     }
   };
 

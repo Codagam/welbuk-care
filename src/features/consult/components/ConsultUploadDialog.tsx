@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -11,7 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 
-import { AppModal, Button, DateField, TextField } from "@/ui";
+import { AppAlert, AppModal, DateField, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { createPatientLabReport } from "@/lib/api/endpoints/consult-data";
 import { uploadFile } from "@/lib/api/endpoints/recording";
@@ -19,6 +19,16 @@ import {
   usePatchReportAttachments,
   useInvalidatePatientHistory,
 } from "../hooks";
+import {
+  ErrorBanner,
+  FieldError,
+  FileDropZone,
+  FormSection,
+  PickedFileRow,
+  UploadSheetFooter,
+  UploadSheetHeader,
+  type PickedFile,
+} from "./upload/UploadKit";
 
 const MAX_SIZE_MB = 10;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
@@ -30,14 +40,45 @@ const ACCEPT_MIME = new Set([
   "application/pdf",
 ]);
 const ACCEPT_EXT = /\.(jpe?g|png|webp|pdf)$/i;
+const FORMATS = ["PDF", "JPG", "PNG", "WEBP"];
 const REPORT_STATUSES = ["PENDING", "COMPLETED", "REVIEWED"] as const;
+type ReportStatus = (typeof REPORT_STATUSES)[number];
 
-type PickedFile = {
-  uri: string;
-  name: string;
-  mimeType: string;
-  size?: number;
+const STATUS_STYLE: Record<
+  ReportStatus,
+  { label: string; dot: string; active: string; text: string }
+> = {
+  PENDING: {
+    label: "Pending",
+    dot: "bg-amber-500",
+    active: "border-amber-300 bg-amber-50",
+    text: "text-amber-800",
+  },
+  COMPLETED: {
+    label: "Completed",
+    dot: "bg-emerald-500",
+    active: "border-emerald-300 bg-emerald-50",
+    text: "text-emerald-800",
+  },
+  REVIEWED: {
+    label: "Reviewed",
+    dot: "bg-blue-500",
+    active: "border-blue-300 bg-blue-50",
+    text: "text-blue-800",
+  },
 };
+
+/** One-tap fill for the most common orders. */
+const COMMON_TESTS = [
+  "CBC",
+  "Lipid profile",
+  "HbA1c",
+  "LFT",
+  "KFT",
+  "Thyroid profile",
+  "Urine routine",
+  "X-ray",
+];
 
 function mimeOf(asset: {
   name?: string | null;
@@ -60,7 +101,7 @@ function validatePicked(
   if (assets.length > opts.maxFiles) {
     return {
       ok: [],
-      error: `You can attach up to ${opts.maxFiles} file${opts.maxFiles === 1 ? "" : "s"}.`,
+      error: `You can attach up to ${opts.maxFiles} more file${opts.maxFiles === 1 ? "" : "s"}.`,
     };
   }
   const ok: PickedFile[] = [];
@@ -89,10 +130,6 @@ function validatePicked(
   return { ok, error: null };
 }
 
-function toast(title: string, message?: string) {
-  Alert.alert(title, message);
-}
-
 type Tab = "visit" | "lab";
 
 type Props = {
@@ -105,6 +142,57 @@ type Props = {
   existingAttachmentUrls: string[];
   onSuccess?: () => void;
 };
+
+function TabCard({
+  active,
+  icon,
+  title,
+  description,
+  onPress,
+  disabled,
+}: {
+  active: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active, disabled }}
+      className={`flex-1 gap-1.5 rounded-2xl border p-3 ${
+        active
+          ? "border-brand bg-brand-50/60"
+          : "border-neutral-200 bg-white active:bg-neutral-50"
+      } ${disabled ? "opacity-40" : ""}`}
+    >
+      <View className="flex-row items-center gap-2">
+        <View
+          className={`h-8 w-8 items-center justify-center rounded-lg ${
+            active ? "bg-brand" : "bg-neutral-100"
+          }`}
+        >
+          <Ionicons name={icon} size={16} color={active ? "#fff" : "#525252"} />
+        </View>
+        <Text
+          className={`flex-1 text-sm font-semibold ${
+            active ? "text-brand-700" : "text-neutral-800"
+          }`}
+        >
+          {title}
+        </Text>
+        {active ? (
+          <Ionicons name="checkmark-circle" size={18} color="#FD006A" />
+        ) : null}
+      </View>
+      <Text className="text-xs leading-4 text-neutral-500">{description}</Text>
+    </Pressable>
+  );
+}
 
 /**
  * Practice-parity "Upload document" dialog — Visit file | Lab report tabs.
@@ -126,10 +214,14 @@ export function ConsultUploadDialog({
     new Date().toISOString().split("T")[0]
   );
   const [test, setTest] = useState("");
-  const [status, setStatus] =
-    useState<(typeof REPORT_STATUSES)[number]>("PENDING");
+  const [status, setStatus] = useState<ReportStatus>("PENDING");
   const [notes, setNotes] = useState("");
+  /** Picker problems (wrong type / too big) — shown under the file field. */
+  const [fileError, setFileError] = useState<string | null>(null);
+  /** Request failures — shown as a banner above the footer. */
   const [error, setError] = useState<string | null>(null);
+  /** Field errors appear only after the first submit attempt. */
+  const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const patchAttach = usePatchReportAttachments(consultationId, patientId);
@@ -140,25 +232,42 @@ export function ConsultUploadDialog({
 
   useEffect(() => {
     if (!open) return;
-    setTab(canUploadLab ? "visit" : "visit");
+    setTab("visit");
     setVisitFiles([]);
     setLabFile(null);
     setDate(new Date().toISOString().split("T")[0]);
     setTest("");
     setStatus("PENDING");
     setNotes("");
+    setFileError(null);
     setError(null);
+    setSubmitted(false);
     setBusy(false);
-  }, [open, canUploadLab]);
+  }, [open]);
 
   const close = () => onOpenChange(false);
 
-  const pickVisitFiles = async () => {
+  const switchTab = (next: Tab) => {
+    setTab(next);
+    setFileError(null);
     setError(null);
+    setSubmitted(false);
+  };
+
+  const labErrors = {
+    test: !test.trim() ? "Enter the test name" : null,
+    file: !labFile ? "Attach the report file (image or PDF)" : null,
+    date: !date.trim() ? "Pick the report date" : null,
+  };
+  const visitError =
+    visitFiles.length === 0 ? "Choose at least one file to attach" : null;
+
+  const pickVisitFiles = async () => {
+    setFileError(null);
     try {
       const remaining = MAX_VISIT_FILES - visitFiles.length;
       if (remaining <= 0) {
-        setError(`You can attach up to ${MAX_VISIT_FILES} files.`);
+        setFileError(`You can attach up to ${MAX_VISIT_FILES} files.`);
         return;
       }
       const picked = await DocumentPicker.getDocumentAsync({
@@ -176,18 +285,18 @@ export function ConsultUploadDialog({
         maxFiles: remaining,
       });
       if (err) {
-        setError(err);
+        setFileError(err);
         return;
       }
       const merged = [...visitFiles, ...ok].slice(0, MAX_VISIT_FILES);
       setVisitFiles(merged);
     } catch (e) {
-      setError(describeError(e));
+      setFileError(describeError(e));
     }
   };
 
   const pickLabFile = async () => {
-    setError(null);
+    setFileError(null);
     try {
       const picked = await DocumentPicker.getDocumentAsync({
         copyToCacheDirectory: true,
@@ -204,24 +313,25 @@ export function ConsultUploadDialog({
         maxFiles: 1,
       });
       if (err) {
-        setError(err);
+        setFileError(err);
         return;
       }
       setLabFile(ok[0] ?? null);
     } catch (e) {
-      setError(describeError(e));
+      setFileError(describeError(e));
     }
   };
 
   /** Pipeline A — Visit Documents: upload files, then PATCH full URL list */
   const handleVisitAttach = async () => {
+    setSubmitted(true);
+    setError(null);
     if (!consultationId?.trim()) {
-      setError("consultationId is required");
+      setError("This consultation could not be found. Reopen it and try again.");
       return;
     }
-    if (visitFiles.length === 0) return;
+    if (visitError) return;
     setBusy(true);
-    setError(null);
     try {
       // 1) POST /api/upload purpose=consult_report (get storage URLs)
       const uploaded: string[] = [];
@@ -236,8 +346,7 @@ export function ConsultUploadDialog({
         if (urls[0]) uploaded.push(urls[0]);
       }
       if (uploaded.length === 0) {
-        setError("Upload failed");
-        toast("Upload failed", "No files were uploaded.");
+        setError("No files were uploaded. Check your connection and try again.");
         return;
       }
 
@@ -251,18 +360,15 @@ export function ConsultUploadDialog({
       await patchAttach.mutateAsync(attachmentUrls);
 
       await invalidateHistory();
-      toast(
-        "File attached to visit",
+      AppAlert.success(
         uploaded.length === 1
-          ? undefined
-          : `${uploaded.length} files attached`
+          ? "File attached to visit"
+          : `${uploaded.length} files attached to visit`
       );
       onSuccess?.();
       close();
     } catch (e) {
-      const msg = describeError(e);
-      setError(msg);
-      toast("Upload failed", msg);
+      setError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -270,27 +376,13 @@ export function ConsultUploadDialog({
 
   /** Pipeline B — Lab report: POST upload (patient_lab_report) → POST lab-reports FormData */
   const handleLabSave = async () => {
+    setSubmitted(true);
     setError(null);
     if (!patientId || !facilityId) {
       setError("Patient and facility are required to upload a lab report.");
       return;
     }
-    if (!test.trim()) {
-      setError("Test name is required");
-      return;
-    }
-    if (!date.trim()) {
-      setError("Date is required");
-      return;
-    }
-    if (!status) {
-      setError("Status is required");
-      return;
-    }
-    if (!labFile) {
-      setError("Please upload a lab report file (image or PDF)");
-      return;
-    }
+    if (labErrors.test || labErrors.file || labErrors.date || !labFile) return;
 
     setBusy(true);
     try {
@@ -303,8 +395,7 @@ export function ConsultUploadDialog({
       );
       const fileUrl = urls[0];
       if (!fileUrl) {
-        setError("Upload failed");
-        toast("Upload failed");
+        setError("The file could not be uploaded. Please try again.");
         return;
       }
 
@@ -318,17 +409,17 @@ export function ConsultUploadDialog({
 
       await createPatientLabReport(facilityId, form);
       await invalidateHistory();
-      toast("Lab report uploaded");
+      AppAlert.success("Lab report saved", test.trim());
       onSuccess?.();
       close();
     } catch (e) {
-      const msg = describeError(e);
-      setError(msg);
-      toast("Failed to save lab report", msg);
+      setError(describeError(e));
     } finally {
       setBusy(false);
     }
   };
+
+  const showVisitError = submitted && visitError;
 
   return (
     <AppModal
@@ -337,305 +428,240 @@ export function ConsultUploadDialog({
       presentationStyle="pageSheet"
       onRequestClose={close}
     >
-      <View className="flex-1 bg-white">
-        <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
-          <Text className="text-lg font-semibold text-neutral-900">
-            Upload document
-          </Text>
-          <Pressable onPress={close} hitSlop={12} disabled={busy}>
-            <Ionicons name="close" size={24} color="#6b7280" />
-          </Pressable>
-        </View>
+      <KeyboardAvoidingView
+        className="flex-1 bg-white"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <UploadSheetHeader
+          title="Upload document"
+          subtitle="Add a file to this visit or save a lab report"
+          onClose={close}
+          disabled={busy}
+        />
 
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
+          contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 32 }}
         >
-          {/* Tabs */}
-          <View className="flex-row rounded-xl border border-neutral-200 bg-neutral-50 p-1">
-            <Pressable
-              onPress={() => setTab("visit")}
+          <View className="flex-row gap-3" accessibilityRole="tablist">
+            <TabCard
+              active={tab === "visit"}
+              icon="attach"
+              title="Visit file"
+              description="Attach scans or photos to this consultation"
+              onPress={() => switchTab("visit")}
               disabled={busy}
-              className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2.5 ${
-                tab === "visit" ? "bg-white" : ""
-              }`}
-            >
-              <Ionicons
-                name="attach"
-                size={14}
-                color={tab === "visit" ? "#FD006A" : "#6b7280"}
-              />
-              <Text
-                className={`text-sm font-medium ${
-                  tab === "visit" ? "text-brand" : "text-neutral-600"
-                }`}
-              >
-                Visit file
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => canUploadLab && setTab("lab")}
+            />
+            <TabCard
+              active={tab === "lab"}
+              icon="flask-outline"
+              title="Lab report"
+              description={
+                canUploadLab
+                  ? "Save a test result to the patient's history"
+                  : "Needs a patient and facility"
+              }
+              onPress={() => switchTab("lab")}
               disabled={!canUploadLab || busy}
-              className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2.5 ${
-                tab === "lab" ? "bg-white" : ""
-              } ${!canUploadLab ? "opacity-40" : ""}`}
-            >
-              <Ionicons
-                name="flask-outline"
-                size={14}
-                color={tab === "lab" ? "#FD006A" : "#6b7280"}
-              />
-              <Text
-                className={`text-sm font-medium ${
-                  tab === "lab" ? "text-brand" : "text-neutral-600"
-                }`}
-              >
-                Lab report
-              </Text>
-            </Pressable>
+            />
           </View>
 
           {tab === "visit" ? (
-            <View className="gap-4">
-              <Text className="text-xs text-neutral-500">
-                Attach an image or PDF to this consultation only (no test
-                metadata).
-              </Text>
-
-              <Pressable
-                onPress={() => void pickVisitFiles()}
-                disabled={busy || !consultationId}
-                className="items-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 px-4 py-8 active:border-brand"
-              >
-                <Ionicons name="cloud-upload-outline" size={28} color="#FD006A" />
-                <Text className="text-sm font-medium text-neutral-800">
-                  Choose files
-                </Text>
-                <Text className="text-center text-xs text-neutral-500">
-                  JPG, PNG, WEBP, or PDF — up to {MAX_SIZE_MB} MB each (max{" "}
-                  {MAX_VISIT_FILES})
-                </Text>
-              </Pressable>
-
-              {visitFiles.length > 0 ? (
-                <View className="gap-2">
-                  {visitFiles.map((f, i) => (
-                    <View
-                      key={`${f.uri}-${i}`}
-                      className="flex-row items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2"
-                    >
-                      <Ionicons
-                        name={
-                          f.mimeType === "application/pdf"
-                            ? "document-text-outline"
-                            : "image-outline"
-                        }
-                        size={18}
-                        color="#6b7280"
-                      />
-                      <Text
-                        className="flex-1 text-sm text-neutral-800"
-                        numberOfLines={1}
-                      >
-                        {f.name}
-                      </Text>
-                      <Pressable
-                        onPress={() =>
-                          setVisitFiles((prev) =>
-                            prev.filter((_, idx) => idx !== i)
-                          )
-                        }
-                        disabled={busy}
-                        hitSlop={8}
-                      >
-                        <Ionicons name="close-circle" size={20} color="#9ca3af" />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-
-              {error && tab === "visit" ? (
-                <Text className="text-sm text-red-500">{error}</Text>
-              ) : null}
-
-              <View className="flex-row justify-end gap-2 pt-2">
-                <Button
-                  label="Cancel"
-                  variant="outline"
-                  size="md"
-                  onPress={close}
-                  disabled={busy}
-                />
-                <Button
-                  label={
-                    visitFiles.length > 1
-                      ? `Attach (${visitFiles.length})`
-                      : "Attach"
-                  }
-                  size="md"
-                  onPress={() => void handleVisitAttach()}
-                  loading={busy}
-                  disabled={visitFiles.length === 0 || !consultationId}
-                  icon={
-                    busy ? null : (
-                      <Ionicons name="attach" size={16} color="#fff" />
-                    )
-                  }
-                />
-              </View>
-            </View>
-          ) : null}
-
-          {tab === "lab" ? (
-            <View className="gap-4">
-              {!canUploadLab ? (
-                <Text className="text-sm text-neutral-500">
-                  Patient and facility are required to upload a lab report.
-                </Text>
-              ) : (
-                <>
-                  <DateField
-                    label="Date"
-                    value={date}
-                    onChange={setDate}
+            <FormSection
+              label="Files"
+              required
+              aside={
+                visitFiles.length > 0 ? (
+                  <Text className="text-xs text-neutral-500">
+                    {visitFiles.length} / {MAX_VISIT_FILES}
+                  </Text>
+                ) : null
+              }
+            >
+              <View className="gap-2.5">
+                {visitFiles.map((f, i) => (
+                  <PickedFileRow
+                    key={`${f.uri}-${i}`}
+                    file={f}
                     disabled={busy}
+                    onRemove={() =>
+                      setVisitFiles((prev) =>
+                        prev.filter((_, idx) => idx !== i)
+                      )
+                    }
                   />
-
-                  <TextField
-                    label="Test name"
-                    value={test}
-                    onChangeText={setTest}
-                    placeholder="e.g. CBC, Lipid profile"
-                    editable={!busy}
+                ))}
+                {visitFiles.length < MAX_VISIT_FILES ? (
+                  <FileDropZone
+                    title={
+                      visitFiles.length ? "Add more files" : "Tap to choose files"
+                    }
+                    hint={`Up to ${MAX_VISIT_FILES} files, ${MAX_SIZE_MB} MB each`}
+                    formats={FORMATS}
+                    onPress={() => void pickVisitFiles()}
+                    disabled={busy || !consultationId}
+                    error={Boolean(fileError || showVisitError)}
+                    compact={visitFiles.length > 0}
                   />
+                ) : null}
+              </View>
+              {fileError ? (
+                <FieldError message={fileError} />
+              ) : showVisitError ? (
+                <FieldError message={visitError} />
+              ) : null}
+            </FormSection>
+          ) : null}
 
-                  <View className="gap-1.5">
-                    <Text className="text-sm font-medium text-neutral-700">
-                      Report file
-                    </Text>
-                    <Pressable
-                      onPress={() => void pickLabFile()}
-                      disabled={busy}
-                      className="items-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 px-4 py-6 active:border-brand"
-                    >
-                      {labFile ? (
-                        <>
-                          <Ionicons
-                            name={
-                              labFile.mimeType === "application/pdf"
-                                ? "document-text-outline"
-                                : "image-outline"
-                            }
-                            size={24}
-                            color="#FD006A"
-                          />
-                          <Text
-                            className="text-sm font-medium text-neutral-800"
-                            numberOfLines={1}
-                          >
-                            {labFile.name}
-                          </Text>
-                          <Text className="text-xs text-brand">Tap to change</Text>
-                        </>
-                      ) : (
-                        <>
-                          <Ionicons
-                            name="cloud-upload-outline"
-                            size={24}
-                            color="#FD006A"
-                          />
-                          <Text className="text-sm font-medium text-neutral-800">
-                            Choose file
-                          </Text>
-                          <Text className="text-xs text-neutral-500">
-                            Image or PDF — up to {MAX_SIZE_MB} MB
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
+          {tab === "lab" && canUploadLab ? (
+            <View className="gap-5">
+              <View className="gap-2">
+                <TextField
+                  label="Test name"
+                  required
+                  value={test}
+                  onChangeText={setTest}
+                  placeholder="e.g. CBC, Lipid profile"
+                  editable={!busy}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  error={submitted ? (labErrors.test ?? undefined) : undefined}
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ gap: 6 }}
+                >
+                  {COMMON_TESTS.map((name) => {
+                    const active = test.trim().toLowerCase() === name.toLowerCase();
+                    return (
+                      <Pressable
+                        key={name}
+                        onPress={() => setTest(name)}
+                        disabled={busy}
+                        className={`rounded-full border px-3 py-1.5 ${
+                          active
+                            ? "border-brand bg-brand-50"
+                            : "border-neutral-200 bg-white active:bg-neutral-50"
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-medium ${
+                            active ? "text-brand-700" : "text-neutral-600"
+                          }`}
+                        >
+                          {name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
-                  <View className="gap-1.5">
-                    <Text className="text-sm font-medium text-neutral-700">
-                      Status
-                    </Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {REPORT_STATUSES.map((s) => {
-                        const active = status === s;
-                        return (
-                          <Pressable
-                            key={s}
-                            onPress={() => setStatus(s)}
-                            disabled={busy}
-                            className={`rounded-full px-3 py-1.5 ${
-                              active ? "bg-brand" : "bg-neutral-100"
-                            }`}
-                          >
-                            <Text
-                              className={`text-xs font-medium ${
-                                active
-                                  ? "text-brand-foreground"
-                                  : "text-neutral-600"
-                              }`}
-                            >
-                              {s.charAt(0) + s.slice(1).toLowerCase()}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
+              <FormSection
+                label="Report file"
+                required
+                error={
+                  fileError ?? (submitted ? labErrors.file : null)
+                }
+              >
+                {labFile ? (
+                  <PickedFileRow
+                    file={labFile}
+                    disabled={busy}
+                    onReplace={() => void pickLabFile()}
+                    onRemove={() => setLabFile(null)}
+                  />
+                ) : (
+                  <FileDropZone
+                    hint={`One file, up to ${MAX_SIZE_MB} MB`}
+                    formats={FORMATS}
+                    onPress={() => void pickLabFile()}
+                    disabled={busy}
+                    error={Boolean(fileError || (submitted && labErrors.file))}
+                  />
+                )}
+              </FormSection>
 
-                  <View className="gap-1.5">
-                    <Text className="text-sm font-medium text-neutral-700">
-                      Notes (optional)
-                    </Text>
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Additional observations…"
-                      placeholderTextColor="#9ca3af"
-                      multiline
-                      editable={!busy}
-                      className="min-h-[80px] rounded-xl border border-neutral-300 bg-white px-4 py-3 text-base text-neutral-900"
-                      textAlignVertical="top"
-                    />
-                  </View>
+              <DateField
+                label="Report date"
+                required
+                value={date}
+                onChange={setDate}
+                maximumDate={new Date().toISOString().split("T")[0]}
+                disabled={busy}
+                error={submitted ? (labErrors.date ?? undefined) : undefined}
+              />
 
-                  {error ? (
-                    <Text className="text-sm text-red-500">{error}</Text>
-                  ) : null}
+              <FormSection label="Status" required>
+                <View className="flex-row gap-2">
+                  {REPORT_STATUSES.map((s) => {
+                    const active = status === s;
+                    const style = STATUS_STYLE[s];
+                    return (
+                      <Pressable
+                        key={s}
+                        onPress={() => setStatus(s)}
+                        disabled={busy}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: active }}
+                        className={`h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border ${
+                          active
+                            ? style.active
+                            : "border-neutral-200 bg-white active:bg-neutral-50"
+                        }`}
+                      >
+                        <View className={`h-2 w-2 rounded-full ${style.dot}`} />
+                        <Text
+                          className={`text-sm font-medium ${
+                            active ? style.text : "text-neutral-600"
+                          }`}
+                        >
+                          {style.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </FormSection>
 
-                  <View className="flex-row justify-end gap-2 pt-2">
-                    <Button
-                      label="Cancel"
-                      variant="outline"
-                      size="md"
-                      onPress={close}
-                      disabled={busy}
-                    />
-                    <Button
-                      label="Save report"
-                      size="md"
-                      onPress={() => void handleLabSave()}
-                      loading={busy}
-                      disabled={busy}
-                    />
-                  </View>
-                </>
-              )}
+              <FormSection label="Notes" optional>
+                <TextInput
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Key findings or observations…"
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                  editable={!busy}
+                  className="min-h-[88px] rounded-xl border border-neutral-300 bg-white px-4 py-3 text-base text-neutral-900"
+                  textAlignVertical="top"
+                />
+              </FormSection>
             </View>
           ) : null}
 
-          {busy ? (
-            <View className="items-center py-2">
-              <ActivityIndicator color="#FD006A" />
-              <Text className="mt-2 text-xs text-neutral-500">Uploading…</Text>
-            </View>
-          ) : null}
+          {error ? <ErrorBanner message={error} /> : null}
         </ScrollView>
-      </View>
+
+        <UploadSheetFooter
+          primaryLabel={
+            tab === "lab"
+              ? "Save report"
+              : visitFiles.length > 1
+                ? `Attach ${visitFiles.length} files`
+                : "Attach file"
+          }
+          icon={tab === "lab" ? "checkmark" : "attach"}
+          onPrimary={() =>
+            void (tab === "lab" ? handleLabSave() : handleVisitAttach())
+          }
+          onCancel={close}
+          busy={busy}
+          primaryDisabled={tab === "visit" && !consultationId}
+          showRequiredHint
+        />
+      </KeyboardAvoidingView>
     </AppModal>
   );
 }

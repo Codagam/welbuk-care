@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -15,6 +14,7 @@ import {
   useDrugCatalogOptions,
   useQuickAddDrug,
 } from "../hooks/usePrescriptionDraft";
+import { AppAlert } from "@/ui/AppAlert";
 
 export function QuickAddDrugDialog({
   open,
@@ -71,7 +71,7 @@ export function QuickAddDrugDialog({
         strength,
         category: category || undefined,
       });
-      Alert.alert(
+      AppAlert.success(
         out.alreadyExisted ? "Already in catalogue" : "Medicine added",
         out.alreadyExisted
           ? "Already in the catalogue — selected"

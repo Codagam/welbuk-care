@@ -1,8 +1,8 @@
 import { useEffect, type ReactNode } from "react";
-import { Alert } from "react-native";
 
 import { useSectionAccess } from "./hooks";
 import { NoAccess, SectionAccessLoading } from "./NoAccess";
+import { AppAlert } from "@/ui/AppAlert";
 
 type SectionAccessGateProps = {
   /**
@@ -50,7 +50,7 @@ export function SectionAccessGate({
 
   useEffect(() => {
     if (!denied) return;
-    Alert.alert(
+    AppAlert.alert(
       "You don't have permission",
       `${sectionLabel} isn't available for your role. Ask a facility administrator if you need access.`
     );

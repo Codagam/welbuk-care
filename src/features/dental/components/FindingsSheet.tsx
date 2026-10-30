@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 import { AppModal, Button, DateField, TextField, TimeField } from "@/ui";
@@ -38,6 +37,7 @@ import {
 import { DiagnosisTypesAutocomplete } from "./DiagnosisTypesAutocomplete";
 import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
 import { ToothBadge } from "./ToothBadge";
+import { AppAlert } from "@/ui/AppAlert";
 
 type ConditionDraft = {
   problem: string;
@@ -516,7 +516,7 @@ export function FindingsSheet({
 
   const confirmClearTooth = () => {
     if (!toothId || !onClearTooth) return;
-    Alert.alert(
+    AppAlert.alert(
       "Delete tooth plan",
       `Remove all findings and linked plan rows for tooth ${toothId}?`,
       [

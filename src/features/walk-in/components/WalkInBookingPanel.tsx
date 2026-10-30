@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -35,6 +34,7 @@ import {
   type WalkInSelection,
 } from "../lib";
 import { PhoneOtpVerify } from "./PhoneOtpVerify";
+import { AppAlert } from "@/ui/AppAlert";
 
 const KIND_STYLE: Record<
   WalkInPatientKind,
@@ -190,11 +190,13 @@ export function WalkInBookingPanel({ onBooked, showTitle = true }: Props) {
       });
 
       const token = formatSeriesToken(appointment?.tokenNumber, appointment?.tokenSeries);
-      Alert.alert(
+      AppAlert.alert(
         t("walkIn.bookedTitle"),
         token
           ? t("walkIn.bookedMessage", { name: patientName, token })
-          : t("walkIn.bookedMessageNoToken", { name: patientName })
+          : t("walkIn.bookedMessageNoToken", { name: patientName }),
+        undefined,
+        { tone: "success" }
       );
       reset();
       onBooked?.();

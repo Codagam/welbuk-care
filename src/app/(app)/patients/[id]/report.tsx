@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   Text,
   View,
@@ -26,6 +25,7 @@ import { printLocalPdf } from "@/lib/api/printLocalPdf";
 import { shareLocalFileOrAlert } from "@/lib/api/shareLocalFile";
 import { useActiveFacility } from "@/lib/auth/store";
 import { Button, Screen, TopBar } from "@/ui";
+import { AppAlert } from "@/ui/AppAlert";
 
 function formatDateLabel(value?: string | null): string {
   if (!value) return "—";
@@ -120,7 +120,7 @@ export default function PatientAppointmentReportScreen() {
 
   useEffect(() => {
     if (consultAccessLoading || canAccessConsult) return;
-    Alert.alert(
+    AppAlert.alert(
       "You don't have permission",
       "Consult isn't available for your role. Ask a facility administrator if you need access."
     );
@@ -202,7 +202,7 @@ export default function PatientAppointmentReportScreen() {
         dialogTitle: "Download PDF",
       });
     } catch (e) {
-      Alert.alert("Download failed", describeError(e));
+      AppAlert.alert("Download failed", describeError(e));
     } finally {
       setDownloading(false);
     }
@@ -216,7 +216,7 @@ export default function PatientAppointmentReportScreen() {
       await printLocalPdf(uri);
     } catch (e) {
       if (isPrintCanceled(e)) return;
-      Alert.alert("Print failed", describeError(e));
+      AppAlert.alert("Print failed", describeError(e));
     } finally {
       setPrinting(false);
     }

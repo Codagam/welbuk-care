@@ -1,7 +1,6 @@
 ﻿import * as DocumentPicker from "expo-document-picker";
 import { useMemo, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -34,6 +33,7 @@ import {
   validatePrescriptionItem,
 } from "../validation";
 import { QuickAddDrugDialog } from "./QuickAddDrugDialog";
+import { AppAlert } from "@/ui/AppAlert";
 
 const TIMING = ["BF", "AF"] as const;
 
@@ -616,7 +616,7 @@ function TemplateBar({
         return;
       }
       if (e instanceof ApiError && e.status === 409) {
-        Alert.alert(
+        AppAlert.alert(
           "Template exists",
           "A template with this name already exists. Update it?",
           [

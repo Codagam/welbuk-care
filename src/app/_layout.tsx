@@ -15,7 +15,7 @@ import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { useAuthStore } from "@/lib/auth/store";
 import { queryClient } from "@/lib/query";
-import { AppModal, AppStatusBar, Button } from "@/ui";
+import { AppAlertHost, AppModal, AppStatusBar, Button } from "@/ui";
 import { AnimatedSplash, splashHasPlayed } from "@/ui/AnimatedSplash";
 
 // Module scope: keep the native splash up until AnimatedSplash paints its first frame.
@@ -208,6 +208,7 @@ export default function RootLayout() {
           {/* Update prompt waits until the splash is gone. */}
           {splashDone ? <UpdateVersionAlert /> : null}
           <Stack screenOptions={{ headerShown: false }} />
+          <AppAlertHost />
           {/* Overlay rendered last, never swapped by an early return. */}
           {splashDone ? null : (
             <AnimatedSplash

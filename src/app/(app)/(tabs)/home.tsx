@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 
 import { HeaderActions } from "@/features/header";
 import {
@@ -16,6 +16,7 @@ import {
   useAuthUser,
 } from "@/lib/auth/store";
 import { Screen } from "@/ui";
+import { AppAlert } from "@/ui/AppAlert";
 
 const APP_VERSION = "1.0.0";
 
@@ -144,7 +145,7 @@ export default function SettingsScreen() {
     null;
 
   const confirmSignOut = () => {
-    Alert.alert(
+    AppAlert.alert(
       t("common.signOutConfirmTitle"),
       t("common.signOutConfirmMessage"),
       [
@@ -154,7 +155,8 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: () => signOut(),
         },
-      ]
+      ],
+      { icon: "log-out-outline" }
     );
   };
 

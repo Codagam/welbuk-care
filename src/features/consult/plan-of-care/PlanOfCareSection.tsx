@@ -7,7 +7,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Alert,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -43,6 +42,7 @@ import {
   usePrescriptionDraft,
 } from "./hooks/usePrescriptionDraft";
 import type { AllergyRecordLike } from "./types";
+import { AppAlert } from "@/ui/AppAlert";
 
 function normalizeAllergies(
   raw: unknown
@@ -135,7 +135,7 @@ export function PlanOfCareSection({
     const message = detail?.trim()
       ? detail
       : "The appointment has been completed.";
-    Alert.alert("Appointment completed", message, [
+    AppAlert.alert("Appointment completed", message, [
       {
         text: "OK",
         onPress: () => router.replace("/queue"),
@@ -192,7 +192,7 @@ export function PlanOfCareSection({
     };
 
     if (!hasMeds && !hasAttach) {
-      Alert.alert(
+      AppAlert.alert(
         "Complete without prescription?",
         "No medicines or attachments. Complete this visit anyway?",
         [

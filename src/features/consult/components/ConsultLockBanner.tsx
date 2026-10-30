@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +21,7 @@ import {
   MIN_REOPEN_WORDS,
 } from "../consultLock";
 import { useReopenConsult } from "../useReopenConsult";
+import { AppAlert } from "@/ui/AppAlert";
 
 export function ConsultLockBanner({
   consultationId,
@@ -53,11 +53,11 @@ export function ConsultLockBanner({
     if (!ready || saving) return;
     try {
       await reopen.mutateAsync(reason);
-      Alert.alert("Reopened — this consultation can be edited again");
+      AppAlert.success("Reopened", "This consultation can be edited again.");
       setReason("");
       setSheetOpen(false);
     } catch (e) {
-      Alert.alert("Could not reopen", describeError(e));
+      AppAlert.alert("Could not reopen", describeError(e));
     }
   };
 

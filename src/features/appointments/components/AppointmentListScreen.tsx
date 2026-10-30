@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -60,6 +59,7 @@ import {
 import { canOpenAppointmentFromList } from "../lib/appointmentGates";
 import { resolveAppointmentActions } from "../lib/appointmentActions";
 import type { Appointment } from "../types";
+import { AppAlert } from "@/ui/AppAlert";
 
 function patientDisplayName(appt: Appointment): string {
   if (!appt.patient) return "this patient";
@@ -157,7 +157,7 @@ export function AppointmentListScreen() {
 
   const onReadyForNext = async () => {
     if (!facilityId) {
-      Alert.alert(
+      AppAlert.alert(
         "Select a facility",
         "Choose a facility before notifying reception."
       );
@@ -165,12 +165,12 @@ export function AppointmentListScreen() {
     }
     try {
       await readyForNext.mutateAsync();
-      Alert.alert(
+      AppAlert.success(
         "Front desk notified",
         "Reception has been told you are ready for the next patient."
       );
     } catch (err) {
-      Alert.alert("Could not notify front desk", describeError(err));
+      AppAlert.alert("Could not notify front desk", describeError(err));
     }
   };
 
@@ -187,7 +187,7 @@ export function AppointmentListScreen() {
         },
       });
     } catch (err) {
-      Alert.alert("Could not open consult", describeError(err));
+      AppAlert.alert("Could not open consult", describeError(err));
     } finally {
       setOpeningId(null);
     }
@@ -196,14 +196,14 @@ export function AppointmentListScreen() {
   const onOpenConsult = async (appt: Appointment) => {
     if (consultAccessLoading) return;
     if (!canOpenConsult) {
-      Alert.alert(
+      AppAlert.alert(
         "You don't have permission",
         "Your role can't open consultations. Only doctors can consult a patient. Ask a facility administrator if you need access."
       );
       return;
     }
     if (!canOpenAppointmentFromList(appt)) {
-      Alert.alert(
+      AppAlert.alert(
         "Consult unavailable",
         "Check in the patient first when the visit is still Scheduled. Walk-ins and waiting visits can open directly. Follow-up fees and time slots must be completed first."
       );
@@ -224,7 +224,9 @@ export function AppointmentListScreen() {
         patientName: patientDisplayName(appt),
       });
     } catch (err) {
-      Alert.alert(t("appointments.failedToOpenVitals"), describeError(err));
+      AppAlert.alert(t("appointments.failedToOpenVitals"), describeError(err), undefined, {
+        tone: "error",
+      });
     } finally {
       setOpeningVitalsId(null);
     }
@@ -249,9 +251,11 @@ export function AppointmentListScreen() {
     setCheckingInId(appt.id);
     try {
       await checkIn.mutateAsync(appt.id);
-      Alert.alert(t("appointments.checkInSuccess"));
+      AppAlert.success(t("appointments.checkInSuccess"));
     } catch (err) {
-      Alert.alert(t("appointments.failedToCheckIn"), describeError(err));
+      AppAlert.alert(t("appointments.failedToCheckIn"), describeError(err), undefined, {
+        tone: "error",
+      });
     } finally {
       setCheckingInId(null);
     }
@@ -260,7 +264,7 @@ export function AppointmentListScreen() {
   const onCheckIn = (appt: Appointment) => {
     if (checkingInId !== null) return;
     const name = patientDisplayName(appt);
-    Alert.alert(
+    AppAlert.alert(
       t("appointments.checkInConfirmTitle"),
       t("appointments.checkInConfirmMessage", { name }),
       [
@@ -269,7 +273,8 @@ export function AppointmentListScreen() {
           text: t("appointments.checkIn"),
           onPress: () => void performCheckIn(appt),
         },
-      ]
+      ],
+      { tone: "confirm", icon: "log-in-outline" }
     );
   };
 
@@ -278,9 +283,11 @@ export function AppointmentListScreen() {
     setFittingInId(appt.id);
     try {
       await lateArrival.mutateAsync(appt.id);
-      Alert.alert(t("appointments.fitInSuccess"));
+      AppAlert.success(t("appointments.fitInSuccess"));
     } catch (err) {
-      Alert.alert(t("appointments.failedToFitIn"), describeError(err));
+      AppAlert.alert(t("appointments.failedToFitIn"), describeError(err), undefined, {
+        tone: "error",
+      });
     } finally {
       setFittingInId(null);
     }
@@ -292,7 +299,7 @@ export function AppointmentListScreen() {
   };
 
   const confirmDelete = (appt: Appointment) => {
-    Alert.alert(
+    AppAlert.alert(
       t("appointments.deleteConfirmTitle"),
       t("appointments.deleteConfirmMessage", { name: patientDisplayName(appt) }),
       [
@@ -304,14 +311,20 @@ export function AppointmentListScreen() {
             deleteAppointment.mutate(
               { id: appt.id },
               {
-                onSuccess: () => Alert.alert(t("appointments.deleteSuccess")),
+                onSuccess: () => AppAlert.success(t("appointments.deleteSuccess")),
                 onError: (err) =>
-                  Alert.alert(t("appointments.failedToDelete"), describeError(err)),
+                  AppAlert.alert(
+                    t("appointments.failedToDelete"),
+                    describeError(err),
+                    undefined,
+                    { tone: "error" }
+                  ),
               }
             );
           },
         },
-      ]
+      ],
+      { tone: "danger", icon: "trash" }
     );
   };
 

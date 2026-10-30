@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -26,6 +25,7 @@ import {
   useCancelAppointment,
   type CancelRefund,
 } from "../hooks/useAppointmentActions";
+import { AppAlert } from "@/ui/AppAlert";
 
 function formatRupees(n: number): string {
   return `₹${n.toLocaleString("en-IN", {
@@ -202,11 +202,13 @@ export function CancelAppointmentSheet({
       });
       if (result.cashRefundError) {
         // The visit IS cancelled; close and say what is left to do.
-        Alert.alert(
+        AppAlert.alert(
           t("appointments.cancelSheet.cashRefundFailedTitle"),
           t("appointments.cancelSheet.cashRefundFailed", {
             detail: result.cashRefundError,
-          })
+          }),
+          undefined,
+          { tone: "warning", afterDismiss: true }
         );
       }
       onClose();

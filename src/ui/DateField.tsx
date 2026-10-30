@@ -8,9 +8,12 @@ import {
 import DateTimePicker from "@expo/ui/community/datetime-picker";
 
 import { AppModal } from "./AppModal";
+import { FieldLabel } from "./FieldLabel";
 
 export type DateFieldProps = {
   label?: string;
+  /** Shows a red `*` after the label. */
+  required?: boolean;
   value: string;
   onChange: (ymd: string) => void;
   /** Minimum selectable date as YYYY-MM-DD */
@@ -60,6 +63,7 @@ function formatDisplay(ymd: string): string {
 
 export function DateField({
   label,
+  required,
   value,
   onChange,
   minimumDate,
@@ -83,7 +87,7 @@ export function DateField({
   return (
     <View className={`gap-1.5 ${containerClassName}`}>
       {label ? (
-        <Text className="text-sm font-medium text-neutral-700">{label}</Text>
+        <FieldLabel label={label} required={required} />
       ) : null}
       <Pressable
         disabled={disabled}
