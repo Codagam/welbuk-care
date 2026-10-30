@@ -226,11 +226,6 @@ export function ConsultUploadDialog({
       // 1) POST /api/upload purpose=consult_report (get storage URLs)
       const uploaded: string[] = [];
       for (const file of visitFiles) {
-        console.log("[visit-attach] POST /api/upload consult_report", {
-          consultationId,
-          name: file.name,
-          mimeType: file.mimeType,
-        });
         const urls = await uploadFile(
           file.uri,
           file.name,
@@ -238,7 +233,6 @@ export function ConsultUploadDialog({
           "consult_report",
           { consultationId }
         );
-        console.log("[visit-attach] upload urls", urls);
         if (urls[0]) uploaded.push(urls[0]);
       }
       if (uploaded.length === 0) {
@@ -254,13 +248,7 @@ export function ConsultUploadDialog({
         ),
         ...uploaded,
       ];
-      console.log("[visit-attach] PATCH attachments", {
-        consultationId,
-        count: attachmentUrls.length,
-        attachmentUrls,
-      });
-      const saved = await patchAttach.mutateAsync(attachmentUrls);
-      console.log("[visit-attach] PATCH saved", saved);
+      await patchAttach.mutateAsync(attachmentUrls);
 
       await invalidateHistory();
       toast(
@@ -273,7 +261,6 @@ export function ConsultUploadDialog({
       close();
     } catch (e) {
       const msg = describeError(e);
-      console.log("[visit-attach] failed", e);
       setError(msg);
       toast("Upload failed", msg);
     } finally {

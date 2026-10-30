@@ -42,22 +42,7 @@ export function useTodayQueue() {
         sortBy: "startTime",
         sortOrder: "asc" as const,
       };
-      console.log("[queue] appointment-search request", params);
-      const result = await searchAppointments(params, signal);
-      console.log("[queue] appointment-search response", {
-        totalCount: result.totalCount,
-        count: result.data?.length,
-        sample: result.data?.slice(0, 2).map((a) => ({
-          id: a.id,
-          doctorId: a.doctorId,
-          doctorName: a.doctor?.name,
-          patient: a.patient
-            ? `${a.patient.firstName} ${a.patient.lastName ?? ""}`.trim()
-            : null,
-          status: a.status,
-        })),
-      });
-      return result;
+      return searchAppointments(params, signal);
     },
   });
 }

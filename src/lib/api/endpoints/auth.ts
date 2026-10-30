@@ -94,8 +94,8 @@ export async function loginRequest(input: LoginInput): Promise<{
         facilities: me.facilities ?? data.facilities ?? [],
       };
     }
-  } catch (err) {
-    console.log("[auth] /me failed after login, falling back to login user", err);
+  } catch {
+    // Fall back to the login user (no doctorId until the next /me).
   }
 
   return { token, user: data.user, facilities: data.facilities ?? [] };

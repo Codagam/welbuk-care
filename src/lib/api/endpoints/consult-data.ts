@@ -134,38 +134,16 @@ export async function patchReportAttachmentUrls(
     ),
   };
 
-  console.log("[PATCH /api/consult/report/attachments] request body", body);
-
-  try {
-    const res = await api<{ attachmentUrls?: string[] }>({
-      path: "/api/consult/report/attachments",
-      method: "PATCH",
-      body,
-    });
-    console.log("[PATCH /api/consult/report/attachments] 200 response", res);
-    return {
-      attachmentUrls: Array.isArray(res?.attachmentUrls)
-        ? res.attachmentUrls
-        : body.attachmentUrls,
-    };
-  } catch (err) {
-    console.log("[PATCH /api/consult/report/attachments] failed", {
-      message: err instanceof Error ? err.message : String(err),
-      status:
-        err && typeof err === "object" && "status" in err
-          ? (err as { status: unknown }).status
-          : undefined,
-      code:
-        err && typeof err === "object" && "code" in err
-          ? (err as { code: unknown }).code
-          : undefined,
-      data:
-        err && typeof err === "object" && "data" in err
-          ? (err as { data: unknown }).data
-          : undefined,
-    });
-    throw err;
-  }
+  const res = await api<{ attachmentUrls?: string[] }>({
+    path: "/api/consult/report/attachments",
+    method: "PATCH",
+    body,
+  });
+  return {
+    attachmentUrls: Array.isArray(res?.attachmentUrls)
+      ? res.attachmentUrls
+      : body.attachmentUrls,
+  };
 }
 
 // ---- Lab reports --------------------------------------------------------

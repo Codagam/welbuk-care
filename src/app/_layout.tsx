@@ -101,7 +101,7 @@ function UpdateVersionAlert() {
         if (err instanceof ApiError && err.code === "NOT_FOUND") return;
 
         // Never block app startup for update checks.
-        console.error("[Version] Check failed:", err);
+        if (__DEV__) console.error("[Version] Check failed:", err);
       }
     };
 
