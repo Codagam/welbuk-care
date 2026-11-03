@@ -26,6 +26,8 @@ import {
     toDateOnly,
     todayYmd,
 } from "../utils";
+import { useDentalConsult } from "../DentalConsultContext";
+import { PAID_LOCK_MESSAGE } from "../useDentalDiagnosis";
 import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
 import { ToothBadge } from "./ToothBadge";
 
@@ -175,6 +177,7 @@ export function PlanEditorSheet({
 }: Props) {
   const [draft, setDraft] = useState<DentalTreatmentPlanRow | null>(null);
   const [pickQuery, setPickQuery] = useState("");
+  const paidLocked = useDentalConsult().isRowPaidLocked(row?.id);
 
   useEffect(() => {
     if (!visible || !row) {
@@ -320,7 +323,7 @@ export function PlanEditorSheet({
   };
 
   const handleSave = () => {
-    if (!canSave) return;
+    if (!canSave || paidLocked) return;
     const providers = draft.providers.map((p) => ({
       doctorId: p.doctorId || "",
       role: p.role?.trim() || "Primary",
@@ -379,6 +382,17 @@ export function PlanEditorSheet({
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 16 }}
         >
+          {paidLocked ? (
+            <View className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <Text className="text-xs text-emerald-900">
+                {PAID_LOCK_MESSAGE}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* DONE + PAID: readable and scrollable, but nothing below can be tapped.
+              The server refuses the same change. */}
+          <View pointerEvents={paidLocked ? "none" : "auto"} style={{ gap: 16 }}>
           {/* Condition banner (linked) */}
           {isLinked && draft.findingSummary?.conditionsText ? (
             <View className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
@@ -632,17 +646,24 @@ export function PlanEditorSheet({
               Add at least one treatment under Treated before saving.
             </Text>
           ) : null}
+          </View>
         </ScrollView>
 
         {/* Footer */}
         <View className="gap-2 border-t border-neutral-200 bg-white px-4 py-3">
+          {paidLocked ? null : (
+            <Button
+              label="Save"
+              loading={saving}
+              disabled={!canSave}
+              onPress={handleSave}
+            />
+          )}
           <Button
-            label="Save"
-            loading={saving}
-            disabled={!canSave}
-            onPress={handleSave}
+            label={paidLocked ? "Close" : "Cancel"}
+            variant="outline"
+            onPress={onClose}
           />
-          <Button label="Cancel" variant="outline" onPress={onClose} />
         </View>
       </View>
     </AppModal>

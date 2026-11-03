@@ -122,10 +122,22 @@ export interface PatientHistory {
   medicalHistory?: MedicalCondition[] | unknown;
   medications?: MedicationRecord[] | unknown[];
   allergies?: AllergyRecord[] | unknown[];
+  pastHistory?: PastHistory | null;
   labReports?: LabReportItem[];
   doctorNotes?: DoctorNote[];
   /** Legacy field some clients used; prefer doctorNotes */
   previousNotes?: PreviousNote[];
+}
+
+/** A Yes/No intake answer with the patient's own details. Null when never answered. */
+export interface PastHistoryAnswer {
+  answer: "Yes" | "No";
+  details: string | null;
+}
+
+export interface PastHistory {
+  previousSurgeries: PastHistoryAnswer | null;
+  hospitalizations: PastHistoryAnswer | null;
 }
 
 export interface PreviousNote {

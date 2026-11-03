@@ -101,6 +101,8 @@ export type DentalData = {
   treatmentOrder: string[];
   treatmentPlanItems: DentalTreatmentPlanRow[];
   billingPayments: BillingPayment[];
+  /** This consult's treatment line is fully paid (decided by the server). */
+  treatmentPaid: boolean;
 };
 
 export type DiagnosisOption = {

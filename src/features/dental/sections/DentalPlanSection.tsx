@@ -219,12 +219,17 @@ export function DentalPlanSection() {
                       ₹ {formatRupees(feesFor(it))}
                     </Text>
                   </View>
+                  {dental.isRowPaidLocked(it.id) ? (
+                    <Text className="text-xs font-medium text-emerald-700">
+                      Paid
+                    </Text>
+                  ) : null}
                   <Pressable
                     onPress={() => setEditRow(it)}
                     className="rounded-lg px-3 py-1.5 active:bg-neutral-100"
                   >
                     <Text className="text-sm font-semibold text-neutral-900">
-                      Edit
+                      {dental.isRowPaidLocked(it.id) ? "View" : "Treat"}
                     </Text>
                   </Pressable>
                 </View>

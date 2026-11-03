@@ -15,7 +15,7 @@ import {
   postDentalFindings,
   putDentalFull,
 } from "@/lib/api/endpoints/dental";
-import { describeError } from "@/lib/api/errors";
+import { ApiError, describeError } from "@/lib/api/errors";
 import { queryClient } from "@/lib/query";
 import {
   CONSULT_LOCKED_MESSAGE,
@@ -44,6 +44,9 @@ import {
 import type { DentalDiagnosisClonePair } from "./utils";
 
 const AUTOSAVE_MS = 60_000;
+
+export const PAID_LOCK_MESSAGE =
+  "This treatment is done and paid, so it can no longer be changed.";
 
 const STATIC_OPTIONS: DiagnosisOption[] = PROBLEM_TYPES.map((p) => ({
   value: p.value,
@@ -77,6 +80,8 @@ export function useDentalDiagnosis({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  /** The consult's treatment line is fully paid, as the server last reported. */
+  const [treatmentPaid, setTreatmentPaid] = useState(false);
   const [diagnosisTypes, setDiagnosisTypes] = useState<DiagnosisOption[] | null>(
     null
   );
@@ -116,6 +121,7 @@ export function useDentalDiagnosis({
     setError(null);
     try {
       const data = await getDental(consultationId);
+      setTreatmentPaid(data.treatmentPaid);
       let parsed = data.treatmentEntries;
       const priorTrim = (priorDentalConsultationId ?? "").trim();
       const priorOk =
@@ -158,6 +164,31 @@ export function useDentalDiagnosis({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  /**
+   * DONE + PAID = LOCKED. Read off the SAVED row: the editor's own status moves as
+   * treated items are ticked. Paid is per consult because the whole plan bills as one
+   * line, so a treatment added later can unlock this row again, as in Practice.
+   */
+  const isRowPaidLocked = useCallback(
+    (rowId: string | null | undefined): boolean =>
+      treatmentPaid &&
+      planItems.some((p) => p.id === rowId && p.status === "done"),
+    [treatmentPaid, planItems]
+  );
+
+  /** Removing a finding takes its plan row with it; the server keeps a paid one. */
+  const findingsHavePaidRow = useCallback(
+    (entryIds: Set<string>): boolean =>
+      treatmentPaid &&
+      planRef.current.some(
+        (p) =>
+          p.status === "done" &&
+          !!p.diagnosisEntryId &&
+          entryIds.has(p.diagnosisEntryId)
+      ),
+    [treatmentPaid]
+  );
 
   const chartTeethStates = useMemo<TeethStates>(
     () => deriveTeethStates(entries),
@@ -266,6 +297,10 @@ export function useDentalDiagnosis({
 
   const deleteFinding = useCallback(
     async (id: string): Promise<boolean> => {
+      if (findingsHavePaidRow(new Set([id]))) {
+        setError(PAID_LOCK_MESSAGE);
+        return false;
+      }
       const next = entriesRef.current.filter((e) => e.id !== id);
       const ok = await saveFindings(next);
       if (ok) {
@@ -276,13 +311,17 @@ export function useDentalDiagnosis({
       }
       return ok;
     },
-    [saveFindings]
+    [saveFindings, findingsHavePaidRow]
   );
 
   const clearTooth = useCallback(
     async (toothId: string): Promise<boolean> => {
       const removed = entriesRef.current.filter((e) => e.toothId === toothId);
       const removedIds = new Set(removed.map((e) => e.id));
+      if (findingsHavePaidRow(removedIds)) {
+        setError(PAID_LOCK_MESSAGE);
+        return false;
+      }
       const next = entriesRef.current.filter((e) => e.toothId !== toothId);
       const nextPlan = filterPlanRowsAfterRemovingTooth(
         planRef.current,
@@ -324,7 +363,7 @@ export function useDentalDiagnosis({
         setSaving(false);
       }
     },
-    [appointmentId, consultationId, locked]
+    [appointmentId, consultationId, locked, findingsHavePaidRow]
   );
 
   const persistFull = useCallback(
@@ -332,7 +371,8 @@ export function useDentalDiagnosis({
       planOverride?: DentalTreatmentPlanRow[]
     ): Promise<boolean> => {
       if (!consultationId) return false;
-      if (locked) return true;
+      // No dental chart on this consult: Complete must not write an empty one.
+      if (locked || !enabled) return true;
       const toSave = entriesRef.current;
       const plan = planOverride ?? planRef.current;
       try {
@@ -349,7 +389,7 @@ export function useDentalDiagnosis({
         return false;
       }
     },
-    [consultationId, locked]
+    [consultationId, locked, enabled]
   );
 
   const flushDental = useCallback(async (): Promise<boolean> => {
@@ -387,13 +427,18 @@ export function useDentalDiagnosis({
         return res.billingSync ?? null;
       } catch (e) {
         refetchConsultIfCompletedLock(queryClient, consultationId, e);
+        // The desk took payment after this screen loaded. Show what the server has,
+        // so the row reads locked and the edit does not sit there looking saved.
+        if (e instanceof ApiError && e.serverCode === "TREATMENT_PAID_LOCKED") {
+          await reload();
+        }
         setError(describeError(e));
         return null;
       } finally {
         setSaving(false);
       }
     },
-    [consultationId, locked]
+    [consultationId, locked, reload]
   );
 
   return {
@@ -427,6 +472,8 @@ export function useDentalDiagnosis({
     persistFull,
     reload,
     locked,
+    treatmentPaid,
+    isRowPaidLocked,
   };
 }
 

@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { Button } from "@/ui";
 import { formatConditionLabel } from "../problems";
 import type { DentalTreatmentPlanRow, DiagnosisDetailsEntry } from "../types";
+import { useDentalConsult } from "../DentalConsultContext";
 import { doneDiagnosisEntryIds, toDateOnly } from "../utils";
 
 type Props = {
@@ -76,6 +77,7 @@ export function FindingsTable({
   locked = false,
 }: Props) {
   const doneIds = doneDiagnosisEntryIds(planItems);
+  const { treatmentPaid } = useDentalConsult();
 
   const sorted = [...entries].sort((a, b) => {
     const t = a.toothId.localeCompare(b.toothId);
@@ -199,9 +201,13 @@ export function FindingsTable({
                 />
                 <Pressable
                   onPress={() => onDelete(e.id)}
-                  disabled={locked}
+                  disabled={locked || (treatmentPaid && doneIds.has(e.id))}
                   style={{ flexShrink: 0 }}
-                  className={`justify-center px-3 py-2 ${locked ? "opacity-40" : ""}`}
+                  className={`justify-center px-3 py-2 ${
+                    locked || (treatmentPaid && doneIds.has(e.id))
+                      ? "opacity-40"
+                      : ""
+                  }`}
                 >
                   <Text numberOfLines={1} className="text-sm text-red-500">
                     Delete

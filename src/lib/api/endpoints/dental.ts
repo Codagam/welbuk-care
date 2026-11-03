@@ -19,6 +19,7 @@ type RawDentalResponse = {
   treatmentOrder?: unknown;
   treatmentPlanItems?: unknown;
   billingPayments?: unknown;
+  treatmentPaid?: unknown;
 };
 
 function normalizeDental(raw: RawDentalResponse): DentalData {
@@ -45,6 +46,7 @@ function normalizeDental(raw: RawDentalResponse): DentalData {
     billingPayments: Array.isArray(raw.billingPayments)
       ? (raw.billingPayments as DentalData["billingPayments"])
       : [],
+    treatmentPaid: raw.treatmentPaid === true,
   };
 }
 

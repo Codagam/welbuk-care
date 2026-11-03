@@ -147,6 +147,7 @@ export function PatientDetailsSection({
               medicalHistory={medicalHistory}
               medications={medications}
               allergies={allergies}
+              pastHistory={historyQ.data?.pastHistory}
             />
           )}
 

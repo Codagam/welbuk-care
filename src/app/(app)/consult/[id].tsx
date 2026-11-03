@@ -28,6 +28,10 @@ import {
 import { NotesSection } from "@/features/consult/sections/NotesSection";
 import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
 import { calculateAge } from "@/features/consult/patientHeader";
+import {
+  resolveConsultSpecialty,
+  type SpecialtyDef,
+} from "@/features/consult/specialties";
 import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHeader";
 import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
@@ -45,32 +49,20 @@ const SECTION_GAP = 32;
 const ACTIVE_LINE = 80;
 const BOTTOM_SNAP = 48;
 
-function isDentalType(consultationType?: string | null): boolean {
-  const t = (consultationType ?? "").toLowerCase();
-  return t.includes("dent");
-}
-
-function isEyeType(consultationType?: string | null): boolean {
-  const t = (consultationType ?? "").toLowerCase();
-  return (
-    t.includes("eye") || t.includes("ophthal") || t.includes("optom")
-  );
-}
-
 /** Practice-aligned nav rail — audio lives inside Patient details (Live Conversation). */
-function buildNavItems(consultationType?: string | null): SectionNavItem[] {
+function buildNavItems(chartKind: SpecialtyDef["chartKind"]): SectionNavItem[] {
   const items: SectionNavItem[] = [
     {
       id: CONSULT_SECTION_IDS.consultation,
       label: "Patient details",
     },
   ];
-  if (isDentalType(consultationType)) {
+  if (chartKind === "dental") {
     items.push({
       id: CONSULT_SECTION_IDS.dental,
       label: "Diagnosis Panel",
     });
-  } else if (isEyeType(consultationType)) {
+  } else if (chartKind === "eye") {
     items.push({
       id: CONSULT_SECTION_IDS.eye,
       label: "Diagnosis Panel",
@@ -99,6 +91,7 @@ export default function ConsultScreen() {
     error: headerErr,
     consultation,
     appointment,
+    doctor: consultDoctor,
     doctorId: consultDoctorId,
     lock,
     isLocked,
@@ -110,8 +103,15 @@ export default function ConsultScreen() {
     : typeof patient?.age === "number" && patient.age >= 0
       ? patient.age
       : null;
-  const dental = isDentalType(facility?.consultationType);
-  const eye = isEyeType(facility?.consultationType);
+  // Nothing until the consult loads: its doctor decides which chart this is.
+  const chartKind = consultation
+    ? resolveConsultSpecialty({
+        doctorSpecialization: consultDoctor?.specialization,
+        facilityConsultationType: facility?.consultationType,
+      }).chartKind
+    : null;
+  const dental = chartKind === "dental";
+  const eye = chartKind === "eye";
 
   const resolvedPatientId =
     patientIdParam ||
@@ -119,10 +119,7 @@ export default function ConsultScreen() {
     consultation?.patientId ||
     undefined;
 
-  const navItems = useMemo(
-    () => buildNavItems(facility?.consultationType),
-    [facility?.consultationType]
-  );
+  const navItems = useMemo(() => buildNavItems(chartKind), [chartKind]);
 
   const notesFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -351,6 +348,7 @@ export default function ConsultScreen() {
             facilityId={facility?.id}
             defaultDoctorId={consultDoctorId ?? user?.id ?? ""}
             locked={isLocked}
+            enabled={dental}
           >
             <View className="flex-1">
               <ScrollView
