@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getConsultation } from "@/lib/api/endpoints/consult";
 import { getPatientHistory } from "@/lib/api/endpoints/consult-data";
 import { useFacilityId } from "@/lib/auth/store";
-import type { ConsultPatient } from "./consultPatient";
+import type { ConsultLock, ConsultPatient } from "./consultPatient";
+import { isConsultLocked } from "./consultLock";
 import {
   mapPatientHeaderProps,
   mergeConsultPatient,
@@ -14,6 +15,27 @@ import {
 type HistoryEnvelope = {
   patient?: ConsultPatient | null;
 };
+
+/**
+ * Lock state from the shared GET /api/consult/:id cache.
+ * Lock UI from `consultation.status === "COMPLETED"` only — after a reopen,
+ * `lock.completedAt` may still be set.
+ */
+export function useConsultLock(consultationId: string | undefined) {
+  const consultQ = useQuery({
+    queryKey: ["consultation", consultationId],
+    enabled: !!consultationId,
+    queryFn: () => getConsultation(consultationId!),
+  });
+  const status = consultQ.data?.consultation?.status ?? null;
+  const lock: ConsultLock | null = consultQ.data?.lock ?? null;
+  return {
+    status,
+    lock,
+    isLocked: isConsultLocked(status),
+    refetch: consultQ.refetch,
+  };
+}
 
 /**
  * Loads header patient from GET /api/consult/:id (primary),
@@ -71,6 +93,9 @@ export function useConsultPatientHeader(consultationId: string | undefined) {
     [patient]
   );
 
+  const status = consultQ.data?.consultation?.status ?? null;
+  const lock: ConsultLock | null = consultQ.data?.lock ?? null;
+
   return {
     patient,
     header: header as PatientHeaderProps | null,
@@ -86,6 +111,9 @@ export function useConsultPatientHeader(consultationId: string | undefined) {
       consultQ.data?.consultation?.doctorId ??
       consultQ.data?.doctorId ??
       null,
+    status,
+    lock,
+    isLocked: isConsultLocked(status),
     reload: consultQ.refetch,
   };
 }

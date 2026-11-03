@@ -1,3 +1,4 @@
+﻿﻿import { useRouter } from "expo-router";
 import {
   useLayoutEffect,
   useMemo,
@@ -6,13 +7,11 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Alert,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 
 import {
   useInvalidatePatientHistory,
@@ -24,6 +23,8 @@ import { useDentalFlushOptional } from "@/features/dental/DentalConsultContext";
 import { describeError } from "@/lib/api/errors";
 import { useAuthUser, useFacilityId } from "@/lib/auth/store";
 
+import { CONSULT_LOCKED_COMPLETE_REASON } from "@/features/consult/consultLock";
+
 import { CompleteBar } from "./components/CompleteBar";
 import { CompleteFooter } from "./components/CompleteFooter";
 import { FollowUpSheet } from "./components/FollowUpSheet";
@@ -34,6 +35,7 @@ import {
 } from "./components/NotesCards";
 import { PrescriptionCard } from "./components/PrescriptionCard";
 import { ReferSheet } from "./components/ReferSheet";
+import type { PickerAnchor } from "./components/regimen/pickerPlacement";
 import {
   useAllergyGate,
   useCompletePrescription,
@@ -41,6 +43,7 @@ import {
   usePrescriptionDraft,
 } from "./hooks/usePrescriptionDraft";
 import type { AllergyRecordLike } from "./types";
+import { AppAlert } from "@/ui/AppAlert";
 
 function normalizeAllergies(
   raw: unknown
@@ -67,23 +70,31 @@ export function PlanOfCareSection({
   patientId,
   patientName,
   patientAge,
+  patientAgeYears,
   patientGender,
   patientPhone,
   doctorId,
   doctorName,
   onStickyFooter,
+  locked = false,
+  flushNotes,
 }: {
   consultationId: string;
   appointmentId?: string;
   patientId?: string;
   patientName?: string;
   patientAge?: number | string;
+  /** Whole years, or null when unknown. Drives the child dose check. */
+  patientAgeYears?: number | null;
   patientGender?: string;
   patientPhone?: string;
   doctorId?: string;
   doctorName?: string;
   /** Renders the Complete CTA as a sticky screen footer (UI placement only). */
   onStickyFooter?: (footer: ReactNode | null) => void;
+  locked?: boolean;
+  /** Writes unsaved SOAP notes. Complete waits on it: a locked consult refuses them. */
+  flushNotes?: () => Promise<boolean>;
 }) {
   const { width } = useWindowDimensions();
   /** Tablet / landscape: notes share a horizontal row */
@@ -116,6 +127,12 @@ export function PlanOfCareSection({
   const flushDental = useDentalFlushOptional();
 
   const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpAnchor, setFollowUpAnchor] = useState<PickerAnchor>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   const [referOpen, setReferOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -131,7 +148,7 @@ export function PlanOfCareSection({
     const message = detail?.trim()
       ? detail
       : "The appointment has been completed.";
-    Alert.alert("Appointment completed", message, [
+    AppAlert.alert("Appointment completed", message, [
       {
         text: "OK",
         onPress: () => router.replace("/queue"),
@@ -156,12 +173,23 @@ export function PlanOfCareSection({
 
     const proceed = async () => {
       try {
-        if (flushDental) {
+        if (locked) {
+          setError(CONSULT_LOCKED_COMPLETE_REASON);
+          return;
+        }
+        // Flush would 409 on a completed consult — skip when already locked.
+        if (flushDental && !locked) {
           const ok = await flushDental();
           if (!ok) {
             setError("Could not flush dental chart/plan before complete.");
             return;
           }
+        }
+        if (flushNotes && !(await flushNotes())) {
+          setError(
+            "Could not save the clinical notes. Check the connection and try Complete again."
+          );
+          return;
         }
         const res = await complete.mutateAsync({
           appointmentId,
@@ -183,7 +211,7 @@ export function PlanOfCareSection({
     };
 
     if (!hasMeds && !hasAttach) {
-      Alert.alert(
+      AppAlert.alert(
         "Complete without prescription?",
         "No medicines or attachments. Complete this visit anyway?",
         [
@@ -196,10 +224,12 @@ export function PlanOfCareSection({
     await proceed();
   };
 
-  const completeDisabled = allergy.allergyPrintBlocked;
-  const completeDisabledReason = completeDisabled
-    ? "Acknowledge allergy warnings to unlock Complete."
-    : null;
+  const completeDisabled = allergy.allergyPrintBlocked || locked;
+  const completeDisabledReason = locked
+    ? CONSULT_LOCKED_COMPLETE_REASON
+    : completeDisabled
+      ? "Acknowledge allergy warnings to unlock Complete."
+      : null;
 
   const runCompleteRef = useRef(runComplete);
   runCompleteRef.current = runComplete;
@@ -224,13 +254,18 @@ export function PlanOfCareSection({
     completeDisabledReason,
     error,
     done,
+    locked,
   ]);
 
   return (
     <View style={styles.stack}>
       <CompleteBar
         followUpSummaryLine={followUpLine}
-        onFollowUp={() => setFollowUpOpen(true)}
+        onFollowUp={(anchor) => {
+          setFollowUpAnchor(anchor);
+          setFollowUpOpen(true);
+        }}
+        locked={locked}
       />
 
       {draft.isLoading || summaryQ.isLoading ? (
@@ -244,14 +279,16 @@ export function PlanOfCareSection({
           prescriptions={draft.prescriptions}
           onAdd={draft.addPrescription}
           onRemove={draft.removePrescription}
+          onUpdate={draft.setPrescriptions}
           onApplyTemplate={draft.applyTemplateMeds}
           attachedImages={draft.attachedImages}
           onAttachedImagesChange={draft.setAttachedImages}
           allergyWarnings={allergy.warnings}
           allergyOverrideAck={allergy.allergyOverrideAck}
           onAllergyOverrideChange={allergy.setAllergyOverrideAck}
-          drugs={drugsQ.data ?? []}
+          patientAgeYears={patientAgeYears}
           tabletLayout={tablet}
+          locked={locked}
         />
       </View>
 
@@ -272,6 +309,7 @@ export function PlanOfCareSection({
               consultationId={consultationId}
               initialNotes={summaryQ.data?.doctorNotes}
               fill
+              locked={locked}
             />
           </View>
           <View style={styles.notesCol}>
@@ -280,6 +318,7 @@ export function PlanOfCareSection({
               initialSummary={summaryQ.data?.summary}
               isAIGenerated={!!summaryQ.data?.isAIGenerated}
               fill
+              locked={locked}
             />
           </View>
         </View>
@@ -288,11 +327,13 @@ export function PlanOfCareSection({
           <DoctorNotesCard
             consultationId={consultationId}
             initialNotes={summaryQ.data?.doctorNotes}
+            locked={locked}
           />
           <ConversationSummaryCard
             consultationId={consultationId}
             initialSummary={summaryQ.data?.summary}
             isAIGenerated={!!summaryQ.data?.isAIGenerated}
+            locked={locked}
           />
         </View>
       )}
@@ -311,15 +352,14 @@ export function PlanOfCareSection({
       <FollowUpSheet
         open={followUpOpen}
         onClose={() => setFollowUpOpen(false)}
+        anchor={followUpAnchor}
         facilityId={facilityId}
         consultationId={consultationId}
         patientId={patientId ?? ""}
         doctorId={resolvedDoctorId}
-        patientLine={patientLine}
-        doctorLine={resolvedDoctorName}
         followUpSummaryLine={followUpLine}
-        onBooked={async (line) => {
-          await saveSummary.mutateAsync({ followUp: line });
+        onBooked={async (summary) => {
+          await saveSummary.mutateAsync(summary);
         }}
       />
 

@@ -25,6 +25,12 @@ export interface ConsultSummary {
   plan?: string | null;
   diagnosisCodes?: DiagnosisCode[];
   followUp?: string | null;
+  // Sent with a booking only; the read returns the line in followUp.
+  followUpDate?: string;
+  followUpIntervalCount?: number;
+  followUpIntervalUnit?: string;
+  followUpRecurring?: boolean;
+  followUpAgreedVia?: "CONSULT" | "DESK_OTP" | "INFERRED";
   prescriptionAttachmentUrls?: string[];
   reportAttachmentUrls?: string[];
 }
@@ -35,6 +41,11 @@ export interface Prescription {
   dosePattern?: string | null;
   foodTiming?: string | null;
   duration?: string | number | null;
+  durationValue?: number | null;
+  durationUnit?: string | null;
+  doseNote?: string | null;
+  regimenId?: string | null;
+  regimenVersion?: number | null;
   qtyPrescribed?: number | null;
   drugId?: string;
   isAttachment?: boolean;
@@ -45,6 +56,11 @@ export interface PrescriptionItemInput {
   dosePattern: string;
   foodTiming: string; // "BF" | "AF"
   duration: string | number;
+  durationValue?: number;
+  durationUnit?: string;
+  doseNote?: string;
+  regimenId?: string;
+  regimenVersion?: number | null;
   qtyPrescribed?: number;
   drugId?: string;
 }
@@ -106,10 +122,22 @@ export interface PatientHistory {
   medicalHistory?: MedicalCondition[] | unknown;
   medications?: MedicationRecord[] | unknown[];
   allergies?: AllergyRecord[] | unknown[];
+  pastHistory?: PastHistory | null;
   labReports?: LabReportItem[];
   doctorNotes?: DoctorNote[];
   /** Legacy field some clients used; prefer doctorNotes */
   previousNotes?: PreviousNote[];
+}
+
+/** A Yes/No intake answer with the patient's own details. Null when never answered. */
+export interface PastHistoryAnswer {
+  answer: "Yes" | "No";
+  details: string | null;
+}
+
+export interface PastHistory {
+  previousSurgeries: PastHistoryAnswer | null;
+  hospitalizations: PastHistoryAnswer | null;
 }
 
 export interface PreviousNote {

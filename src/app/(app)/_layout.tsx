@@ -2,6 +2,7 @@ import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { OfflineBanner } from "@/ui/OfflineBanner";
+import { RealtimeToastHost } from "@/ui/RealtimeToast";
 import { useAuthStore } from "@/lib/auth/store";
 import { useRealtime } from "@/lib/realtime/useRealtime";
 
@@ -32,6 +33,7 @@ export default function AppLayout() {
       <View className="flex-1">
         <Stack screenOptions={{ headerShown: false }} />
       </View>
+      <RealtimeToastHost />
     </View>
   );
 }

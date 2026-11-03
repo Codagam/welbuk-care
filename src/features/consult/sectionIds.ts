@@ -12,6 +12,6 @@ export type ConsultSectionId =
   (typeof CONSULT_SECTION_IDS)[keyof typeof CONSULT_SECTION_IDS];
 
 export type SectionNavItem = {
-  id: ConsultSectionId;
+  id: string;
   label: string;
 };

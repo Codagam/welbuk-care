@@ -15,6 +15,12 @@ import {
   postDentalFindings,
   putDentalFull,
 } from "@/lib/api/endpoints/dental";
+import { ApiError, describeError } from "@/lib/api/errors";
+import { queryClient } from "@/lib/query";
+import {
+  CONSULT_LOCKED_MESSAGE,
+  refetchConsultIfCompletedLock,
+} from "@/features/consult/consultLock";
 import { PROBLEM_TYPES } from "./problems";
 import type {
   BillingSync,
@@ -39,6 +45,9 @@ import type { DentalDiagnosisClonePair } from "./utils";
 
 const AUTOSAVE_MS = 60_000;
 
+export const PAID_LOCK_MESSAGE =
+  "This treatment is done and paid, so it can no longer be changed.";
+
 const STATIC_OPTIONS: DiagnosisOption[] = PROBLEM_TYPES.map((p) => ({
   value: p.value,
   label: p.label,
@@ -51,6 +60,7 @@ type Options = {
   enabled?: boolean;
   priorDentalConsultationId?: string | null;
   defaultDoctorId?: string;
+  locked?: boolean;
 };
 
 export function useDentalDiagnosis({
@@ -60,6 +70,7 @@ export function useDentalDiagnosis({
   enabled = true,
   priorDentalConsultationId = null,
   defaultDoctorId = "",
+  locked = false,
 }: Options) {
   const [entries, setEntries] = useState<DiagnosisDetailsEntry[]>([]);
   const [planItems, setPlanItems] = useState<DentalTreatmentPlanRow[]>([]);
@@ -69,6 +80,8 @@ export function useDentalDiagnosis({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  /** The consult's treatment line is fully paid, as the server last reported. */
+  const [treatmentPaid, setTreatmentPaid] = useState(false);
   const [diagnosisTypes, setDiagnosisTypes] = useState<DiagnosisOption[] | null>(
     null
   );
@@ -108,6 +121,7 @@ export function useDentalDiagnosis({
     setError(null);
     try {
       const data = await getDental(consultationId);
+      setTreatmentPaid(data.treatmentPaid);
       let parsed = data.treatmentEntries;
       const priorTrim = (priorDentalConsultationId ?? "").trim();
       const priorOk =
@@ -141,7 +155,7 @@ export function useDentalDiagnosis({
       }
       setEntries(parsed);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load dental data");
+      setError(describeError(e));
     } finally {
       setLoading(false);
     }
@@ -150,6 +164,31 @@ export function useDentalDiagnosis({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  /**
+   * DONE + PAID = LOCKED. Read off the SAVED row: the editor's own status moves as
+   * treated items are ticked. Paid is per consult because the whole plan bills as one
+   * line, so a treatment added later can unlock this row again, as in Practice.
+   */
+  const isRowPaidLocked = useCallback(
+    (rowId: string | null | undefined): boolean =>
+      treatmentPaid &&
+      planItems.some((p) => p.id === rowId && p.status === "done"),
+    [treatmentPaid, planItems]
+  );
+
+  /** Removing a finding takes its plan row with it; the server keeps a paid one. */
+  const findingsHavePaidRow = useCallback(
+    (entryIds: Set<string>): boolean =>
+      treatmentPaid &&
+      planRef.current.some(
+        (p) =>
+          p.status === "done" &&
+          !!p.diagnosisEntryId &&
+          entryIds.has(p.diagnosisEntryId)
+      ),
+    [treatmentPaid]
+  );
 
   const chartTeethStates = useMemo<TeethStates>(
     () => deriveTeethStates(entries),
@@ -169,9 +208,10 @@ export function useDentalDiagnosis({
   }, [planItems, entries]);
 
   const openTooth = useCallback((toothId: string) => {
+    if (locked) return;
     setSelectedTooth(toothId);
     setFindingsOpen(true);
-  }, []);
+  }, [locked]);
 
   const closeFindings = useCallback(() => {
     setFindingsOpen(false);
@@ -184,6 +224,10 @@ export function useDentalDiagnosis({
     ): Promise<boolean> => {
       if (!appointmentId) {
         setError("Missing appointmentId — cannot save findings.");
+        return false;
+      }
+      if (locked) {
+        setError(CONSULT_LOCKED_MESSAGE);
         return false;
       }
       setSaving(true);
@@ -241,17 +285,22 @@ export function useDentalDiagnosis({
         setFindingsOpen(false);
         return true;
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to save findings");
+        refetchConsultIfCompletedLock(queryClient, consultationId, e);
+        setError(describeError(e));
         return false;
       } finally {
         setSaving(false);
       }
     },
-    [appointmentId, selectedTooth, consultationId]
+    [appointmentId, selectedTooth, consultationId, locked]
   );
 
   const deleteFinding = useCallback(
     async (id: string): Promise<boolean> => {
+      if (findingsHavePaidRow(new Set([id]))) {
+        setError(PAID_LOCK_MESSAGE);
+        return false;
+      }
       const next = entriesRef.current.filter((e) => e.id !== id);
       const ok = await saveFindings(next);
       if (ok) {
@@ -262,13 +311,17 @@ export function useDentalDiagnosis({
       }
       return ok;
     },
-    [saveFindings]
+    [saveFindings, findingsHavePaidRow]
   );
 
   const clearTooth = useCallback(
     async (toothId: string): Promise<boolean> => {
       const removed = entriesRef.current.filter((e) => e.toothId === toothId);
       const removedIds = new Set(removed.map((e) => e.id));
+      if (findingsHavePaidRow(removedIds)) {
+        setError(PAID_LOCK_MESSAGE);
+        return false;
+      }
       const next = entriesRef.current.filter((e) => e.toothId !== toothId);
       const nextPlan = filterPlanRowsAfterRemovingTooth(
         planRef.current,
@@ -276,6 +329,10 @@ export function useDentalDiagnosis({
         removedIds
       );
       if (!appointmentId) return false;
+      if (locked) {
+        setError(CONSULT_LOCKED_MESSAGE);
+        return false;
+      }
       setSaving(true);
       try {
         await postDentalFindings({
@@ -299,13 +356,14 @@ export function useDentalDiagnosis({
         setStatusMsg("Tooth cleared.");
         return true;
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to clear tooth");
+        refetchConsultIfCompletedLock(queryClient, consultationId, e);
+        setError(describeError(e));
         return false;
       } finally {
         setSaving(false);
       }
     },
-    [appointmentId, consultationId]
+    [appointmentId, consultationId, locked, findingsHavePaidRow]
   );
 
   const persistFull = useCallback(
@@ -313,6 +371,8 @@ export function useDentalDiagnosis({
       planOverride?: DentalTreatmentPlanRow[]
     ): Promise<boolean> => {
       if (!consultationId) return false;
+      // No dental chart on this consult: Complete must not write an empty one.
+      if (locked || !enabled) return true;
       const toSave = entriesRef.current;
       const plan = planOverride ?? planRef.current;
       try {
@@ -324,11 +384,12 @@ export function useDentalDiagnosis({
           treatmentPlanItems: plan,
         });
         return true;
-      } catch {
+      } catch (e) {
+        refetchConsultIfCompletedLock(queryClient, consultationId, e);
         return false;
       }
     },
-    [consultationId]
+    [consultationId, locked, enabled]
   );
 
   const flushDental = useCallback(async (): Promise<boolean> => {
@@ -337,12 +398,12 @@ export function useDentalDiagnosis({
 
   // Autosave every 60s
   useEffect(() => {
-    if (!enabled || !consultationId) return;
+    if (!enabled || !consultationId || locked) return;
     const id = setInterval(() => {
       void persistFull();
     }, AUTOSAVE_MS);
     return () => clearInterval(id);
-  }, [enabled, consultationId, persistFull]);
+  }, [enabled, consultationId, persistFull, locked]);
 
   const savePlan = useCallback(
     async (
@@ -350,6 +411,10 @@ export function useDentalDiagnosis({
     ): Promise<BillingSync | null> => {
       if (!consultationId) {
         setError("Missing consultationId");
+        return null;
+      }
+      if (locked) {
+        setError(CONSULT_LOCKED_MESSAGE);
         return null;
       }
       setSaving(true);
@@ -361,13 +426,19 @@ export function useDentalDiagnosis({
         setStatusMsg(null);
         return res.billingSync ?? null;
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to save plan");
+        refetchConsultIfCompletedLock(queryClient, consultationId, e);
+        // The desk took payment after this screen loaded. Show what the server has,
+        // so the row reads locked and the edit does not sit there looking saved.
+        if (e instanceof ApiError && e.serverCode === "TREATMENT_PAID_LOCKED") {
+          await reload();
+        }
+        setError(describeError(e));
         return null;
       } finally {
         setSaving(false);
       }
     },
-    [consultationId]
+    [consultationId, locked, reload]
   );
 
   return {
@@ -400,6 +471,9 @@ export function useDentalDiagnosis({
     flushDental,
     persistFull,
     reload,
+    locked,
+    treatmentPaid,
+    isRowPaidLocked,
   };
 }
 

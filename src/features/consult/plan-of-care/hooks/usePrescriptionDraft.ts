@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -10,9 +10,15 @@ import {
   updatePrescriptionTemplate,
   validateConsultPrescription,
 } from "@/lib/api/endpoints/prescription";
-import { searchDrugs, type DrugCatalogItem } from "@/lib/api/endpoints/drugs";
+import {
+  getDrugCatalogOptions,
+  quickAddDrug,
+  searchDrugs,
+  type DrugCatalogItem,
+} from "@/lib/api/endpoints/drugs";
 import { uploadFile } from "@/lib/api/endpoints/recording";
 import { useFacilityId } from "@/lib/auth/store";
+import { refetchConsultIfCompletedLock } from "@/features/consult/consultLock";
 import type { Prescription } from "@/features/consult/types";
 
 import { matchPrescriptionLinesToAllergies } from "../allergy";
@@ -24,6 +30,7 @@ import {
   savePrescriptionDraft,
 } from "../prescriptionDraftStore";
 import type { AttachedRxImage, PlanPrescription } from "../types";
+import { toLinePayload, validatePrescriptionItem } from "../validation";
 
 function toPlanLine(p: Prescription): PlanPrescription {
   return {
@@ -32,6 +39,12 @@ function toPlanLine(p: Prescription): PlanPrescription {
     dosePattern: p.dosePattern ?? "1-0-1",
     foodTiming: p.foodTiming ?? "AF",
     duration: String(p.duration ?? "1"),
+    durationValue: p.durationValue ?? null,
+    durationUnit: p.durationUnit ?? null,
+    doseNote: p.doseNote ?? null,
+    regimenId: p.regimenId ?? null,
+    regimenVersion: p.regimenVersion ?? null,
+    qtyPrescribed: p.qtyPrescribed ?? null,
     drugId: p.drugId,
     isAttachment: p.isAttachment,
   };
@@ -54,19 +67,34 @@ export function useDrugCatalog(enabled = true) {
   });
 }
 
-export function filterDrugCatalog(
-  drugs: DrugCatalogItem[],
-  query: string
-): DrugCatalogItem[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return drugs.slice(0, 40);
-  return drugs
-    .filter((d) => {
-      const brand = (d.brandName ?? "").toLowerCase();
-      const generic = (d.genericName ?? "").toLowerCase();
-      return brand.includes(q) || generic.includes(q);
-    })
-    .slice(0, 40);
+export function useDrugCatalogOptions(enabled = true) {
+  const facilityId = useFacilityId();
+  return useQuery({
+    queryKey: ["drug-catalog-options", "dosageType", facilityId],
+    enabled: enabled && !!facilityId,
+    staleTime: 30 * 60_000,
+    queryFn: () => getDrugCatalogOptions(facilityId!, "dosageType"),
+  });
+}
+
+export function useQuickAddDrug() {
+  const facilityId = useFacilityId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      brandName: string;
+      genericName: string;
+      dosageForm: string;
+      strength: string;
+      category?: string;
+    }) => {
+      if (!facilityId) throw new Error("No facility selected");
+      return quickAddDrug({ facilityId, ...body });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["drug-catalog"] });
+    },
+  });
 }
 
 export function usePrescriptionTemplates(consultationId: string) {
@@ -156,12 +184,11 @@ export function usePrescriptionDraft(consultationId: string) {
   const addPrescription = useCallback(
     (item: Omit<PlanPrescription, "id"> & { id?: string }) => {
       const row: PlanPrescription = {
+        ...item,
         id: item.id ?? newPrescriptionId(),
         name: item.name.trim(),
         dosePattern: item.dosePattern.trim(),
-        foodTiming: item.foodTiming,
         duration: String(item.duration).trim(),
-        drugId: item.drugId,
       };
       setPrescriptions((prev) => [...prev, row]);
       return row;
@@ -253,6 +280,7 @@ export function useAttachPrescription(consultationId: string) {
       qc.invalidateQueries({ queryKey: ["prescriptions", consultationId] });
       qc.invalidateQueries({ queryKey: ["summary", consultationId] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 
@@ -265,6 +293,7 @@ export function usePatchRxAttachments(consultationId: string) {
       qc.invalidateQueries({ queryKey: ["prescriptions", consultationId] });
       qc.invalidateQueries({ queryKey: ["summary", consultationId] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 
@@ -310,13 +339,16 @@ export function useCompletePrescription(consultationId: string) {
     }) => {
       const meds = args.prescriptions
         .filter((p) => (p.name ?? "").trim().length > 0 && !p.isAttachment)
-        .map((p) => ({
-          name: p.name.trim(),
-          dosePattern: p.dosePattern,
-          foodTiming: p.foodTiming,
-          duration: String(p.duration),
-          drugId: p.drugId,
-        }));
+        .map(toLinePayload);
+
+      // Templates and lines loaded from the server skip the add form, so check
+      // here and name the medicine, rather than after the allergy check.
+      for (const m of meds) {
+        const err = validatePrescriptionItem(m);
+        if (err) {
+          throw new Error(err.includes(m.name) ? err : `${m.name}: ${err}`);
+        }
+      }
 
       if (
         !args.skipValidate &&
@@ -351,6 +383,7 @@ export function useCompletePrescription(consultationId: string) {
       qc.invalidateQueries({ queryKey: ["summary", consultationId] });
       qc.invalidateQueries({ queryKey: ["queue"] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 

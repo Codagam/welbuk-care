@@ -1,7 +1,8 @@
-import { Alert, Platform, Share } from "react-native";
+import { Platform, Share } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
 import { describeError } from "@/lib/api/errors";
+import { AppAlert } from "@/ui/AppAlert";
 
 function guessMime(uriOrName: string): string {
   const path = uriOrName.split("?")[0]?.toLowerCase() ?? "";
@@ -52,7 +53,7 @@ export async function shareLocalFile(
     await FileSystem.writeAsStringAsync(dest, base64, {
       encoding: FileSystem.EncodingType.Base64,
     });
-    Alert.alert("Downloaded", `Saved ${fileName}`);
+    AppAlert.success("Downloaded", `Saved ${fileName}`);
     return;
   }
 
@@ -81,6 +82,6 @@ export async function shareLocalFileOrAlert(
   try {
     await shareLocalFile(localUri, opts);
   } catch (e) {
-    Alert.alert("Download failed", describeError(e));
+    AppAlert.alert("Download failed", describeError(e));
   }
 }

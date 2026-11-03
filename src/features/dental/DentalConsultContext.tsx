@@ -16,6 +16,8 @@ export function DentalConsultProvider({
   facilityId,
   defaultDoctorId,
   priorDentalConsultationId,
+  locked = false,
+  enabled = true,
   children,
 }: {
   consultationId: string;
@@ -23,15 +25,19 @@ export function DentalConsultProvider({
   facilityId?: string;
   defaultDoctorId?: string;
   priorDentalConsultationId?: string | null;
+  locked?: boolean;
+  /** False when this consult shows no dental chart: nothing loads or saves. */
+  enabled?: boolean;
   children: ReactNode;
 }) {
   const value = useDentalDiagnosis({
     consultationId,
     appointmentId,
     facilityId,
-    enabled: true,
+    enabled,
     defaultDoctorId,
     priorDentalConsultationId,
+    locked,
   });
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

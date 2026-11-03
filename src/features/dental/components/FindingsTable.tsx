@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { Button } from "@/ui";
 import { formatConditionLabel } from "../problems";
 import type { DentalTreatmentPlanRow, DiagnosisDetailsEntry } from "../types";
+import { useDentalConsult } from "../DentalConsultContext";
 import { doneDiagnosisEntryIds, toDateOnly } from "../utils";
 
 type Props = {
@@ -12,7 +13,51 @@ type Props = {
   onTreat: (entry: DiagnosisDetailsEntry) => void;
   onDelete: (id: string) => void;
   deleting?: boolean;
+  locked?: boolean;
 };
+
+const STATUS_LABEL = {
+  planned: "Planned",
+  "in-progress": "In progress",
+  done: "Done",
+} as const;
+
+const STATUS_PILL = {
+  planned: { bg: "bg-neutral-100", text: "text-neutral-600" },
+  "in-progress": { bg: "bg-amber-50", text: "text-amber-700" },
+  done: { bg: "bg-emerald-50", text: "text-emerald-700" },
+} as const;
+
+/**
+ * A finding's status as Practice shows it: driven by its linked treatment row.
+ * Treating on the plan never writes back to `entry.treatmentStatus`, so reading
+ * that field alone left every finding on "planned" after treatment.
+ */
+function findingDisplayStatus(
+  entry: DiagnosisDetailsEntry,
+  planItems: DentalTreatmentPlanRow[]
+): keyof typeof STATUS_LABEL {
+  const linked = planItems.filter((p) => p.diagnosisEntryId === entry.id);
+  if (linked.some((p) => p.status === "done")) return "done";
+  if (linked.some((p) => p.status === "in-progress")) return "in-progress";
+  return entry.treatmentStatus ?? "planned";
+}
+
+/** Suggested names already ticked as Treated on the linked plan row(s). */
+function treatedNamesFor(
+  entry: DiagnosisDetailsEntry,
+  planItems: DentalTreatmentPlanRow[]
+): Set<string> {
+  const out = new Set<string>();
+  for (const p of planItems) {
+    if (p.diagnosisEntryId !== entry.id) continue;
+    for (const a of p.selectedActuals ?? []) {
+      const n = a.name.trim().toLowerCase();
+      if (n) out.add(n);
+    }
+  }
+  return out;
+}
 
 function earliestDate(e: DiagnosisDetailsEntry): string {
   const dates = Object.values(e.suggestedTreatmentNextDates ?? {})
@@ -29,8 +74,10 @@ export function FindingsTable({
   onEdit,
   onTreat,
   onDelete,
+  locked = false,
 }: Props) {
   const doneIds = doneDiagnosisEntryIds(planItems);
+  const { treatmentPaid } = useDentalConsult();
 
   const sorted = [...entries].sort((a, b) => {
     const t = a.toothId.localeCompare(b.toothId);
@@ -55,6 +102,8 @@ export function FindingsTable({
         lastTooth = e.toothId;
         const treatDisabled = doneIds.has(e.id);
         const treatments = e.suggestedTreatments?.filter(Boolean) ?? [];
+        const status = findingDisplayStatus(e, planItems);
+        const treated = treatedNamesFor(e, planItems);
 
         return (
           <View key={e.id} className="gap-1">
@@ -75,9 +124,13 @@ export function FindingsTable({
                     <Text className="text-base font-semibold text-neutral-900">
                       {formatConditionLabel(e.problem)}
                     </Text>
-                    <View className="rounded-full bg-neutral-100 px-2 py-0.5">
-                      <Text className="text-xs text-neutral-600">
-                        {e.treatmentStatus ?? "planned"}
+                    <View
+                      className={`rounded-full px-2 py-0.5 ${STATUS_PILL[status].bg}`}
+                    >
+                      <Text
+                        className={`text-xs font-medium ${STATUS_PILL[status].text}`}
+                      >
+                        {STATUS_LABEL[status]}
                       </Text>
                     </View>
                   </View>
@@ -90,18 +143,43 @@ export function FindingsTable({
               </View>
 
               {treatments.length > 0 ? (
-                <View className="gap-1">
+                <View className="gap-1.5">
                   {treatments.map((name) => {
                     const fee = e.suggestedTreatmentFees?.[name];
                     const date = toDateOnly(
                       e.suggestedTreatmentNextDates?.[name]
                     );
+                    const isTreated = treated.has(name.trim().toLowerCase());
                     return (
-                      <Text key={name} className="text-sm text-neutral-700">
-                        · {name}
-                        {fee != null ? ` · ₹${fee}` : ""}
-                        {date ? ` · ${date}` : ""}
-                      </Text>
+                      <View
+                        key={name}
+                        className="flex-row flex-wrap items-center gap-2"
+                      >
+                        <View className="rounded-md bg-neutral-100 px-2 py-1">
+                          <Text className="text-sm font-medium text-neutral-800">
+                            {name}
+                          </Text>
+                        </View>
+                        {fee != null ? (
+                          <Text className="text-sm text-neutral-600">
+                            ₹{fee}
+                          </Text>
+                        ) : null}
+                        {date ? (
+                          <Text className="text-sm text-neutral-500">
+                            {date.split("-").reverse().join("-")}
+                          </Text>
+                        ) : null}
+                        <Text
+                          className={
+                            isTreated
+                              ? "text-xs font-medium text-emerald-700"
+                              : "text-xs font-medium text-amber-700"
+                          }
+                        >
+                          {isTreated ? "Treated" : "Pending"}
+                        </Text>
+                      </View>
                     );
                   })}
                 </View>
@@ -113,17 +191,23 @@ export function FindingsTable({
                   variant="outline"
                   size="md"
                   onPress={() => onEdit(e.toothId)}
+                  disabled={locked}
                 />
                 <Button
                   label="Treat"
                   size="md"
                   onPress={() => onTreat(e)}
-                  disabled={treatDisabled}
+                  disabled={treatDisabled || locked}
                 />
                 <Pressable
                   onPress={() => onDelete(e.id)}
+                  disabled={locked || (treatmentPaid && doneIds.has(e.id))}
                   style={{ flexShrink: 0 }}
-                  className="justify-center px-3 py-2"
+                  className={`justify-center px-3 py-2 ${
+                    locked || (treatmentPaid && doneIds.has(e.id))
+                      ? "opacity-40"
+                      : ""
+                  }`}
                 >
                   <Text numberOfLines={1} className="text-sm text-red-500">
                     Delete

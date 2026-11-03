@@ -17,9 +17,11 @@ const COLS: { key: keyof EyeSide; label: string }[] = [
 export function EyeSection({
   consultationId,
   appointmentId,
+  locked = false,
 }: {
   consultationId: string;
   appointmentId?: string;
+  locked?: boolean;
 }) {
   const q = useEye(consultationId);
   const save = useSaveEye(consultationId);
@@ -40,6 +42,7 @@ export function EyeSection({
   };
 
   const onSave = async () => {
+    if (locked) return;
     setError(null);
     if (!appointmentId) {
       setError("This consultation has no linked appointment to attach the Rx to.");
@@ -74,6 +77,7 @@ export function EyeSection({
           onChangeText={(v) => setSide(side, c.key, v)}
           placeholder="—"
           autoCapitalize="none"
+          editable={!locked}
         />
       ))}
     </View>
@@ -112,6 +116,7 @@ export function EyeSection({
             }}
             placeholder="62"
             keyboardType="numbers-and-punctuation"
+            editable={!locked}
           />
         </View>
 
@@ -129,6 +134,7 @@ export function EyeSection({
         label="Save refraction & Rx"
         onPress={onSave}
         loading={save.isPending}
+        disabled={locked}
       />
     </View>
   );

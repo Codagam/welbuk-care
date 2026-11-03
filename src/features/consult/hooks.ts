@@ -18,7 +18,6 @@ import {
   patchReportAttachmentUrls,
   saveSummary,
   saveVitals,
-  searchDiagnosisCodes,
 } from "@/lib/api/endpoints/consult-data";
 import {
   listPatientDocuments,
@@ -31,6 +30,7 @@ import {
 import { getSiteConfigEnabled } from "@/lib/api/endpoints/site-config";
 import { useFacilityId } from "@/lib/auth/store";
 import type { ConsultSummary, Vitals } from "./types";
+import { refetchConsultIfCompletedLock } from "./consultLock";
 
 export function useConsultation(id: string) {
   return useQuery({
@@ -40,7 +40,7 @@ export function useConsultation(id: string) {
   });
 }
 
-export { useConsultPatientHeader } from "./useConsultPatientHeader";
+export { useConsultPatientHeader, useConsultLock } from "./useConsultPatientHeader";
 
 // ---- Vitals -------------------------------------------------------------
 
@@ -62,6 +62,7 @@ export function useSaveVitals(id: string) {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["queue"] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, id, err),
   });
 }
 
@@ -80,15 +81,7 @@ export function useSaveSummary(id: string) {
   return useMutation({
     mutationFn: (summary: Partial<ConsultSummary>) => saveSummary(id, summary),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["summary", id] }),
-  });
-}
-
-export function useDiagnosisSearch(q: string) {
-  return useQuery({
-    queryKey: ["diagnosis-codes", q.trim()],
-    enabled: q.trim().length >= 2,
-    queryFn: ({ signal }) => searchDiagnosisCodes(q.trim(), signal),
-    staleTime: 5 * 60_000,
+    onError: (err) => refetchConsultIfCompletedLock(qc, id, err),
   });
 }
 
@@ -115,6 +108,7 @@ export function useAddPrescription(id: string) {
       qtyPrescribed?: number;
     }) => addPrescriptionLine(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["prescriptions", id] }),
+    onError: (err) => refetchConsultIfCompletedLock(qc, id, err),
   });
 }
 
@@ -123,6 +117,7 @@ export function useDeletePrescription(id: string) {
   return useMutation({
     mutationFn: (lineId: string) => deletePrescriptionLine(lineId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["prescriptions", id] }),
+    onError: (err) => refetchConsultIfCompletedLock(qc, id, err),
   });
 }
 
@@ -135,6 +130,7 @@ export function useFinalizePrescription(id: string) {
       qc.invalidateQueries({ queryKey: ["consultation", id] });
       qc.invalidateQueries({ queryKey: ["queue"] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, id, err),
   });
 }
 
@@ -213,6 +209,7 @@ export function useDeleteLabReport(
       });
       qc.invalidateQueries({ queryKey: ["summary", consultationId] });
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 
@@ -233,6 +230,7 @@ export function usePatchReportAttachments(
         });
       }
     },
+    onError: (err) => refetchConsultIfCompletedLock(qc, consultationId, err),
   });
 }
 

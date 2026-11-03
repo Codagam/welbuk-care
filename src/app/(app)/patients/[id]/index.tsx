@@ -1,54 +1,73 @@
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-// import { useRouter } from "expo-router";
-
-import { Screen, TopBar } from "@/ui";
-// import { Button } from "@/ui";
-import { describeError } from "@/lib/api/errors";
-import { usePatient } from "@/features/patients/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import {
-  calcAge,
-  formatDob,
-  fullName,
-  initials,
-  normalizeGender,
-} from "@/features/patients/utils";
-// import { PatientCareActions } from "@/features/care/PatientCareActions";
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 
-function Field({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <View className="w-1/2 gap-0.5 py-2 pr-4">
-      <Text className="text-xs uppercase tracking-wide text-neutral-400">
-        {label}
-      </Text>
-      <Text className="text-base text-neutral-900">{value || "—"}</Text>
-    </View>
-  );
-}
+import { DocumentsCard } from "@/features/consult/components/DocumentsCard";
+import { usePatient } from "@/features/patients/hooks";
+import { QuestionnaireSheet } from "@/features/patients/QuestionnaireSheet";
+import { AppointmentsCard } from "@/features/patients/sections/AppointmentsCard";
+import { LabReportsCard } from "@/features/patients/sections/LabReportsCard";
+import { MedicalHistoryCard } from "@/features/patients/sections/MedicalHistoryCard";
+import { PatientHeaderCard } from "@/features/patients/sections/PatientHeaderCard";
+import { ReferralsCard } from "@/features/patients/sections/ReferralsCard";
+import { describeError } from "@/lib/api/errors";
+import { useFacilityId } from "@/lib/auth/store";
+import { Button, Screen, TopBar } from "@/ui";
 
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  // const router = useRouter();
+  const router = useRouter();
+  const facilityId = useFacilityId();
+  const qc = useQueryClient();
   const q = usePatient(id);
+
+  const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
+
+  const mongoId = q.data?.id;
+  const routeId = id ?? "";
+
+  const refreshAll = async () => {
+    await q.refetch();
+    if (!mongoId) return;
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["patient-questionnaire"] }),
+      qc.invalidateQueries({ queryKey: ["patient-appointments", mongoId] }),
+      qc.invalidateQueries({ queryKey: ["patient-referrals", mongoId] }),
+      qc.invalidateQueries({ queryKey: ["patient-lab-reports", mongoId] }),
+      qc.invalidateQueries({ queryKey: ["patient-documents", mongoId] }),
+    ]);
+  };
 
   return (
     <Screen>
       <TopBar
-        title="Patient"
-        // Edit patient hidden for now
-        // right={
-        //   q.data ? (
-        //     <Button
-        //       label="Edit"
-        //       size="md"
-        //       variant="outline"
-        //       onPress={() =>
-        //         router.push({ pathname: "/patients/[id]/edit", params: { id } })
-        //       }
-        //     />
-        //   ) : undefined
-        // }
+        title=""
+        backLabel="Back"
+        right={
+          q.data ? (
+            <Button
+              label="Edit"
+              size="md"
+              variant="primary"
+              className="rounded-md"
+              onPress={() =>
+                router.push({
+                  pathname: "/patients/[id]/edit",
+                  params: { id: routeId },
+                })
+              }
+            />
+          ) : undefined
+        }
       />
+
       {q.isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#FD006A" />
@@ -60,61 +79,62 @@ export default function PatientDetailScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView>
-          <View className="mx-auto w-full max-w-2xl gap-5 p-6">
-            <View className="flex-row items-center gap-4">
-              <View className="h-16 w-16 items-center justify-center rounded-full bg-brand-50">
-                <Text className="text-xl font-bold text-brand-700">
-                  {initials(q.data)}
-                </Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-2xl font-bold text-neutral-900">
-                  {fullName(q.data)}
-                </Text>
-                <Text className="text-sm text-neutral-500">
-                  #{String(q.data.patientId)}
-                  {q.data.abhaNumber ? "  ·  ABHA linked" : ""}
-                </Text>
-              </View>
-            </View>
-
-            <View className="flex-row flex-wrap rounded-2xl border border-neutral-200 bg-white px-4 py-2">
-              <Field label="Gender" value={normalizeGender(q.data.gender)} />
-              <Field
-                label="Age"
-                value={
-                  calcAge(q.data.dob) != null ? `${calcAge(q.data.dob)} years` : "—"
-                }
+        <ScrollView
+          refreshControl={
+            <RefreshControl
+              refreshing={q.isRefetching}
+              onRefresh={() => void refreshAll()}
+              tintColor="#FD006A"
+            />
+          }
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 16,
+            paddingBottom: 32,
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 1152,
+              alignSelf: "center",
+              flexDirection: "column",
+              gap: 12,
+            }}
+            className="mx-auto w-full max-w-6xl flex-col gap-3"
+          >
+            <PatientHeaderCard patient={q.data} />
+            {mongoId ? (
+              <AppointmentsCard
+                mongoPatientId={mongoId}
+                routePatientId={routeId}
               />
-              <Field label="Date of birth" value={formatDob(q.data.dob)} />
-              <Field label="Blood group" value={q.data.bloodGroup} />
-              <Field label="Mobile" value={q.data.phone} />
-              <Field label="Email" value={q.data.email} />
-              <Field label="ABHA" value={q.data.abhaNumber} />
-              <Field label="Guardian" value={q.data.parentOrGuardianName} />
-            </View>
-
-            {q.data.address ? (
-              <View className="gap-0.5 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
-                <Text className="text-xs uppercase tracking-wide text-neutral-400">
-                  Address
-                </Text>
-                <Text className="text-base text-neutral-900">
-                  {q.data.address}
-                </Text>
-              </View>
             ) : null}
-
-            {/* Care section hidden for now
-            <View className="gap-3 pt-2">
-              <Text className="text-lg font-semibold text-neutral-900">Care</Text>
-              <PatientCareActions patientId={q.data.id} />
-            </View>
-            */}
+            <MedicalHistoryCard
+              patientId={routeId || mongoId!}
+              onEdit={() => setQuestionnaireOpen(true)}
+            />
+            {mongoId ? <ReferralsCard mongoPatientId={mongoId} /> : null}
+            {mongoId ? <LabReportsCard mongoPatientId={mongoId} /> : null}
+            {mongoId ? <DocumentsCard patientId={mongoId} /> : null}
+            {!facilityId ? (
+              <Text className="text-xs text-amber-700">
+                Select a facility to load chart sections.
+              </Text>
+            ) : null}
           </View>
         </ScrollView>
       )}
+
+      {q.data && mongoId ? (
+        <QuestionnaireSheet
+          open={questionnaireOpen}
+          onOpenChange={setQuestionnaireOpen}
+          patientId={routeId || mongoId}
+          mongoPatientId={mongoId}
+          onSaved={() => void refreshAll()}
+        />
+      ) : null}
     </Screen>
   );
 }

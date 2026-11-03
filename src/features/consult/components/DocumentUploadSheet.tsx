@@ -1,31 +1,27 @@
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { ScrollView, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 
-import { AppModal, Button } from "@/ui";
+import { AppAlert, AppModal } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import {
   PATIENT_DOCUMENT_MAX_BYTES,
   PATIENT_DOCUMENT_MIME,
 } from "@/lib/api/endpoints/documents";
 import { useUploadPatientDocument } from "../hooks";
+import {
+  ErrorBanner,
+  FileDropZone,
+  FormSection,
+  PickedFileRow,
+  UploadSheetFooter,
+  UploadSheetHeader,
+  type PickedFile,
+} from "./upload/UploadKit";
 
 const MAX_SIZE_MB = 10;
 const ACCEPT_EXT = /\.(jpe?g|png|pdf|docx?)$/i;
-
-type PickedFile = {
-  uri: string;
-  name: string;
-  mimeType: string;
-  size?: number;
-};
+const FORMATS = ["PDF", "JPG", "PNG", "DOC", "DOCX"];
 
 function mimeOf(asset: {
   name?: string | null;
@@ -63,20 +59,26 @@ export function DocumentUploadSheet({
 }: Props) {
   const upload = useUploadPatientDocument(patientId);
   const [file, setFile] = useState<PickedFile | null>(null);
+  /** Picker problems (wrong type / too big) — shown under the file field. */
+  const [fileError, setFileError] = useState<string | null>(null);
+  /** Request failures — shown as a banner above the footer. */
   const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setFile(null);
+    setFileError(null);
     setError(null);
+    setSubmitted(false);
     setBusy(false);
   }, [open]);
 
   const close = () => onOpenChange(false);
 
   const pickFile = async () => {
-    setError(null);
+    setFileError(null);
     try {
       const picked = await DocumentPicker.getDocumentAsync({
         copyToCacheDirectory: true,
@@ -94,14 +96,14 @@ export function DocumentUploadSheet({
       const mime = mimeOf(a);
       const name = a.name || "file";
       if (!PATIENT_DOCUMENT_MIME.has(mime) && !ACCEPT_EXT.test(name)) {
-        setError("Only JPG, PNG, PDF, DOC, or DOCX are allowed.");
+        setFileError("Only JPG, PNG, PDF, DOC, or DOCX are allowed.");
         return;
       }
       if (
         typeof a.size === "number" &&
         a.size > PATIENT_DOCUMENT_MAX_BYTES
       ) {
-        setError(`File must be ${MAX_SIZE_MB} MB or smaller.`);
+        setFileError(`File must be ${MAX_SIZE_MB} MB or smaller.`);
         return;
       }
       setFile({
@@ -111,31 +113,32 @@ export function DocumentUploadSheet({
         size: a.size,
       });
     } catch (e) {
-      setError(describeError(e));
+      setFileError(describeError(e));
     }
   };
 
   const handleUpload = async () => {
+    setSubmitted(true);
+    setError(null);
     if (!file || !patientId) return;
     setBusy(true);
-    setError(null);
     try {
       await upload.mutateAsync({
         uri: file.uri,
         fileName: file.name,
         mimeType: file.mimeType,
       });
-      Alert.alert("Document uploaded");
+      AppAlert.success("Document uploaded", file.name);
       onSuccess?.();
       close();
     } catch (e) {
-      const msg = describeError(e);
-      setError(msg);
-      Alert.alert("Upload failed", msg);
+      setError(describeError(e));
     } finally {
       setBusy(false);
     }
   };
+
+  const missingFile = submitted && !file;
 
   return (
     <AppModal
@@ -145,91 +148,52 @@ export function DocumentUploadSheet({
       onRequestClose={close}
     >
       <View className="flex-1 bg-white">
-        <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
-          <Text className="text-lg font-semibold text-neutral-900">
-            Upload document
-          </Text>
-          <Pressable onPress={close} hitSlop={12} disabled={busy}>
-            <Ionicons name="close" size={24} color="#6b7280" />
-          </Pressable>
-        </View>
+        <UploadSheetHeader
+          title="Upload document"
+          subtitle="Insurance card, referral letter, ID or other patient file"
+          icon="folder-open-outline"
+          onClose={close}
+          disabled={busy}
+        />
 
-        <View className="gap-4 p-4">
-          <Text className="text-xs text-neutral-500">
-            Attach an insurance card, referral scan, or other patient file
-            (JPG, PNG, PDF, DOC, DOCX — up to {MAX_SIZE_MB} MB).
-          </Text>
-
-          <Pressable
-            onPress={() => void pickFile()}
-            disabled={busy}
-            className="items-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 px-4 py-8 active:border-brand"
+        <ScrollView
+          contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 32 }}
+        >
+          <FormSection
+            label="Document file"
+            required
+            error={
+              fileError ?? (missingFile ? "Choose a file to upload" : null)
+            }
           >
             {file ? (
-              <>
-                <Ionicons
-                  name={
-                    file.mimeType === "application/pdf" ||
-                    file.mimeType.includes("word")
-                      ? "document-text-outline"
-                      : "image-outline"
-                  }
-                  size={28}
-                  color="#FD006A"
-                />
-                <Text
-                  className="text-sm font-medium text-neutral-800"
-                  numberOfLines={1}
-                >
-                  {file.name}
-                </Text>
-                <Text className="text-xs text-brand">Tap to change</Text>
-              </>
+              <PickedFileRow
+                file={file}
+                disabled={busy}
+                onReplace={() => void pickFile()}
+                onRemove={() => setFile(null)}
+              />
             ) : (
-              <>
-                <Ionicons
-                  name="cloud-upload-outline"
-                  size={28}
-                  color="#FD006A"
-                />
-                <Text className="text-sm font-medium text-neutral-800">
-                  Choose file
-                </Text>
-                <Text className="text-center text-xs text-neutral-500">
-                  JPG, PNG, PDF, DOC, or DOCX — up to {MAX_SIZE_MB} MB
-                </Text>
-              </>
+              <FileDropZone
+                hint={`One file, up to ${MAX_SIZE_MB} MB`}
+                formats={FORMATS}
+                onPress={() => void pickFile()}
+                disabled={busy}
+                error={Boolean(fileError || missingFile)}
+              />
             )}
-          </Pressable>
+          </FormSection>
 
-          {error ? (
-            <Text className="text-sm text-red-500">{error}</Text>
-          ) : null}
+          {error ? <ErrorBanner message={error} /> : null}
+        </ScrollView>
 
-          <View className="flex-row justify-end gap-2 pt-2">
-            <Button
-              label="Cancel"
-              variant="outline"
-              size="md"
-              onPress={close}
-              disabled={busy}
-            />
-            <Button
-              label="Upload"
-              size="md"
-              onPress={() => void handleUpload()}
-              loading={busy}
-              disabled={!file || busy}
-            />
-          </View>
-
-          {busy ? (
-            <View className="items-center py-2">
-              <ActivityIndicator color="#FD006A" />
-              <Text className="mt-2 text-xs text-neutral-500">Uploading…</Text>
-            </View>
-          ) : null}
-        </View>
+        <UploadSheetFooter
+          primaryLabel="Upload"
+          onPrimary={() => void handleUpload()}
+          onCancel={close}
+          busy={busy}
+          showRequiredHint
+        />
       </View>
     </AppModal>
   );

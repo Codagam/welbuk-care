@@ -2,6 +2,8 @@ import { Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { DateField, TextField } from "@/ui";
+import { isDoctorRole } from "@/lib/auth/roles";
+import { useAuthUser } from "@/lib/auth/store";
 import {
   APPOINTMENT_STATUS_OPTIONS,
   type AppointmentListFilters,
@@ -27,9 +29,12 @@ export function AppointmentSearchBar({
   onToggleFilters,
   onClearFilters,
 }: Props) {
+  const user = useAuthUser();
+  const hideDoctorFilter = isDoctorRole(user);
+
   const activeFilterCount = [
     filters.patient,
-    filters.doctor,
+    hideDoctorFilter ? "" : filters.doctor,
     filters.reason,
     filters.status,
     filters.filtersCleared ? "" : filters.date !== todayYmd() ? filters.date : "",
@@ -37,7 +42,7 @@ export function AppointmentSearchBar({
 
   return (
     <View className="gap-3 border-b border-neutral-200 bg-white px-4 py-3">
-      <View className="flex-row items-center gap-2">
+      <View className="flex-row items-stretch gap-2">
         <View className="min-w-0 flex-1">
           <TextField
             value={search}
@@ -50,7 +55,8 @@ export function AppointmentSearchBar({
         </View>
         <Pressable
           onPress={onToggleFilters}
-          className={`h-12 flex-row items-center gap-1.5 rounded-xl border px-3 ${
+          style={{ height: 48, minHeight: 48 }}
+          className={`flex-row items-center justify-center gap-1.5 rounded-xl border px-3 ${
             filtersOpen || activeFilterCount
               ? "border-brand bg-brand-50"
               : "border-neutral-300 bg-white"
@@ -96,14 +102,16 @@ export function AppointmentSearchBar({
             }
             placeholder="Patient name"
           />
-          <TextField
-            label="Doctor"
-            value={filters.doctor}
-            onChangeText={(doctor) =>
-              onFiltersChange({ ...filters, doctor, filtersCleared: false })
-            }
-            placeholder="Doctor name"
-          />
+          {hideDoctorFilter ? null : (
+            <TextField
+              label="Doctor"
+              value={filters.doctor}
+              onChangeText={(doctor) =>
+                onFiltersChange({ ...filters, doctor, filtersCleared: false })
+              }
+              placeholder="Doctor name"
+            />
+          )}
           <TextField
             label="Reason"
             value={filters.reason}

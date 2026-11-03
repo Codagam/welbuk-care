@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 
-import { searchAppointments } from "@/lib/api/endpoints/appointments";
+import {
+  checkInAppointment,
+  lateArrivalAppointment,
+  searchAppointments,
+} from "@/lib/api/endpoints/appointments";
 import {
   openConsultForAppointment,
   readyForNextPatient,
@@ -15,7 +23,8 @@ import {
 import type { AppointmentListFilters } from "../types";
 
 const DEBOUNCE_MS = 500;
-const PAGE_SIZE = 20;
+/** Dashboard default — Practice sends 50; cap 100 server-side. */
+const PAGE_SIZE = 50;
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -110,6 +119,7 @@ export function useAppointmentList(
         filters,
         sortBy: "startTime",
         sortOrder: "desc",
+        hideTentativeFromList: true,
       });
       return searchAppointments(params, signal);
     },
@@ -125,6 +135,35 @@ export function useOpenConsult() {
   return useMutation({
     mutationFn: (appointmentId: string) =>
       openConsultForAppointment(appointmentId),
+  });
+}
+
+export function useCheckInAppointment() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (appointmentId: string) => checkInAppointment(appointmentId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
+}
+
+/** NO_SHOW / late arrival — re-slot to next free slot as SCHEDULED. */
+export function useLateArrivalAppointment() {
+  const qc = useQueryClient();
+  const facilityId = useFacilityId();
+
+  return useMutation({
+    mutationFn: (appointmentId: string) => {
+      if (!facilityId) {
+        throw new Error("Select a facility first");
+      }
+      return lateArrivalAppointment({ appointmentId, facilityId });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["appointments"] });
+    },
   });
 }
 

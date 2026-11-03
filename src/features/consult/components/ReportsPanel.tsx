@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -31,6 +30,7 @@ import {
   ModalSafeArea,
 } from "./ImagePreview";
 import { SectionChrome } from "./SectionChrome";
+import { AppAlert } from "@/ui/AppAlert";
 
 type LocalFile = { storageUrl: string; localUri: string };
 
@@ -41,6 +41,7 @@ export function ReportsPanel({
   labReports,
   doctorNotes,
   onRefresh,
+  locked = false,
 }: {
   consultationId: string;
   patientId?: string;
@@ -48,6 +49,7 @@ export function ReportsPanel({
   labReports: LabReportItem[];
   doctorNotes: DoctorNote[];
   onRefresh?: () => void;
+  locked?: boolean;
 }) {
   const facilityId = useFacilityId();
   const summaryQ = useSummary(consultationId);
@@ -141,7 +143,7 @@ export function ReportsPanel({
     message: string;
     onConfirm: () => void;
   }) => {
-    Alert.alert(opts.title, opts.message, [
+    AppAlert.alert(opts.title, opts.message, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: opts.onConfirm },
     ]);
@@ -204,18 +206,27 @@ export function ReportsPanel({
       <SectionChrome title="Reports">
         <View className="gap-2.5">
           <View className="flex-row items-center justify-between gap-2">
-            <View className="min-w-0 flex-1 flex-row flex-wrap items-center gap-2">
+            <View className="min-w-0 flex-1 flex-row items-center gap-2">
               <Ionicons name="folder-outline" size={16} color="#FD006A" />
-              <Text className="text-sm font-semibold text-neutral-900">
+              <Text
+                className="shrink text-sm font-semibold text-neutral-900"
+                numberOfLines={1}
+              >
                 Visit files
               </Text>
               {attachedUrls.length > 0 ? (
-                <Text className="text-xs font-medium text-brand">
+                <Text
+                  className="shrink-0 text-xs font-medium text-brand"
+                  numberOfLines={1}
+                >
                   {attachedUrls.length} visit file
                   {attachedUrls.length !== 1 ? "s" : ""}
                 </Text>
               ) : (
-                <Text className="text-xs text-neutral-500">
+                <Text
+                  className="min-w-0 shrink text-xs text-neutral-500"
+                  numberOfLines={1}
+                >
                   No visit files yet
                 </Text>
               )}
@@ -226,7 +237,7 @@ export function ReportsPanel({
               size="md"
               className="shrink-0"
               onPress={() => setUploadOpen(true)}
-              disabled={!consultationId}
+              disabled={!consultationId || locked}
               icon={<Ionicons name="add" size={16} color="#fff" />}
             />
           </View>
@@ -276,7 +287,7 @@ export function ReportsPanel({
         icon="document-text-outline"
         badge={labReports.length}
         collapsible
-        defaultOpen={false}
+        defaultOpen
       >
         {labReports.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
@@ -315,7 +326,7 @@ export function ReportsPanel({
                         <Ionicons name="eye-outline" size={16} color="#FD006A" />
                       </Pressable>
                     ) : null}
-                    {item.canDelete ? (
+                    {item.canDelete && !locked ? (
                       <Pressable
                         onPress={() => handleDeleteLab(item)}
                         disabled={deleteLab.isPending}
@@ -353,7 +364,7 @@ export function ReportsPanel({
         icon="calendar-outline"
         badge={doctorNotes.length}
         collapsible
-        defaultOpen={false}
+        defaultOpen
       >
         {doctorNotes.length === 0 ? (
           <Text className="text-xs italic text-neutral-500">
@@ -443,7 +454,7 @@ export function ReportsPanel({
             ) : (
               <View />
             )}
-            {canDeleteCurrent ? (
+            {canDeleteCurrent && !locked ? (
               <Button
                 label="Delete"
                 variant="danger"

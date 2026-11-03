@@ -22,9 +22,10 @@ export async function getPatient(
   id: string,
   facilityId: string
 ): Promise<Patient> {
+  // Practice accepts display patientId (Int) or Mongo id via patientId / id.
   const res = await api<{ patient: Patient }>({
     path: "/api/patient/crud",
-    query: { id, facilityId },
+    query: { patientId: id, facilityId },
   });
   return res.patient;
 }
@@ -39,4 +40,12 @@ export function updatePatient(
   body: PatientWriteInput
 ): Promise<{ message: string; patient: Patient }> {
   return api({ path: "/api/patient/crud", method: "PUT", body });
+}
+
+/** Soft-unlink from facility — does not delete the patient row. */
+export function unlinkPatient(body: {
+  id: string;
+  facilityId: string;
+}): Promise<{ success: boolean; message: string }> {
+  return api({ path: "/api/patient/crud", method: "DELETE", body });
 }

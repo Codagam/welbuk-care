@@ -19,6 +19,7 @@ type RawDentalResponse = {
   treatmentOrder?: unknown;
   treatmentPlanItems?: unknown;
   billingPayments?: unknown;
+  treatmentPaid?: unknown;
 };
 
 function normalizeDental(raw: RawDentalResponse): DentalData {
@@ -45,6 +46,7 @@ function normalizeDental(raw: RawDentalResponse): DentalData {
     billingPayments: Array.isArray(raw.billingPayments)
       ? (raw.billingPayments as DentalData["billingPayments"])
       : [],
+    treatmentPaid: raw.treatmentPaid === true,
   };
 }
 
@@ -147,6 +149,7 @@ export type FacilityDoctor = {
   doctorId?: number;
   specialization?: string;
   isDefault?: boolean;
+  slotDurationMinutes?: number;
 };
 
 export function getFacilityDoctors(
@@ -164,6 +167,10 @@ export function getFacilityDoctors(
       specialization:
         typeof x.specialization === "string" ? x.specialization : undefined,
       isDefault: x.isDefault === true,
+      slotDurationMinutes:
+        typeof x.slotDurationMinutes === "number"
+          ? x.slotDurationMinutes
+          : undefined,
     }));
   });
 }

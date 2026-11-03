@@ -40,6 +40,13 @@ export interface Appointment {
   patientId?: string | null;
   facilityId?: string | null;
   fee?: number | null;
+  /**
+   * Whole-rupee amount actually collected — `fee` may carry paise the desk
+   * rounds up before charging (₹212.50 fee → ₹213 taken). Refunds use this.
+   */
+  amountPaidRupees?: number | null;
+  /** Bill the visit fee sits on; a cash refund is raised against it. */
+  invoiceNumber?: string | null;
   paymentId?: string | null;
   paymentMethod?: string | null;
   paymentStatus?: string | null;
@@ -52,6 +59,8 @@ export interface Appointment {
   followUpSourceConsultationId?: string | null;
   tentativeCreatedAt?: string | null;
   dropsAt?: string | null;
+  tokenNumber?: number | null;
+  tokenSeries?: "PRIOR" | "WALK_IN" | "EMERGENCY" | null;
   doctor?: AppointmentDoctor | null;
   patient?: AppointmentPatient | null;
   facility?: AppointmentFacility | null;
@@ -99,7 +108,7 @@ export interface AppointmentListFilters {
   doctor: string;
   reason: string;
   status: string;
-  /** True after user taps “Clear filters” (no date window). */
+  /** True after user taps “Clear filters” (today + future window). */
   filtersCleared: boolean;
 }
 
