@@ -46,16 +46,17 @@ export function saveSummary(
 
 // ---- ICD-10 diagnosis search -------------------------------------------
 
-export async function searchDiagnosisCodes(
+/** One page of the ICD-10 list. An empty `q` returns the common codes. */
+export async function searchDiagnosisCodesPage(
   q: string,
-  signal?: AbortSignal
-): Promise<DiagnosisCode[]> {
-  const res = await api<{ codes: DiagnosisCode[] }>({
+  page: number,
+  pageSize: number
+): Promise<{ codes: DiagnosisCode[]; total: number }> {
+  const res = await api<{ codes?: DiagnosisCode[]; total?: number }>({
     path: "/api/consult/diagnosis-codes",
-    query: { q, limit: 20 },
-    signal,
+    query: { system: "icd10", q, page, pageSize },
   });
-  return res.codes ?? [];
+  return { codes: res.codes ?? [], total: res.total ?? 0 };
 }
 
 // ---- Prescriptions ------------------------------------------------------

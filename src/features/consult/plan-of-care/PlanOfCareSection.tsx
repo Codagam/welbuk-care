@@ -35,6 +35,7 @@ import {
 } from "./components/NotesCards";
 import { PrescriptionCard } from "./components/PrescriptionCard";
 import { ReferSheet } from "./components/ReferSheet";
+import type { PickerAnchor } from "./components/regimen/pickerPlacement";
 import {
   useAllergyGate,
   useCompletePrescription,
@@ -76,6 +77,7 @@ export function PlanOfCareSection({
   doctorName,
   onStickyFooter,
   locked = false,
+  flushNotes,
 }: {
   consultationId: string;
   appointmentId?: string;
@@ -91,6 +93,8 @@ export function PlanOfCareSection({
   /** Renders the Complete CTA as a sticky screen footer (UI placement only). */
   onStickyFooter?: (footer: ReactNode | null) => void;
   locked?: boolean;
+  /** Writes unsaved SOAP notes. Complete waits on it: a locked consult refuses them. */
+  flushNotes?: () => Promise<boolean>;
 }) {
   const { width } = useWindowDimensions();
   /** Tablet / landscape: notes share a horizontal row */
@@ -123,6 +127,12 @@ export function PlanOfCareSection({
   const flushDental = useDentalFlushOptional();
 
   const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpAnchor, setFollowUpAnchor] = useState<PickerAnchor>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   const [referOpen, setReferOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -174,6 +184,12 @@ export function PlanOfCareSection({
             setError("Could not flush dental chart/plan before complete.");
             return;
           }
+        }
+        if (flushNotes && !(await flushNotes())) {
+          setError(
+            "Could not save the clinical notes. Check the connection and try Complete again."
+          );
+          return;
         }
         const res = await complete.mutateAsync({
           appointmentId,
@@ -245,7 +261,10 @@ export function PlanOfCareSection({
     <View style={styles.stack}>
       <CompleteBar
         followUpSummaryLine={followUpLine}
-        onFollowUp={() => setFollowUpOpen(true)}
+        onFollowUp={(anchor) => {
+          setFollowUpAnchor(anchor);
+          setFollowUpOpen(true);
+        }}
         locked={locked}
       />
 
@@ -333,15 +352,14 @@ export function PlanOfCareSection({
       <FollowUpSheet
         open={followUpOpen}
         onClose={() => setFollowUpOpen(false)}
+        anchor={followUpAnchor}
         facilityId={facilityId}
         consultationId={consultationId}
         patientId={patientId ?? ""}
         doctorId={resolvedDoctorId}
-        patientLine={patientLine}
-        doctorLine={resolvedDoctorName}
         followUpSummaryLine={followUpLine}
-        onBooked={async (line) => {
-          await saveSummary.mutateAsync({ followUp: line });
+        onBooked={async (summary) => {
+          await saveSummary.mutateAsync(summary);
         }}
       />
 

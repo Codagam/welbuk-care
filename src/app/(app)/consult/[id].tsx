@@ -124,8 +124,9 @@ export default function ConsultScreen() {
     [facility?.consultationType]
   );
 
+  const notesFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const sectionY = useRef<Record<string, number>>({});
+  const sectionY =useRef<Record<string, number>>({});
   const sectionH = useRef<Record<string, number>>({});
   const [activeId, setActiveId] = useState<string>(
     () => navItems[0]?.id ?? CONSULT_SECTION_IDS.consultation
@@ -286,7 +287,12 @@ export default function ConsultScreen() {
         subtitle="SOAP notes and diagnosis codes"
         onLayoutY={onSectionLayout}
       >
-        <NotesSection consultationId={id} locked={isLocked} />
+        <NotesSection
+          key={id}
+          consultationId={id}
+          locked={isLocked}
+          flushRef={notesFlushRef}
+        />
       </ConsultSectionCard>
 
       <ConsultSectionCard
@@ -307,6 +313,7 @@ export default function ConsultScreen() {
           doctorName={user?.name ?? user?.email}
           onStickyFooter={setStickyFooter}
           locked={isLocked}
+          flushNotes={() => notesFlushRef.current?.() ?? Promise.resolve(true)}
         />
       </ConsultSectionCard>
     </View>

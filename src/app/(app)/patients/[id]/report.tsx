@@ -13,6 +13,7 @@ import {
   formatFollowUpForPrint,
 } from "@/features/consult/plan-of-care/followUp";
 import { formatDuration } from "@/features/consult/plan-of-care/sig";
+import { formatDiagnosisCodes } from "@/features/consult/soapText";
 import { writeConsultationReportPdfToCache } from "@/features/patients/buildConsultationReportPdf";
 import { usePatient } from "@/features/patients/hooks";
 import {
@@ -164,13 +165,11 @@ export default function PatientAppointmentReportScreen() {
   const doctorLabel = consultQ.data?.doctor?.name?.trim() || "Doctor";
   const notes =
     summaryQ.data?.doctorNotes?.trim() || "No doctor notes available.";
-  const diagnosis = (() => {
-    const codes = summaryQ.data?.diagnosisCodes ?? [];
-    if (Array.isArray(codes) && codes.length > 0) {
-      return codes.map((c) => c.code).filter(Boolean).join(", ");
-    }
-    return summaryQ.data?.assessment?.trim() || "N/A";
-  })();
+  // Saved codes first, as Practice prints them, then the Assessment text.
+  const diagnosis =
+    formatDiagnosisCodes(summaryQ.data?.diagnosisCodes) ||
+    summaryQ.data?.assessment?.trim() ||
+    "N/A";
   const timeLabel = formatTimeLabel(appointmentTime);
   const dateTimeLabel =
     consultDateLabel === "—"

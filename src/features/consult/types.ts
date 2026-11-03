@@ -25,6 +25,12 @@ export interface ConsultSummary {
   plan?: string | null;
   diagnosisCodes?: DiagnosisCode[];
   followUp?: string | null;
+  // Sent with a booking only; the read returns the line in followUp.
+  followUpDate?: string;
+  followUpIntervalCount?: number;
+  followUpIntervalUnit?: string;
+  followUpRecurring?: boolean;
+  followUpAgreedVia?: "CONSULT" | "DESK_OTP" | "INFERRED";
   prescriptionAttachmentUrls?: string[];
   reportAttachmentUrls?: string[];
 }

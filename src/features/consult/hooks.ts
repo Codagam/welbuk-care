@@ -18,7 +18,6 @@ import {
   patchReportAttachmentUrls,
   saveSummary,
   saveVitals,
-  searchDiagnosisCodes,
 } from "@/lib/api/endpoints/consult-data";
 import {
   listPatientDocuments,
@@ -83,17 +82,6 @@ export function useSaveSummary(id: string) {
     mutationFn: (summary: Partial<ConsultSummary>) => saveSummary(id, summary),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["summary", id] }),
     onError: (err) => refetchConsultIfCompletedLock(qc, id, err),
-  });
-}
-
-/** Load ICD-10 codes when the field is open; empty `q` returns the default list. */
-export function useDiagnosisSearch(q: string, open = false) {
-  return useQuery({
-    queryKey: ["diagnosis-codes", q.trim()],
-    enabled: open,
-    queryFn: ({ signal }) => searchDiagnosisCodes(q.trim(), signal),
-    staleTime: 5 * 60_000,
-    placeholderData: (prev) => prev,
   });
 }
 

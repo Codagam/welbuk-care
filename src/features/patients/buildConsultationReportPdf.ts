@@ -159,7 +159,19 @@ export async function buildConsultationReportPdf(
   // Diagnosis / Notes boxes
   const gap = 12;
   const boxW = (contentWidth - gap) / 2;
-  const boxH = 80;
+  // Line breaks are kept (Assessment holds one code per line), and the boxes grow
+  // to fit: a diagnosis must not be cut off at four lines on a printed prescription.
+  const boxLines = (text: string) =>
+    text
+      .split("\n")
+      .flatMap((line) => wrapText(pdfSafe(line), boxW - 20, font, 11))
+      .slice(0, 16);
+  const diagLines = boxLines(input.diagnosis || "N/A");
+  const doctorNoteLines = boxLines(input.notes || "—");
+  const boxH = Math.max(
+    80,
+    40 + Math.max(diagLines.length, doctorNoteLines.length) * 14
+  );
   page.drawRectangle({
     x: margin,
     y: y - boxH,
@@ -175,8 +187,7 @@ export async function buildConsultationReportPdf(
     color: rgb(1, 0.98, 0.92),
   });
   drawText("DIAGNOSIS", margin + 10, y - 14, 9, true, rgb(0.12, 0.25, 0.69));
-  const diagLines = wrapText(input.diagnosis || "N/A", boxW - 20, font, 11);
-  diagLines.slice(0, 4).forEach((line, i) => {
+  diagLines.forEach((line, i) => {
     drawText(line, margin + 10, y - 32 - i * 14, 11);
   });
   drawText(
@@ -187,8 +198,7 @@ export async function buildConsultationReportPdf(
     true,
     rgb(0.57, 0.25, 0.05)
   );
-  const noteLines = wrapText(input.notes || "—", boxW - 20, font, 11);
-  noteLines.slice(0, 4).forEach((line, i) => {
+  doctorNoteLines.forEach((line, i) => {
     drawText(line, margin + boxW + gap + 10, y - 32 - i * 14, 11);
   });
   y -= boxH + 22;

@@ -21,7 +21,8 @@ const TOP_SAFE = 40;
 export function placePicker(
   anchor: PickerAnchor,
   screen: { width: number; height: number },
-  keyboardHeight: number
+  keyboardHeight: number,
+  panelHeight: number = PANEL_HEIGHT
 ): { left: number; top: number; width: number; height: number } {
   const width = Math.min(
     PANEL_WIDTH,
@@ -33,7 +34,7 @@ export function placePicker(
     Math.min(anchor.x, screen.width - width - GUTTER)
   );
   const bottomLimit = screen.height - keyboardHeight - GUTTER;
-  const height = Math.min(PANEL_HEIGHT, bottomLimit - TOP_SAFE);
+  const height = Math.min(panelHeight, bottomLimit - TOP_SAFE);
   const top = Math.max(
     TOP_SAFE,
     Math.min(anchor.y + anchor.height + GAP, bottomLimit - height)
