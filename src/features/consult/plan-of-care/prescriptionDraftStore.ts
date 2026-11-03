@@ -105,15 +105,20 @@ export async function clearAllPrescriptionDrafts(): Promise<void> {
   await SecureStore.deleteItemAsync(INDEX_KEY).catch(() => {});
 }
 
-/** Merge API structured lines with local draft (by id; API first). */
+/**
+ * Merge API structured lines with the local draft. A line in both takes the draft's
+ * copy: rows are edited in place now, and those edits live only in the draft until
+ * Complete, so taking the server's copy would undo them on the next open.
+ */
 export function mergePrescriptions(
   apiLines: PlanPrescription[],
   draftLines: PlanPrescription[]
 ): PlanPrescription[] {
   const structuredOnly = apiLines.filter((p) => !p.isAttachment);
   const apiIds = new Set(structuredOnly.map((p) => p.id));
+  const draftById = new Map(draftLines.map((p) => [p.id, p]));
   return [
-    ...structuredOnly,
+    ...structuredOnly.map((p) => draftById.get(p.id) ?? p),
     ...draftLines.filter((p) => !apiIds.has(p.id) && !p.isAttachment),
   ];
 }

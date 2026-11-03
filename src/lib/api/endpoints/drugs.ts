@@ -78,8 +78,8 @@ export async function searchDrugs(body: {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   search?: string;
-}): Promise<{ drugs: DrugCatalogItem[] }> {
-  const res = await api<{ drugs?: DrugCatalogItem[] }>({
+}): Promise<{ drugs: DrugCatalogItem[]; total: number }> {
+  const res = await api<{ drugs?: DrugCatalogItem[]; totalCount?: number }>({
     path: "/api/drug/search",
     method: "POST",
     body: {
@@ -91,7 +91,7 @@ export async function searchDrugs(body: {
       search: body.search ?? "",
     },
   });
-  return { drugs: res.drugs ?? [] };
+  return { drugs: res.drugs ?? [], total: res.totalCount ?? 0 };
 }
 
 /**

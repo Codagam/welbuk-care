@@ -35,6 +35,11 @@ export interface Prescription {
   dosePattern?: string | null;
   foodTiming?: string | null;
   duration?: string | number | null;
+  durationValue?: number | null;
+  durationUnit?: string | null;
+  doseNote?: string | null;
+  regimenId?: string | null;
+  regimenVersion?: number | null;
   qtyPrescribed?: number | null;
   drugId?: string;
   isAttachment?: boolean;
@@ -45,6 +50,11 @@ export interface PrescriptionItemInput {
   dosePattern: string;
   foodTiming: string; // "BF" | "AF"
   duration: string | number;
+  durationValue?: number;
+  durationUnit?: string;
+  doseNote?: string;
+  regimenId?: string;
+  regimenVersion?: number | null;
   qtyPrescribed?: number;
   drugId?: string;
 }

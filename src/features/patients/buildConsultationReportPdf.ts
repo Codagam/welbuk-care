@@ -1,12 +1,21 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
+import {
+  followUpPrintDetail,
+  formatFollowUpForPrint,
+} from "@/features/consult/plan-of-care/followUp";
+import { formatDuration } from "@/features/consult/plan-of-care/sig";
+
 export type ReportPdfRxLine = {
   id: string;
   name?: string | null;
   dosePattern?: string | null;
   foodTiming?: string | null;
   duration?: string | number | null;
+  durationValue?: number | null;
+  durationUnit?: string | null;
+  doseNote?: string | null;
 };
 
 export type ConsultationReportPdfInput = {
@@ -20,7 +29,20 @@ export type ConsultationReportPdfInput = {
   diagnosis: string;
   notes: string;
   prescriptionRows: ReportPdfRxLine[];
+  /** The summary's follow-up line. Empty prints "As advised". */
+  followUp?: string | null;
 };
+
+/**
+ * The standard PDF fonts encode WinAnsi only, and pdf-lib THROWS on anything else,
+ * which would lose the whole PDF over one character in a free-text note. ¼ ½ ¾ and
+ * · are inside the range. Other scripts print as "?", so a gap shows on the paper.
+ */
+function pdfSafe(text: string): string {
+  return text
+    .replace(/\s/g, " ")
+    .replace(/[^\x20-\x7E -ÿ–—‘’“”•…]/g, "?");
+}
 
 function foodTimingLabel(value?: string | null): string {
   if (!value) return "";
@@ -59,7 +81,7 @@ export async function buildConsultationReportPdf(
   input: ConsultationReportPdfInput
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([612, 792]); // US Letter
+  let page = pdf.addPage([612, 792]); // US Letter
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
@@ -174,22 +196,34 @@ export async function buildConsultationReportPdf(
   // Prescription
   drawText("Rx PRESCRIPTION", margin, y, 14, true);
   y -= 10;
-  const tableTop = y;
   const col1 = margin;
   const col2 = margin + contentWidth * 0.42;
   const col3 = margin + contentWidth * 0.82;
   const rowH = 22;
-  page.drawRectangle({
-    x: margin,
-    y: tableTop - rowH,
-    width: contentWidth,
-    height: rowH,
-    color: rgb(0.09, 0.09, 0.09),
-  });
-  drawText("Medicine", col1 + 8, tableTop - 15, 10, true, rgb(1, 1, 1));
-  drawText("Dosage & Frequency", col2 + 4, tableTop - 15, 10, true, rgb(1, 1, 1));
-  drawText("Days", col3 + 8, tableTop - 15, 10, true, rgb(1, 1, 1));
-  y = tableTop - rowH;
+  const noteSize = 8.5;
+  const noteLead = 11;
+  /** Nothing may be drawn below this: the watermark sits under it. */
+  const pageBottom = 60;
+
+  const startPage = () => {
+    page = pdf.addPage([612, 792]);
+    y = page.getHeight() - margin;
+  };
+
+  const drawTableHeader = () => {
+    page.drawRectangle({
+      x: margin,
+      y: y - rowH,
+      width: contentWidth,
+      height: rowH,
+      color: rgb(0.09, 0.09, 0.09),
+    });
+    drawText("Medicine", col1 + 8, y - 15, 10, true, rgb(1, 1, 1));
+    drawText("Dosage & Frequency", col2 + 4, y - 15, 10, true, rgb(1, 1, 1));
+    drawText("Duration", col3 + 8, y - 15, 10, true, rgb(1, 1, 1));
+    y -= rowH;
+  };
+  drawTableHeader();
 
   const rows =
     input.prescriptionRows.length > 0
@@ -205,14 +239,23 @@ export async function buildConsultationReportPdf(
         ];
 
   rows.forEach((line, idx) => {
-    y -= rowH;
-    if (y < 90) return;
+    const note = pdfSafe(line.doseNote?.trim() ?? "");
+    const noteLines = note
+      ? wrapText(note, col3 - col2 - 8, font, noteSize)
+      : [];
+    const height = rowH + noteLines.length * noteLead;
+    // A medicine must never fall off the page: it continues on the next one.
+    if (y - height < pageBottom) {
+      startPage();
+      drawTableHeader();
+    }
+    y -= height;
     if (idx % 2 === 1) {
       page.drawRectangle({
         x: margin,
         y,
         width: contentWidth,
-        height: rowH,
+        height,
         color: rgb(0.98, 0.98, 0.98),
       });
     }
@@ -225,15 +268,24 @@ export async function buildConsultationReportPdf(
     const dose = [line.dosePattern, foodTimingLabel(line.foodTiming)]
       .filter(Boolean)
       .join(" · ");
-    drawText((line.name || "—").slice(0, 36), col1 + 8, y + 7, 10);
-    drawText((dose || "—").slice(0, 32), col2 + 4, y + 7, 10);
-    drawText(
-      line.duration != null && String(line.duration) ? String(line.duration) : "—",
-      col3 + 8,
-      y + 7,
-      10
-    );
+    const baseline = y + height - 15;
+    drawText(pdfSafe(line.name || "—").slice(0, 36), col1 + 8, baseline, 10);
+    drawText(pdfSafe(dose || "—").slice(0, 32), col2 + 4, baseline, 10);
+    drawText(pdfSafe(formatDuration(line) || "—"), col3 + 8, baseline, 10);
+    noteLines.forEach((text, i) => {
+      drawText(
+        text,
+        col2 + 4,
+        baseline - noteLead * (i + 1),
+        noteSize,
+        false,
+        rgb(0.4, 0.4, 0.4)
+      );
+    });
   });
+
+  // The footer stays whole: 28 + 22 for the rows, plus the detail under the date.
+  if (y - 72 < pageBottom) startPage();
 
   y -= 28;
   page.drawLine({
@@ -249,29 +301,35 @@ export async function buildConsultationReportPdf(
   const authLabelW = fontBold.widthOfTextAtSize(authLabel, 9);
   drawText(authLabel, rightX - authLabelW, y, 9, true, rgb(0.45, 0.45, 0.45));
   y -= 22;
+  const nextVisit = pdfSafe(formatFollowUpForPrint(input.followUp));
+  const nextVisitDetail = pdfSafe(followUpPrintDetail(input.followUp));
   page.drawRectangle({
     x: margin,
     y: y - 4,
-    width: 90,
+    width: Math.max(90, font.widthOfTextAtSize(nextVisit, 11) + 20),
     height: 22,
     color: rgb(0.93, 0.99, 0.96),
   });
-  drawText("As advised", margin + 10, y + 2, 11, false, rgb(0.02, 0.37, 0.27));
+  drawText(nextVisit, margin + 10, y + 2, 11, false, rgb(0.02, 0.37, 0.27));
+  if (nextVisitDetail) {
+    drawText(nextVisitDetail, margin, y - 16, 9, false, rgb(0.4, 0.4, 0.4));
+  }
   const docW2 = fontBold.widthOfTextAtSize(input.doctorLabel, 12);
   drawText(input.doctorLabel, rightX - docW2, y + 2, 12, true);
 
-  // Watermark
+  // Watermark, on every page
   const watermark = "Powered by Welbuk";
   const wmSize = 11;
   const wmW = font.widthOfTextAtSize(watermark, wmSize);
-  drawText(
-    watermark,
-    (pageWidth - wmW) / 2,
-    36,
-    wmSize,
-    false,
-    rgb(0.64, 0.64, 0.64)
-  );
+  for (const p of pdf.getPages()) {
+    p.drawText(watermark, {
+      x: (pageWidth - wmW) / 2,
+      y: 36,
+      size: wmSize,
+      font,
+      color: rgb(0.64, 0.64, 0.64),
+    });
+  }
 
   return pdf.save();
 }

@@ -1,23 +1,22 @@
-﻿import * as DocumentPicker from "expo-document-picker";
-import { useMemo, useState } from "react";
+import * as DocumentPicker from "expo-document-picker";
+import { useState, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useCardFocusHighlight } from "@/features/consult/useCardFocusHighlight";
-import type { DrugCatalogItem } from "@/lib/api/endpoints/drugs";
 import { ApiError, describeError, isConsultCompletedLock } from "@/lib/api/errors";
 import { useFacilityId } from "@/lib/auth/store";
-import { AppModal, Button, Segmented, TextField } from "@/ui";
+import { AppModal, Button, TextField } from "@/ui";
 
 import { formatAllergyMatchSummaryLine } from "../allergy";
 import {
-  filterDrugCatalog,
   useAttachPrescription,
   usePatchRxAttachments,
   usePrescriptionTemplates,
@@ -28,27 +27,23 @@ import type {
   AttachedRxImage,
   PlanPrescription,
 } from "../types";
-import {
-  dosePatternAfterCatalogDrugPick,
-  validatePrescriptionItem,
-} from "../validation";
 import { QuickAddDrugDialog } from "./QuickAddDrugDialog";
+import { PrescriptionEditor } from "./regimen/PrescriptionEditor";
 import { AppAlert } from "@/ui/AppAlert";
-
-const TIMING = ["BF", "AF"] as const;
 
 export function PrescriptionCard({
   consultationId,
   prescriptions,
   onAdd,
   onRemove,
+  onUpdate,
   onApplyTemplate,
   attachedImages,
   onAttachedImagesChange,
   allergyWarnings,
   allergyOverrideAck,
   onAllergyOverrideChange,
-  drugs,
+  patientAgeYears,
   tabletLayout = false,
   locked = false,
 }: {
@@ -56,6 +51,7 @@ export function PrescriptionCard({
   prescriptions: PlanPrescription[];
   onAdd: (item: Omit<PlanPrescription, "id"> & { id?: string }) => void;
   onRemove: (id: string) => void;
+  onUpdate: (items: PlanPrescription[]) => void;
   onApplyTemplate: (
     meds: Array<{
       name: string;
@@ -69,84 +65,31 @@ export function PrescriptionCard({
   allergyWarnings: AllergyWarning[];
   allergyOverrideAck: boolean;
   onAllergyOverrideChange: (ack: boolean) => void;
-  drugs: DrugCatalogItem[];
-  /** Wider table / toolbar layout for tablets */
+  /** Whole years, or null when unknown. Drives the child dose check. */
+  patientAgeYears?: number | null;
+  /** Wider toolbar layout for tablets */
   tabletLayout?: boolean;
   locked?: boolean;
 }) {
-  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
   const facilityId = useFacilityId();
   const qc = useQueryClient();
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   return (
-    <View
-      className={`w-full gap-4 rounded-2xl border bg-white p-5 ${
-        highlighted ? "border-brand" : "border-neutral-200"
-      }`}
-    >
-      <View
-        className={
-          tabletLayout
-            ? "flex-row flex-wrap items-start justify-between gap-3"
-            : "gap-3"
-        }
-      >
-        <View className="gap-0.5">
-          <Text className="text-lg font-semibold text-brand">
-            Prescription
-          </Text>
-          <Text className="text-xs text-neutral-500">
-            {prescriptions.length === 0
-              ? "Add medicines for this visit"
-              : `${prescriptions.length} medicine${prescriptions.length === 1 ? "" : "s"}`}
-          </Text>
+    <View className="w-full gap-4 rounded-2xl border border-neutral-200 bg-white p-5">
+      <View className="flex-row flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-3">
+        <View className="flex-row items-center gap-2">
+          <Ionicons name="clipboard-outline" size={20} color="#FD006A" />
+          <Text className="text-lg font-semibold text-brand">Prescription</Text>
         </View>
-
-        <View
-          className={
-            tabletLayout
-              ? "max-w-full flex-1 flex-row flex-wrap items-center justify-end gap-2"
-              : "gap-2"
-          }
-        >
-          <TemplateBar
-            consultationId={consultationId}
-            prescriptions={prescriptions}
-            hasAttachments={attachedImages.length > 0}
-            onApply={onApplyTemplate}
-            compact={tabletLayout}
-            locked={locked}
-          />
-          {facilityId ? (
-            <Button
-              label="+ Add medicine"
-              variant="outline"
-              size="md"
-              disabled={locked}
-              onPress={() => setQuickAddOpen(true)}
-              className="h-12 justify-center"
-            />
-          ) : null}
-          <AttachBar
-            consultationId={consultationId}
-            attachedImages={attachedImages}
-            onAttachedImagesChange={onAttachedImagesChange}
-            compact={tabletLayout}
-            locked={locked}
-          />
-        </View>
-      </View>
-
-      {facilityId ? (
-        <QuickAddDrugDialog
-          open={quickAddOpen}
-          onClose={() => setQuickAddOpen(false)}
-          onCreated={() => {
-            void qc.invalidateQueries({ queryKey: ["drug-catalog"] });
-          }}
+        <AttachBar
+          consultationId={consultationId}
+          attachedImages={attachedImages}
+          onAttachedImagesChange={onAttachedImagesChange}
+          compact={tabletLayout}
+          locked={locked}
         />
-      ) : null}
+      </View>
 
       {allergyWarnings.length > 0 ? (
         <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
@@ -181,359 +124,59 @@ export function PrescriptionCard({
         </View>
       ) : null}
 
-      {/* Medicine table */}
-      <View className="overflow-hidden rounded-xl border border-neutral-200">
-        {tabletLayout ? (
-          <View className="flex-row border-b border-neutral-200 bg-neutral-50 px-3 py-2.5">
-            <Text className="flex-[2.2] text-xs font-semibold uppercase tracking-wide text-brand">
-              Medicine
-            </Text>
-            <Text className="flex-[1.1] text-xs font-semibold uppercase tracking-wide text-brand">
-              Dose
-            </Text>
-            <Text className="w-14 text-xs font-semibold uppercase tracking-wide text-brand">
-              Food
-            </Text>
-            <Text className="w-14 text-xs font-semibold uppercase tracking-wide text-brand">
-              Days
-            </Text>
-            <View className="w-9" />
-          </View>
-        ) : null}
-
-        {prescriptions.length === 0 ? (
-          <View className="px-4 py-8">
-            <Text className="text-center text-sm text-neutral-400">
-              No medicines added yet.
-            </Text>
-          </View>
-        ) : (
-          <View>
-            {prescriptions.map((l, idx) =>
-              tabletLayout ? (
-                <View
-                  key={l.id}
-                  className={`flex-row items-center px-3 py-3 ${
-                    idx < prescriptions.length - 1
-                      ? "border-b border-neutral-100"
-                      : ""
-                  }`}
+      {/* A locked consult keeps the list readable and withdraws this toolbar:
+          applying a template replaces the medicines. */}
+      {!locked ? (
+        <View className="flex-row flex-wrap items-center justify-end gap-2 rounded-xl bg-brand-50 p-3">
+          <TemplateBar
+            consultationId={consultationId}
+            prescriptions={prescriptions}
+            hasAttachments={attachedImages.length > 0}
+            onApply={onApplyTemplate}
+            compact={tabletLayout}
+            beforeSave={
+              facilityId ? (
+                <Pressable
+                  onPress={() => setQuickAddOpen(true)}
+                  style={{ flexShrink: 0 }}
+                  className="h-12 flex-row items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 active:bg-neutral-50"
                 >
+                  <Ionicons name="add" size={16} color="#111827" />
                   <Text
-                    className="flex-[2.2] pr-2 text-sm font-semibold text-neutral-900"
-                    numberOfLines={2}
+                    numberOfLines={1}
+                    className="text-sm font-semibold text-neutral-900"
                   >
-                    {l.name}
+                    Add medicine
                   </Text>
-                  <Text className="flex-[1.1] text-sm text-neutral-700">
-                    {l.dosePattern}
-                  </Text>
-                  <Text className="w-14 text-sm text-neutral-700">
-                    {l.foodTiming}
-                  </Text>
-                  <Text className="w-14 text-sm text-neutral-700">
-                    {l.duration}
-                  </Text>
-                  <Pressable
-                    onPress={() => onRemove(l.id)}
-                    disabled={locked}
-                    className={`h-9 w-9 items-center justify-center rounded-full ${
-                      locked ? "opacity-40" : "active:bg-neutral-100"
-                    }`}
-                  >
-                    <Text className="text-red-500">✕</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <View
-                  key={l.id}
-                  className={`flex-row items-center gap-3 px-3 py-2.5 ${
-                    idx < prescriptions.length - 1
-                      ? "border-b border-neutral-100"
-                      : ""
-                  }`}
-                >
-                  <View className="flex-1">
-                    <Text className="text-sm font-semibold text-neutral-900">
-                      {l.name}
-                    </Text>
-                    <Text className="text-xs text-neutral-500">
-                      {[
-                        l.dosePattern,
-                        l.foodTiming,
-                        l.duration ? `${l.duration} days` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => onRemove(l.id)}
-                    disabled={locked}
-                    className={`h-8 w-8 items-center justify-center rounded-full ${
-                      locked ? "opacity-40" : "active:bg-neutral-100"
-                    }`}
-                  >
-                    <Text className="text-red-500">✕</Text>
-                  </Pressable>
-                </View>
-              )
-            )}
-          </View>
-        )}
-      </View>
-
-      <AddMedicineForm
-        existingNames={prescriptions.map((p) => p.name)}
-        onAdd={onAdd}
-        drugs={drugs}
-        tabletLayout={tabletLayout}
-        onFieldFocus={() => onFocus(undefined as never)}
-        onFieldBlur={() => onBlur(undefined as never)}
-        locked={locked}
-      />
-    </View>
-  );
-}
-
-function AddMedicineForm({
-  existingNames,
-  onAdd,
-  drugs,
-  tabletLayout = false,
-  onFieldFocus,
-  onFieldBlur,
-  locked = false,
-}: {
-  existingNames: string[];
-  onAdd: (item: Omit<PlanPrescription, "id"> & { id?: string }) => void;
-  drugs: DrugCatalogItem[];
-  tabletLayout?: boolean;
-  onFieldFocus?: () => void;
-  onFieldBlur?: () => void;
-  locked?: boolean;
-}) {
-  const [name, setName] = useState("");
-  const [dose, setDose] = useState("1-0-1");
-  const [timing, setTiming] = useState<(typeof TIMING)[number]>("AF");
-  const [duration, setDuration] = useState("5");
-  const [drugId, setDrugId] = useState<string | undefined>();
-  const [error, setError] = useState<string | null>(null);
-  const [showHints, setShowHints] = useState(false);
-
-  const hints = useMemo(
-    () => filterDrugCatalog(drugs, name),
-    [drugs, name]
-  );
-
-  const canAdd = name.trim().length > 0;
-
-  const pickDrug = (d: DrugCatalogItem) => {
-    const brand = (d.brandName ?? "").trim() || (d.genericName ?? "").trim();
-    setName(brand);
-    setDrugId(d.id);
-    setDose(dosePatternAfterCatalogDrugPick(dose, d.dosageForm));
-    setShowHints(false);
-    setError(null);
-  };
-
-  const onSave = () => {
-    if (locked || !canAdd) return;
-    setError(null);
-    const duplicate = existingNames.some(
-      (n) => n.trim().toLowerCase() === name.trim().toLowerCase()
-    );
-    if (duplicate) {
-      setError("This medicine is already on the prescription.");
-      return;
-    }
-    const err = validatePrescriptionItem({
-      name: name.trim(),
-      dosePattern: dose.trim(),
-      foodTiming: timing,
-      duration: duration.trim(),
-    });
-    if (err) {
-      setError(err);
-      return;
-    }
-    onAdd({
-      name: name.trim(),
-      dosePattern: dose.trim(),
-      foodTiming: timing,
-      duration: duration.trim(),
-      drugId,
-    });
-    setName("");
-    setDose("1-0-1");
-    setTiming("AF");
-    setDuration("5");
-    setDrugId(undefined);
-    setShowHints(false);
-  };
-
-  const medicineHints = showHints && hints.length > 0 ? (
-    <View className="mt-1 max-h-40 overflow-hidden rounded-xl border border-neutral-200 bg-white">
-      <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-        {hints.map((d) => (
-          <Pressable
-            key={d.id}
-            onPress={() => pickDrug(d)}
-            className="border-b border-neutral-100 px-3 py-2 active:bg-neutral-50"
-          >
-            <Text className="text-sm font-medium text-neutral-900">
-              {d.brandName || d.genericName}
-            </Text>
-            <Text className="text-xs text-neutral-500">
-              {[d.genericName, d.dosageForm, d.strength]
-                .filter(Boolean)
-                .join(" · ")}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  ) : null;
-
-  const medicineField = (
-    <TextField
-      label="Medicine"
-      labelClassName="text-brand"
-      value={name}
-      onChangeText={(v) => {
-        setName(v);
-        setDrugId(undefined);
-        setShowHints(true);
-      }}
-      onFocus={() => {
-        setShowHints(true);
-        onFieldFocus?.();
-      }}
-      onBlur={onFieldBlur}
-      onPressIn={() => setShowHints(true)}
-      placeholder="Tap to pick medicine"
-    />
-  );
-
-  const addButton = (
-    <Button
-      label={tabletLayout ? "Add" : "Add to prescription"}
-      size="md"
-      variant="primary"
-      onPress={onSave}
-      disabled={!canAdd || locked}
-      className="h-12 min-h-[48px] justify-center py-0"
-      style={{ height: 48 }}
-    />
-  );
-
-  return (
-    <View
-      className={`gap-3 rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-4 ${
-        locked ? "opacity-50" : ""
-      }`}
-      pointerEvents={locked ? "none" : "auto"}
-    >
-      <Text className="text-sm font-semibold text-brand">
-        Add medicine
-      </Text>
-
-      {tabletLayout ? (
-        <View className="gap-1">
-          <View className="flex-row items-end gap-3">
-            <View className="min-w-0 flex-[2] gap-1.5">
-              <Text className="text-sm font-medium text-brand">
-                Medicine
-              </Text>
-              <TextField
-                value={name}
-                onChangeText={(v) => {
-                  setName(v);
-                  setDrugId(undefined);
-                  setShowHints(true);
-                }}
-                onFocus={() => {
-                  setShowHints(true);
-                  onFieldFocus?.();
-                }}
-                onBlur={onFieldBlur}
-                onPressIn={() => setShowHints(true)}
-                placeholder="Tap to pick medicine"
-              />
-            </View>
-            <View className="w-28 gap-1.5">
-              <Text className="text-sm font-medium text-brand">Dose</Text>
-              <TextField
-                value={dose}
-                onChangeText={setDose}
-                placeholder="1-0-1"
-                onFocus={onFieldFocus}
-                onBlur={onFieldBlur}
-              />
-            </View>
-            <View className="w-36 gap-1.5">
-              <Text className="text-sm font-medium text-brand">Food</Text>
-              <Segmented options={TIMING} value={timing} onChange={setTiming} />
-            </View>
-            <View className="w-20 gap-1.5">
-              <Text className="text-sm font-medium text-brand">Days</Text>
-              <TextField
-                value={duration}
-                onChangeText={setDuration}
-                keyboardType="number-pad"
-                placeholder="5"
-                onFocus={onFieldFocus}
-                onBlur={onFieldBlur}
-              />
-            </View>
-            <View className="gap-1.5">
-              <Text className="text-sm font-medium text-transparent">Add</Text>
-              {addButton}
-            </View>
-          </View>
-          {medicineHints}
+                </Pressable>
+              ) : null
+            }
+          />
         </View>
-      ) : (
-        <>
-          <View>
-            {medicineField}
-            {medicineHints}
-          </View>
+      ) : null}
 
-          <View className="flex-row gap-3">
-            <TextField
-              containerClassName="flex-1"
-              label="Dose (M-A-N)"
-              labelClassName="text-brand"
-              value={dose}
-              onChangeText={setDose}
-              placeholder="1-0-1"
-              onFocus={onFieldFocus}
-              onBlur={onFieldBlur}
-            />
-            <TextField
-              containerClassName="flex-1"
-              label="Duration (days)"
-              labelClassName="text-brand"
-              value={duration}
-              onChangeText={setDuration}
-              keyboardType="number-pad"
-              placeholder="5"
-              onFocus={onFieldFocus}
-              onBlur={onFieldBlur}
-            />
-          </View>
+      {facilityId ? (
+        <QuickAddDrugDialog
+          open={quickAddOpen}
+          onClose={() => setQuickAddOpen(false)}
+          onCreated={() => {
+            // Findable in the picker at once. Not auto-added, as on the web: from
+            // here the doctor has not started a row yet.
+            void qc.invalidateQueries({ queryKey: ["drug-catalog"] });
+          }}
+        />
+      ) : null}
 
-          <View className="gap-1.5">
-            <Text className="text-sm font-medium text-brand">Food</Text>
-            <Segmented options={TIMING} value={timing} onChange={setTiming} />
-          </View>
-
-          {addButton}
-        </>
-      )}
-
-      {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
+      <PrescriptionEditor
+        prescriptions={prescriptions}
+        onAdd={onAdd}
+        onRemove={onRemove}
+        onUpdate={onUpdate}
+        facilityId={facilityId ?? ""}
+        consultationId={consultationId}
+        readOnly={locked}
+        patientAgeYears={patientAgeYears}
+      />
     </View>
   );
 }
@@ -544,7 +187,7 @@ function TemplateBar({
   hasAttachments,
   onApply,
   compact = false,
-  locked = false,
+  beforeSave,
 }: {
   consultationId: string;
   prescriptions: PlanPrescription[];
@@ -558,7 +201,8 @@ function TemplateBar({
     }>
   ) => void;
   compact?: boolean;
-  locked?: boolean;
+  /** Sits between the template picker and Save Template, as on the web. */
+  beforeSave?: ReactNode;
 }) {
   const templatesQ = usePrescriptionTemplates(consultationId);
   const saveTpl = useSaveTemplate(consultationId);
@@ -570,7 +214,7 @@ function TemplateBar({
   const [error, setError] = useState<string | null>(null);
 
   const templates = templatesQ.data ?? [];
-  const disabled = locked || hasAttachments || prescriptions.length === 0;
+  const disabled = hasAttachments || prescriptions.length === 0;
 
   const medsPayload = () =>
     prescriptions.map((p) => ({
@@ -581,7 +225,6 @@ function TemplateBar({
     }));
 
   const applySelected = (name: string) => {
-    if (locked) return;
     setSelected(name);
     setPickerOpen(false);
     if (!name) return;
@@ -652,49 +295,37 @@ function TemplateBar({
     <View className={compact ? "flex-row flex-wrap items-center gap-2" : "gap-2"}>
       <Pressable
         onPress={() => setPickerOpen(true)}
-        disabled={locked}
-        className={`h-12 justify-center rounded-xl border border-neutral-300 bg-white px-3 ${
-          compact ? "min-w-[160px]" : "flex-1"
-        } ${locked ? "opacity-50" : ""}`}
+        disabled={hasAttachments}
+        className={`h-12 flex-row items-center justify-between gap-2 rounded-xl border border-neutral-300 bg-white px-3 ${
+          compact ? "min-w-[280px]" : "flex-1"
+        } ${hasAttachments ? "opacity-50" : ""}`}
       >
-        <Text className="text-sm text-neutral-700" numberOfLines={1}>
-          {selected || "No template selected"}
+        <Text className="shrink text-sm text-neutral-700" numberOfLines={1}>
+          {selected || "Select template to auto-fill medications"}
         </Text>
+        <Ionicons name="swap-vertical" size={14} color="#9ca3af" />
       </Pressable>
+      {beforeSave}
       <Pressable
         disabled={disabled}
+        style={{ flexShrink: 0 }}
         onPress={() => {
-          setMode("create");
+          setMode(selected ? "update" : "create");
           setTemplateName(selected);
           setNameOpen(true);
         }}
-        className={`h-12 justify-center rounded-xl px-3 ${
-          disabled
-            ? "bg-brand opacity-40"
-            : "bg-brand active:bg-brand-600"
+        className={`h-12 flex-row items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 ${
+          disabled ? "opacity-40" : "active:bg-neutral-50"
         }`}
       >
-        <Text className="text-sm font-semibold text-white">
-          Save template
+        <Ionicons name="save-outline" size={16} color="#111827" />
+        <Text
+          numberOfLines={1}
+          className="text-sm font-semibold text-neutral-900"
+        >
+          {selected ? "Update Template" : "Save Template"}
         </Text>
       </Pressable>
-      {selected ? (
-        <Pressable
-          disabled={disabled}
-          onPress={() => {
-            setMode("update");
-            setTemplateName(selected);
-            setNameOpen(true);
-          }}
-          className={`h-12 justify-center rounded-xl px-3 ${
-            disabled
-              ? "bg-brand opacity-40"
-              : "bg-brand active:bg-brand-600"
-          }`}
-        >
-          <Text className="text-sm font-semibold text-white">Update</Text>
-        </Pressable>
-      ) : null}
       {!compact && hasAttachments ? (
         <Text className="text-xs text-neutral-500">
           Templates disabled while prescription images are attached.
@@ -846,15 +477,23 @@ function AttachBar({
 
   return (
     <View className={compact ? "flex-row flex-wrap items-center gap-2" : "gap-2"}>
-      <Button
-        label="Attach"
-        variant="primary"
-        size="md"
-        onPress={onPick}
-        loading={upload.isPending || patch.isPending}
-        disabled={locked}
-        className="h-12 justify-center"
-      />
+      {!locked ? (
+        <Pressable
+          onPress={onPick}
+          disabled={upload.isPending || patch.isPending}
+          style={{ flexShrink: 0 }}
+          className="h-11 flex-row items-center gap-1.5 rounded-xl border border-brand-200 bg-white px-3 active:bg-brand-50"
+        >
+          {upload.isPending || patch.isPending ? (
+            <ActivityIndicator size="small" color="#FD006A" />
+          ) : (
+            <Ionicons name="attach-outline" size={18} color="#FD006A" />
+          )}
+          <Text numberOfLines={1} className="text-sm font-semibold text-brand">
+            Attach Prescription
+          </Text>
+        </Pressable>
+      ) : null}
       {attachedImages.length > 0 ? (
         <View className="flex-row flex-wrap gap-2">
           {attachedImages.map((img) => (

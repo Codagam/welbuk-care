@@ -30,6 +30,7 @@ import {
   savePrescriptionDraft,
 } from "../prescriptionDraftStore";
 import type { AttachedRxImage, PlanPrescription } from "../types";
+import { toLinePayload, validatePrescriptionItem } from "../validation";
 
 function toPlanLine(p: Prescription): PlanPrescription {
   return {
@@ -38,6 +39,12 @@ function toPlanLine(p: Prescription): PlanPrescription {
     dosePattern: p.dosePattern ?? "1-0-1",
     foodTiming: p.foodTiming ?? "AF",
     duration: String(p.duration ?? "1"),
+    durationValue: p.durationValue ?? null,
+    durationUnit: p.durationUnit ?? null,
+    doseNote: p.doseNote ?? null,
+    regimenId: p.regimenId ?? null,
+    regimenVersion: p.regimenVersion ?? null,
+    qtyPrescribed: p.qtyPrescribed ?? null,
     drugId: p.drugId,
     isAttachment: p.isAttachment,
   };
@@ -88,21 +95,6 @@ export function useQuickAddDrug() {
       qc.invalidateQueries({ queryKey: ["drug-catalog"] });
     },
   });
-}
-
-export function filterDrugCatalog(
-  drugs: DrugCatalogItem[],
-  query: string
-): DrugCatalogItem[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return drugs.slice(0, 40);
-  return drugs
-    .filter((d) => {
-      const brand = (d.brandName ?? "").toLowerCase();
-      const generic = (d.genericName ?? "").toLowerCase();
-      return brand.includes(q) || generic.includes(q);
-    })
-    .slice(0, 40);
 }
 
 export function usePrescriptionTemplates(consultationId: string) {
@@ -192,12 +184,11 @@ export function usePrescriptionDraft(consultationId: string) {
   const addPrescription = useCallback(
     (item: Omit<PlanPrescription, "id"> & { id?: string }) => {
       const row: PlanPrescription = {
+        ...item,
         id: item.id ?? newPrescriptionId(),
         name: item.name.trim(),
         dosePattern: item.dosePattern.trim(),
-        foodTiming: item.foodTiming,
         duration: String(item.duration).trim(),
-        drugId: item.drugId,
       };
       setPrescriptions((prev) => [...prev, row]);
       return row;
@@ -348,13 +339,16 @@ export function useCompletePrescription(consultationId: string) {
     }) => {
       const meds = args.prescriptions
         .filter((p) => (p.name ?? "").trim().length > 0 && !p.isAttachment)
-        .map((p) => ({
-          name: p.name.trim(),
-          dosePattern: p.dosePattern,
-          foodTiming: p.foodTiming,
-          duration: String(p.duration),
-          drugId: p.drugId,
-        }));
+        .map(toLinePayload);
+
+      // Templates and lines loaded from the server skip the add form, so check
+      // here and name the medicine, rather than after the allergy check.
+      for (const m of meds) {
+        const err = validatePrescriptionItem(m);
+        if (err) {
+          throw new Error(err.includes(m.name) ? err : `${m.name}: ${err}`);
+        }
+      }
 
       if (
         !args.skipValidate &&

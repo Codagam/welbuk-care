@@ -7,9 +7,23 @@ export interface PlanPrescription {
   name: string;
   dosePattern: string;
   foodTiming: FoodTiming | string;
+  /** Legacy course in DAYS. A value + unit line carries both ("90", 3 + MONTHS). */
   duration: string;
+  durationValue?: number | null;
+  durationUnit?: string | null;
+  doseNote?: string | null;
+  regimenId?: string | null;
+  regimenVersion?: number | null;
+  qtyPrescribed?: number | null;
   drugId?: string;
   isAttachment?: boolean;
+  // On this device only: never sent to the server, and absent on a reloaded line.
+  dosageForm?: string | null;
+  /** Filled without the doctor typing it; flagged for checking on a child. */
+  autoFilled?: boolean;
+  /** Where the row's values came from, shown under the medicine. */
+  fillSource?: "regimen" | "history" | "new" | null;
+  historyDate?: string | null;
 }
 
 export interface TemplateMedication {

@@ -69,6 +69,7 @@ export function PlanOfCareSection({
   patientId,
   patientName,
   patientAge,
+  patientAgeYears,
   patientGender,
   patientPhone,
   doctorId,
@@ -81,6 +82,8 @@ export function PlanOfCareSection({
   patientId?: string;
   patientName?: string;
   patientAge?: number | string;
+  /** Whole years, or null when unknown. Drives the child dose check. */
+  patientAgeYears?: number | null;
   patientGender?: string;
   patientPhone?: string;
   doctorId?: string;
@@ -257,13 +260,14 @@ export function PlanOfCareSection({
           prescriptions={draft.prescriptions}
           onAdd={draft.addPrescription}
           onRemove={draft.removePrescription}
+          onUpdate={draft.setPrescriptions}
           onApplyTemplate={draft.applyTemplateMeds}
           attachedImages={draft.attachedImages}
           onAttachedImagesChange={draft.setAttachedImages}
           allergyWarnings={allergy.warnings}
           allergyOverrideAck={allergy.allergyOverrideAck}
           onAllergyOverrideChange={allergy.setAllergyOverrideAck}
-          drugs={drugsQ.data ?? []}
+          patientAgeYears={patientAgeYears}
           tabletLayout={tablet}
           locked={locked}
         />

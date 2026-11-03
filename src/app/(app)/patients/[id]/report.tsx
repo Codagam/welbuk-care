@@ -8,6 +8,11 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
+import {
+  followUpPrintDetail,
+  formatFollowUpForPrint,
+} from "@/features/consult/plan-of-care/followUp";
+import { formatDuration } from "@/features/consult/plan-of-care/sig";
 import { writeConsultationReportPdfToCache } from "@/features/patients/buildConsultationReportPdf";
 import { usePatient } from "@/features/patients/hooks";
 import {
@@ -187,7 +192,11 @@ export default function PatientAppointmentReportScreen() {
     diagnosis,
     notes,
     prescriptionRows,
+    followUp: summaryQ.data?.followUp ?? null,
   };
+
+  const nextVisit = formatFollowUpForPrint(summaryQ.data?.followUp);
+  const nextVisitDetail = followUpPrintDetail(summaryQ.data?.followUp);
 
   const busy = downloading || printing;
 
@@ -322,8 +331,8 @@ export default function PatientAppointmentReportScreen() {
                   <Text className="flex-[1.3] text-sm font-semibold text-white">
                     Dosage & Frequency
                   </Text>
-                  <Text className="w-14 text-right text-sm font-semibold text-white">
-                    Days
+                  <Text className="w-24 text-right text-sm font-semibold text-white">
+                    Duration
                   </Text>
                 </View>
 
@@ -344,16 +353,23 @@ export default function PatientAppointmentReportScreen() {
                       <Text className="flex-[1.7] text-base text-neutral-900">
                         {line.name || "—"}
                       </Text>
-                      <Text className="flex-[1.3] text-base text-neutral-700">
-                        {[
-                          line.dosePattern,
-                          foodTimingLabel(line.foodTiming),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </Text>
-                      <Text className="w-14 text-right text-base text-neutral-700">
-                        {line.duration ? String(line.duration) : "—"}
+                      <View className="flex-[1.3]">
+                        <Text className="text-base text-neutral-700">
+                          {[
+                            line.dosePattern,
+                            foodTimingLabel(line.foodTiming),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </Text>
+                        {line.doseNote?.trim() ? (
+                          <Text className="mt-0.5 text-sm text-neutral-500">
+                            {line.doseNote.trim()}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text className="w-24 text-right text-base text-neutral-700">
+                        {formatDuration(line) || "—"}
                       </Text>
                     </View>
                   ))
@@ -370,9 +386,14 @@ export default function PatientAppointmentReportScreen() {
                       className="text-base font-medium text-emerald-800"
                       numberOfLines={1}
                     >
-                      As advised
+                      {nextVisit}
                     </Text>
                   </View>
+                  {nextVisitDetail ? (
+                    <Text className="text-xs text-neutral-500">
+                      {nextVisitDetail}
+                    </Text>
+                  ) : null}
                 </View>
                 <View className="min-w-0 flex-1 items-end gap-1.5">
                   <Text className="text-xs uppercase tracking-wide text-neutral-500">

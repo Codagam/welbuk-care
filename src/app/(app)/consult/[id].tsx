@@ -27,6 +27,7 @@ import {
 } from "@/features/consult/sectionIds";
 import { NotesSection } from "@/features/consult/sections/NotesSection";
 import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
+import { calculateAge } from "@/features/consult/patientHeader";
 import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHeader";
 import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
@@ -103,6 +104,12 @@ export default function ConsultScreen() {
     isLocked,
   } = useConsultPatientHeader(id);
   const headerName = header?.name || "Consultation";
+  // Not header.age: that reads 0 when the age is unknown, and 0 here is a newborn.
+  const patientAgeYears: number | null = patient?.dob
+    ? calculateAge(patient.dob)
+    : typeof patient?.age === "number" && patient.age >= 0
+      ? patient.age
+      : null;
   const dental = isDentalType(facility?.consultationType);
   const eye = isEyeType(facility?.consultationType);
 
@@ -294,6 +301,7 @@ export default function ConsultScreen() {
           patientId={resolvedPatientId}
           patientName={header?.name}
           patientAge={header?.age ?? patient?.age ?? undefined}
+          patientAgeYears={patientAgeYears}
           patientPhone={header?.phone ?? patient?.phone ?? undefined}
           doctorId={consultDoctorId ?? user?.id}
           doctorName={user?.name ?? user?.email}
