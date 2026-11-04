@@ -35,6 +35,13 @@ const ROLES = ["Primary", "Assisting", "Consulting"] as const;
  * Mirrors Practice provider-fee-split-editor.tsx.
  * Changing doctor must NOT reset fee (only doctorId updates).
  */
+/**
+ * What this box means. Reading it as "the doctor's fee" got a consultation billed
+ * twice in Practice (INV-16-48): once as the visit fee, once as a treatment.
+ */
+const PROCEDURE_FEE_ONLY_HINT =
+  "Charge for this procedure only. The consultation fee is billed on the visit, so do not enter it here. Leave 0 if the procedure is free.";
+
 export function ProviderFeeSplitEditor({
   facilityId,
   value,
@@ -204,7 +211,7 @@ export function ProviderFeeSplitEditor({
         <View className="flex-row flex-wrap items-center justify-between gap-2">
           {!hideTitle ? (
             <Text className="text-sm font-medium text-neutral-900">
-              Provider fee split
+              Doctor procedure fee split
             </Text>
           ) : (
             <View />
@@ -225,6 +232,10 @@ export function ProviderFeeSplitEditor({
         </View>
       ) : null}
 
+      <Text className="text-[11px] leading-snug text-neutral-500">
+        {PROCEDURE_FEE_ONLY_HINT}
+      </Text>
+
       {doctorsLoading && doctors.length === 0 ? (
         <View className="flex-row items-center gap-2 py-2">
           <ActivityIndicator size="small" color="#FD006A" />
@@ -239,10 +250,12 @@ export function ProviderFeeSplitEditor({
         </Text>
       ) : (
         <View className="gap-2">
-          <View className="flex-row gap-2 px-0.5">
+          <View className="flex-row items-end gap-2 px-0.5">
             <Text className="flex-1 text-[11px] text-neutral-400">Doctor</Text>
             <Text className="w-24 text-[11px] text-neutral-400">Role</Text>
-            <Text className="w-20 text-[11px] text-neutral-400">Fee (₹)</Text>
+            <Text className="w-24 text-[11px] text-neutral-400">
+              Doctor procedure fee (₹)
+            </Text>
             <View className="w-8" />
           </View>
 
@@ -307,7 +320,7 @@ export function ProviderFeeSplitEditor({
                     onBlur={() =>
                       updateRow(i, { fee: normalizeFee(Number(p.fee) || 0) })
                     }
-                    className="w-20 rounded-lg border border-neutral-200 bg-white px-2 py-2 text-sm text-neutral-900"
+                    className="w-24 rounded-lg border border-neutral-200 bg-white px-2 py-2 text-sm text-neutral-900"
                   />
 
                   <Pressable

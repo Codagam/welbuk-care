@@ -374,7 +374,7 @@ export function PlanEditorSheet({
             </Pressable>
           </View>
           <Text className="text-sm text-neutral-500">
-            Planned and actual treatment, provider fee split, and status.
+            Planned and actual treatment, doctor procedure fee split, and status.
           </Text>
         </View>
 
@@ -608,17 +608,17 @@ export function PlanEditorSheet({
             </View>
           ) : null}
 
-          {/* Provider fee split */}
+          {/* Doctor procedure fee split */}
           <View className="gap-2">
             <Text className="text-sm font-medium text-neutral-900">
               {isLinked
-                ? "Provider fee split (linked finding)"
-                : "Provider fee split"}
+                ? "Doctor procedure fee split (linked finding)"
+                : "Doctor procedure fee split"}
             </Text>
             <Text className="text-[11px] leading-snug text-neutral-500">
               {isLinked
-                ? "Treated treatment costs plus doctor fees make the total. Doctor fee split starts at 0 until you enter amounts."
-                : "Fee amounts are editable — doctor fees start at 0 and are separate from treatment costs."}
+                ? "Treated treatment costs plus doctor procedure fees make the total. The split starts at 0 until you enter amounts."
+                : "Fee amounts are editable. Doctor procedure fees start at 0 and are separate from treatment costs."}
             </Text>
             <ProviderFeeSplitEditor
               facilityId={facilityId}
