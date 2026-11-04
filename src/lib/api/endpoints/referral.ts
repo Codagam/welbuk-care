@@ -33,6 +33,61 @@ export async function listReferrals(params: {
   return res.referrals ?? res.items ?? [];
 }
 
+export type ReferralFacility = {
+  id: string;
+  facilityId?: number;
+  name: string;
+  address?: string | null;
+};
+
+export type ReceivingDoctor = {
+  id: string;
+  name?: string | null;
+  specialization?: string | null;
+};
+
+/** Facilities to refer to: searched and paged on the server. */
+export async function listReferralFacilities(params: {
+  search: string;
+  page: number;
+  pageSize: number;
+}): Promise<{ items: ReferralFacility[]; hasMore: boolean }> {
+  const res = await api<{
+    facilities?: ReferralFacility[];
+    hasMore?: boolean;
+  }>({ path: "/api/facility/list", query: params });
+  const items = res.facilities ?? [];
+  return {
+    items,
+    hasMore:
+      typeof res.hasMore === "boolean"
+        ? res.hasMore
+        : items.length >= params.pageSize,
+  };
+}
+
+/** Doctors at the receiving facility, for a specialist referral. */
+export async function listReceivingDoctors(params: {
+  fromFacilityId: string;
+  toFacilityId: string;
+  search: string;
+  page: number;
+  pageSize: number;
+}): Promise<{ items: ReceivingDoctor[]; hasMore: boolean }> {
+  const res = await api<{ doctors?: ReceivingDoctor[]; hasMore?: boolean }>({
+    path: "/api/referral/receiving-doctors",
+    query: params,
+  });
+  const items = res.doctors ?? [];
+  return {
+    items,
+    hasMore:
+      typeof res.hasMore === "boolean"
+        ? res.hasMore
+        : items.length >= params.pageSize,
+  };
+}
+
 export function createReferral(body: {
   patientName: string;
   patientAge: number | string;

@@ -29,7 +29,12 @@ import {
   newPrescriptionId,
   savePrescriptionDraft,
 } from "../prescriptionDraftStore";
-import type { AttachedRxImage, PlanPrescription } from "../types";
+import { drugDisplayName, medicineNameKey } from "../lineDraft";
+import type {
+  AllergyRecordLike,
+  AttachedRxImage,
+  PlanPrescription,
+} from "../types";
 import { toLinePayload, validatePrescriptionItem } from "../validation";
 
 function toPlanLine(p: Prescription): PlanPrescription {
@@ -389,26 +394,28 @@ export function useCompletePrescription(consultationId: string) {
 
 export function useAllergyGate(
   prescriptions: PlanPrescription[],
-  allergies: Array<{ name: string; severity?: string }> | undefined | null,
+  allergies: AllergyRecordLike[] | undefined | null,
   drugs: DrugCatalogItem[] | undefined
 ) {
   const namesKey = prescriptions.map((p) => p.name).join("|");
 
   const warnings = useMemo(() => {
-    const list =
-      allergies
-        ?.map((a) => ({
-          name: typeof a === "string" ? a : a.name,
-          severity:
-            typeof a === "object" && a && "severity" in a
-              ? a.severity
-              : null,
-        }))
-        .filter((a) => a.name?.trim()) ?? [];
+    const list = allergies?.filter((a) => a.name?.trim()) ?? [];
     const lines = prescriptions
       .filter((p) => (p.name ?? "").trim())
       .map((p) => {
-        const drug = drugs?.find((d) => d.id === p.drugId);
+        // By id, else by name: a line from a template or a reopened consult carries
+        // no id, and its class and generic name are what the deeper checks read.
+        const key = medicineNameKey(p.name);
+        const drug =
+          drugs?.find((d) => d.id === p.drugId) ??
+          drugs?.find((d) => {
+            const brand = d.brandName || d.genericName || "";
+            return (
+              medicineNameKey(brand) === key ||
+              medicineNameKey(drugDisplayName(brand, d.strength)) === key
+            );
+          });
         return {
           drugName: p.name,
           drugClass: drug?.drugClass ?? null,

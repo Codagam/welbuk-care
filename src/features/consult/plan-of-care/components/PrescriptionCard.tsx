@@ -15,7 +15,10 @@ import { ApiError, describeError, isConsultCompletedLock } from "@/lib/api/error
 import { useFacilityId } from "@/lib/auth/store";
 import { AppModal, Button, TextField } from "@/ui";
 
-import { formatAllergyMatchSummaryLine } from "../allergy";
+import {
+  allergyWarningSubtitleParts,
+  formatAllergyMatchSummaryLine,
+} from "../allergy";
 import {
   useAttachPrescription,
   usePatchRxAttachments,
@@ -92,19 +95,41 @@ export function PrescriptionCard({
       </View>
 
       {allergyWarnings.length > 0 ? (
-        <View className="gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
-          <Text className="text-sm font-semibold text-amber-900">
-            Allergy warnings
-          </Text>
-          {allergyWarnings.map((w, i) => (
-            <Text key={`${w.drug}-${i}`} className="text-xs text-amber-800">
-              {formatAllergyMatchSummaryLine(w)}
+        <View className="gap-3 rounded-xl border border-red-200 bg-red-50 p-3">
+          <View className="flex-row items-center gap-2">
+            <Ionicons name="warning-outline" size={20} color="#dc2626" />
+            <Text className="text-sm font-semibold text-neutral-900">
+              Allergy Detected
             </Text>
+          </View>
+          {allergyWarnings.map((w, i) => (
+            <View
+              key={`${w.drug}-${w.allergenName}-${i}`}
+              className="gap-1 rounded-lg border border-red-100 bg-white px-2.5 py-2"
+            >
+              <Text className="text-sm font-medium text-neutral-900">
+                {formatAllergyMatchSummaryLine(w)}
+              </Text>
+              {allergyWarningSubtitleParts(w).length > 0 ? (
+                <View className="flex-row flex-wrap gap-x-3 gap-y-1">
+                  {allergyWarningSubtitleParts(w).map((d) => (
+                    <Text key={d.label} className="text-xs text-neutral-500">
+                      <Text className="font-medium text-neutral-700">
+                        {d.label}:
+                      </Text>{" "}
+                      {d.value}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+            </View>
           ))}
           <Pressable
             onPress={() => onAllergyOverrideChange(!allergyOverrideAck)}
             disabled={locked}
-            className="mt-1 flex-row items-center gap-2"
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: allergyOverrideAck }}
+            className="flex-row items-center gap-2 border-t border-red-100 pt-2.5"
           >
             <View
               className={`h-5 w-5 items-center justify-center rounded border ${
@@ -117,8 +142,8 @@ export function PrescriptionCard({
                 <Text className="text-[10px] font-bold text-white">✓</Text>
               ) : null}
             </View>
-            <Text className="flex-1 text-xs text-amber-900">
-              I acknowledge these allergies and want to proceed
+            <Text className="flex-1 text-sm font-medium text-neutral-900">
+              Acknowledge
             </Text>
           </Pressable>
         </View>

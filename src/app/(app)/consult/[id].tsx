@@ -303,11 +303,10 @@ export default function ConsultScreen() {
           appointmentId={appointmentId}
           patientId={resolvedPatientId}
           patientName={header?.name}
-          patientAge={header?.age ?? patient?.age ?? undefined}
           patientAgeYears={patientAgeYears}
           patientPhone={header?.phone ?? patient?.phone ?? undefined}
           doctorId={consultDoctorId ?? user?.id}
-          doctorName={user?.name ?? user?.email}
+          doctorName={consultDoctor?.name ?? user?.name ?? user?.email}
           onStickyFooter={setStickyFooter}
           locked={isLocked}
           flushNotes={() => notesFlushRef.current?.() ?? Promise.resolve(true)}

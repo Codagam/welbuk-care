@@ -106,3 +106,20 @@ export function formatAllergyMatchSummaryLine(w: AllergyWarning): string {
         : "penicillin family";
   return `${w.allergenName} ↔ ${w.drug} (${matchText})`;
 }
+
+/** The detail under each match: reaction, class when not already in the title, severity. */
+export function allergyWarningSubtitleParts(
+  w: AllergyWarning
+): { label: string; value: string }[] {
+  const parts: { label: string; value: string }[] = [];
+  if (w.chartReaction?.trim()) {
+    parts.push({ label: "Reaction", value: w.chartReaction.trim() });
+  }
+  if (w.chartAllergenClass?.trim() && w.reason !== "class") {
+    parts.push({ label: "Class", value: w.chartAllergenClass.trim() });
+  }
+  if (w.severity?.trim()) {
+    parts.push({ label: "Severity", value: w.severity.trim() });
+  }
+  return parts;
+}

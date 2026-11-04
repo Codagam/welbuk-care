@@ -42,26 +42,32 @@ import {
   useDrugCatalog,
   usePrescriptionDraft,
 } from "./hooks/usePrescriptionDraft";
+import { useConsultReferrals } from "./hooks/useConsultReferrals";
 import type { AllergyRecordLike } from "./types";
 import { AppAlert } from "@/ui/AppAlert";
 
-function normalizeAllergies(
-  raw: unknown
-): Array<{ name: string; severity?: string }> {
+/**
+ * Keeps the whole record. Reaction and allergen class used to be dropped here, so a
+ * drug-class match could never fire and the alert could not say what the reaction was.
+ */
+function normalizeAllergies(raw: unknown): AllergyRecordLike[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((a) => {
+    .map((a): AllergyRecordLike | null => {
       if (typeof a === "string") return { name: a };
       if (a && typeof a === "object" && "name" in a) {
         const o = a as AllergyRecordLike;
         return {
           name: String(o.name ?? ""),
-          severity: o.severity ?? undefined,
+          reaction: o.reaction ?? null,
+          notes: o.notes ?? null,
+          allergenClass: o.allergenClass ?? null,
+          severity: o.severity ?? null,
         };
       }
       return null;
     })
-    .filter((a): a is { name: string; severity?: string } => !!a?.name?.trim());
+    .filter((a): a is AllergyRecordLike => !!a?.name?.trim());
 }
 
 export function PlanOfCareSection({
@@ -69,7 +75,6 @@ export function PlanOfCareSection({
   appointmentId,
   patientId,
   patientName,
-  patientAge,
   patientAgeYears,
   patientGender,
   patientPhone,
@@ -83,7 +88,6 @@ export function PlanOfCareSection({
   appointmentId?: string;
   patientId?: string;
   patientName?: string;
-  patientAge?: number | string;
   /** Whole years, or null when unknown. Drives the child dose check. */
   patientAgeYears?: number | null;
   patientGender?: string;
@@ -138,6 +142,7 @@ export function PlanOfCareSection({
   const [done, setDone] = useState<string | null>(null);
 
   const labReports = historyQ.data?.labReports ?? [];
+  const referralsQ = useConsultReferrals(patientId);
   const followUpLine = summaryQ.data?.followUp ?? null;
 
   const patientLine =
@@ -296,6 +301,7 @@ export function PlanOfCareSection({
       <View style={styles.block}>
         <LabsCard
           labReports={labReports}
+          referrals={referralsQ.data}
           patientName={patientName || patientLine}
           onRefer={() => setReferOpen(true)}
         />
@@ -363,18 +369,22 @@ export function PlanOfCareSection({
         }}
       />
 
-      <ReferSheet
-        open={referOpen}
-        onClose={() => setReferOpen(false)}
-        patientId={patientId}
-        patientName={patientName || patientLine}
-        patientAge={patientAge ?? "—"}
-        patientGender={patientGender}
-        patientPhone={patientPhone}
-        doctorId={resolvedDoctorId}
-        doctorName={resolvedDoctorName}
-        onCreated={() => invalidateHistory()}
-      />
+      {referOpen ? (
+        <ReferSheet
+          onClose={() => setReferOpen(false)}
+          patientId={patientId}
+          patientName={patientName || patientLine}
+          patientAge={patientAgeYears ?? null}
+          patientGender={patientGender}
+          patientPhone={patientPhone}
+          doctorId={resolvedDoctorId}
+          doctorName={resolvedDoctorName}
+          onCreated={() => {
+            invalidateHistory();
+            void referralsQ.refetch();
+          }}
+        />
+      ) : null}
     </View>
   );
 }

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +19,6 @@ import {
   isReportAttachmentPdf,
   labReportFileUrls,
   labReportHasViewableFiles,
-  labReportSourceLabel,
 } from "@/features/consult/labReports";
 import {
   FileViewerActions,
@@ -26,17 +26,47 @@ import {
   ModalSafeArea,
 } from "@/features/consult/components/ImagePreview";
 
+import {
+  filterLabReports,
+  resultLabel,
+  type ReferralTableRow,
+} from "../labsTable";
+
 type LocalFile = { storageUrl: string; localUri: string };
+
+/** Header aside, about two rows: the card stays short, and the list scrolls inside it. */
+const REPORT_ROWS_MAX_HEIGHT = 100;
+const DATE_COLUMN = 76;
+const ACTION_COLUMN = 48;
+/** Below this the Result column is dropped, as on a phone in Practice. */
+const RESULT_COLUMN_MIN_WIDTH = 480;
+
+const REFERRAL_COLUMNS = [
+  { label: "Date", flex: 1.3 },
+  { label: "Type", flex: 0.8 },
+  { label: "Mode", flex: 0.8 },
+  { label: "Tests", flex: 1.6 },
+  { label: "Status", flex: 0.8 },
+];
 
 export function LabsCard({
   labReports,
+  referrals = [],
   onRefer,
   patientName,
 }: {
   labReports: LabReportItem[];
+  referrals?: ReferralTableRow[];
   onRefer: () => void;
   patientName?: string;
 }) {
+  const [query, setQuery] = useState("");
+  const [width, setWidth] = useState(0);
+  const reportRows = useMemo(
+    () => filterLabReports(labReports, query),
+    [labReports, query]
+  );
+  const showResult = width >= RESULT_COLUMN_MIN_WIDTH;
   const [viewOpen, setViewOpen] = useState(false);
   const [viewTitle, setViewTitle] = useState("Lab report");
   const [viewNote, setViewNote] = useState<string | null>(null);
@@ -78,72 +108,194 @@ export function LabsCard({
       style={{ width: "100%", flexDirection: "column" }}
       className="w-full flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-5"
     >
-      <View className="flex-row items-center justify-between gap-3">
-        <View className="min-w-0 flex-1 gap-0.5">
-          <Text className="text-lg font-semibold tracking-tight text-brand">
-            Labs
-          </Text>
-          <Text className="text-sm text-neutral-500">
-            Patient lab reports on file
-          </Text>
+      <View className="flex-row flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-3">
+        <View className="flex-row items-center gap-2">
+          <Ionicons name="flask-outline" size={20} color="#FD006A" />
+          <Text className="text-lg font-semibold text-brand">Labs</Text>
         </View>
         <Pressable
           onPress={onRefer}
           accessibilityRole="button"
           accessibilityLabel="Refer"
-          className="min-h-[48px] min-w-[96px] items-center justify-center rounded-xl bg-brand px-5 py-3 active:bg-brand-600"
+          style={{ flexShrink: 0 }}
+          className="h-11 flex-row items-center justify-center gap-1.5 rounded-xl bg-brand px-4 active:bg-brand-600"
         >
-          <Text className="text-base font-semibold text-white">Refer</Text>
+          <Ionicons name="send-outline" size={15} color="#fff" />
+          <Text numberOfLines={1} className="text-sm font-semibold text-white">
+            Refer
+          </Text>
         </Pressable>
       </View>
 
-      {labReports.length === 0 ? (
-        <View className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50 px-4 py-6">
-          <Text className="text-center text-sm text-neutral-400">
-            No patient lab reports on file.
-          </Text>
-        </View>
-      ) : (
-        <View className="gap-2">
-          {labReports.map((r, i) => {
-            const canView = labReportHasViewableFiles(r.reportPayload);
-            return (
-              <View
-                key={r.id ?? `${r.date}-${r.test}-${i}`}
-                className="flex-row items-start gap-2 rounded-xl border border-neutral-100 bg-neutral-50 px-3 py-2.5"
+      {labReports.length > 0 ? (
+        <View
+          className="gap-2"
+          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        >
+          <View className="h-11 flex-row items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3">
+            <Ionicons name="search-outline" size={15} color="#6b7280" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search date, test, result..."
+              placeholderTextColor="#9ca3af"
+              autoCorrect={false}
+              accessibilityLabel="Search lab reports"
+              className="min-w-0 flex-1 text-sm text-neutral-900"
+              style={{ height: 44, paddingVertical: 0 }}
+            />
+          </View>
+
+          <View className="overflow-hidden rounded-lg border border-neutral-200">
+            <View className="flex-row gap-2 border-b border-neutral-200 bg-neutral-100 px-2.5 py-2">
+              <Text
+                className="text-xs font-medium text-neutral-500"
+                style={{ width: DATE_COLUMN }}
               >
-                <View className="min-w-0 flex-1">
-                  <Text className="text-sm font-semibold text-neutral-900">
-                    {r.test || "Lab report"}
-                  </Text>
-                  <Text className="mt-0.5 text-xs text-neutral-500">
-                    {[r.date, r.status, labReportSourceLabel(r.source)]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </Text>
-                  {r.result ? (
-                    <Text
-                      className="mt-0.5 text-xs text-neutral-500"
-                      numberOfLines={2}
-                    >
-                      {r.result}
-                    </Text>
-                  ) : null}
-                </View>
-                {canView ? (
-                  <Pressable
-                    onPress={() => void openLabReport(r)}
-                    className="h-8 w-8 items-center justify-center rounded-md bg-brand/10"
-                    accessibilityLabel={`View ${r.test || "lab report"}`}
+                Date
+              </Text>
+              <Text className="min-w-0 flex-1 text-xs font-medium text-neutral-500">
+                Test
+              </Text>
+              {showResult ? (
+                <Text className="min-w-0 flex-1 text-xs font-medium text-neutral-500">
+                  Result
+                </Text>
+              ) : null}
+              <Text
+                className="text-right text-xs font-medium text-neutral-500"
+                style={{ width: ACTION_COLUMN }}
+              >
+                Action
+              </Text>
+            </View>
+
+            <ScrollView
+              style={{ maxHeight: REPORT_ROWS_MAX_HEIGHT }}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {reportRows.length === 0 ? (
+                <Text className="px-3 py-4 text-center text-xs text-neutral-500">
+                  No lab reports.
+                </Text>
+              ) : (
+                reportRows.map((r, i) => (
+                  <View
+                    key={r.id ?? `${r.date}-${r.test}-${i}`}
+                    className={`flex-row items-center gap-2 px-2.5 py-1.5 ${
+                      i < reportRows.length - 1
+                        ? "border-b border-neutral-100"
+                        : ""
+                    }`}
                   >
-                    <Ionicons name="eye-outline" size={18} color="#FD006A" />
-                  </Pressable>
-                ) : null}
-              </View>
-            );
-          })}
+                    <Text
+                      className="text-xs text-neutral-800"
+                      style={{ width: DATE_COLUMN }}
+                    >
+                      {r.date || "—"}
+                    </Text>
+                    <Text
+                      numberOfLines={2}
+                      className="min-w-0 flex-1 text-xs text-neutral-800"
+                    >
+                      {r.test || "Lab report"}
+                    </Text>
+                    {showResult ? (
+                      <Text
+                        numberOfLines={2}
+                        className="min-w-0 flex-1 text-xs text-neutral-500"
+                      >
+                        {resultLabel(r.test, r.result)}
+                      </Text>
+                    ) : null}
+                    <View
+                      className="items-end"
+                      style={{ width: ACTION_COLUMN }}
+                    >
+                      {labReportHasViewableFiles(r.reportPayload) ? (
+                        <Pressable
+                          onPress={() => void openLabReport(r)}
+                          hitSlop={6}
+                          accessibilityLabel={`View ${r.test || "lab report"}`}
+                          className="h-8 w-8 items-center justify-center rounded-md bg-brand active:bg-brand-600"
+                        >
+                          <Ionicons name="eye-outline" size={16} color="#fff" />
+                        </Pressable>
+                      ) : (
+                        <Text className="text-xs text-neutral-400">—</Text>
+                      )}
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
         </View>
-      )}
+      ) : referrals.length === 0 ? (
+        <Text className="text-sm text-neutral-500">
+          No patient lab reports on file.
+        </Text>
+      ) : null}
+
+      {referrals.length > 0 ? (
+        <View
+          className={`overflow-hidden rounded-lg border border-neutral-200 ${
+            labReports.length > 0 ? "mt-1" : ""
+          }`}
+        >
+          <View className="flex-row gap-2 border-b border-neutral-200 bg-neutral-100 px-3 py-2">
+            {REFERRAL_COLUMNS.map((c) => (
+              <Text
+                key={c.label}
+                className="min-w-0 text-xs font-medium text-neutral-600"
+                style={{ flex: c.flex }}
+              >
+                {c.label}
+              </Text>
+            ))}
+          </View>
+          {referrals.map((r, i) => (
+            <View
+              key={r.id}
+              className={`flex-row gap-2 px-3 py-2 ${
+                i < referrals.length - 1 ? "border-b border-neutral-100" : ""
+              }`}
+            >
+              <Text
+                className="min-w-0 text-sm text-neutral-500"
+                style={{ flex: REFERRAL_COLUMNS[0]!.flex }}
+              >
+                {r.date}
+              </Text>
+              <Text
+                className="min-w-0 text-sm text-neutral-900"
+                style={{ flex: REFERRAL_COLUMNS[1]!.flex }}
+              >
+                {r.type}
+              </Text>
+              <Text
+                className="min-w-0 text-sm text-neutral-900"
+                style={{ flex: REFERRAL_COLUMNS[2]!.flex }}
+              >
+                {r.mode}
+              </Text>
+              <Text
+                className="min-w-0 text-sm text-neutral-900"
+                style={{ flex: REFERRAL_COLUMNS[3]!.flex }}
+              >
+                {r.tests}
+              </Text>
+              <Text
+                className="min-w-0 text-sm text-neutral-900"
+                style={{ flex: REFERRAL_COLUMNS[4]!.flex }}
+              >
+                {r.status}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
 
