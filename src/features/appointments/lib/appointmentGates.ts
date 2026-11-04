@@ -152,6 +152,41 @@ export function isTreatAsNoShow(
 }
 
 /**
+ * A real booking the desk never processed (Practice appointment-lifecycle
+ * STARTABLE_WITHOUT_CHECK_IN_STATUSES). Not TENTATIVE or PENDING_PAYMENT: those are
+ * bookings still being made, and advancing one would strand the flow creating it.
+ */
+const STARTABLE_WITHOUT_CHECK_IN = new Set([
+  "SCHEDULED",
+  "CONFIRMED",
+  "NO_SHOW",
+  "RESCHEDULE",
+]);
+
+export function needsCheckInToStartConsult(status: unknown): boolean {
+  return STARTABLE_WITHOUT_CHECK_IN.has(normalizeStatusToken(status));
+}
+
+/**
+ * Offer "Start consult" for today's visit the desk has not checked in. A doctor
+ * looking at the patient is better evidence than a queue status, and blocking them
+ * leaves the visit to be swept to NO_SHOW while the patient is being treated.
+ *
+ * Not for a visit that can already open normally, nor one still waiting on a slot or
+ * a follow-up fee. Rows do not carry the consult's status, so the server is what stops
+ * a finished consult being restarted.
+ */
+export function canStartConsultWithoutCheckIn(
+  appointment: Appointment
+): boolean {
+  if (!needsCheckInToStartConsult(appointment.status)) return false;
+  if (!isAppointmentOnToday(appointment)) return false;
+  if (isFollowUpAwaitingTimeSlot(appointment)) return false;
+  if (isFollowUpFeeDueAfterSlotSet(appointment)) return false;
+  return !canOpenAppointmentFromList(appointment);
+}
+
+/**
  * Desk Check-in CTA — booked PRIOR visit today, status SCHEDULED only.
  * Walk-in / emergency / CONFIRMED / WAITING never get Check-in.
  */

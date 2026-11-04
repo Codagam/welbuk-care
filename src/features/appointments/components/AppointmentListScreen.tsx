@@ -51,12 +51,13 @@ import {
   useLateArrivalAppointment,
   useOpenConsult,
   useReadyForNext,
+  useStartConsult,
 } from "../hooks/useAppointmentList";
 import {
   useAppointmentActionPermissions,
   useDeleteAppointment,
 } from "../hooks/useAppointmentActions";
-import { canOpenAppointmentFromList } from "../lib/appointmentGates";
+import { canOpenAppointmentFromList, normalizeStatusToken } from "../lib/appointmentGates";
 import { resolveAppointmentActions } from "../lib/appointmentActions";
 import type { Appointment } from "../types";
 import { AppAlert } from "@/ui/AppAlert";
@@ -104,6 +105,7 @@ export function AppointmentListScreen() {
 
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
+  const start = useStartConsult();
   const checkIn = useCheckInAppointment();
   const lateArrival = useLateArrivalAppointment();
   const readyForNext = useReadyForNext();
@@ -174,10 +176,16 @@ export function AppointmentListScreen() {
     }
   };
 
-  const navigateToConsult = async (appt: Appointment) => {
+  const navigateToConsult = async (
+    appt: Appointment,
+    load: (appointmentId: string) => Promise<{
+      id: string;
+      patientId?: string | null;
+    }> = open.mutateAsync
+  ) => {
     setOpeningId(appt.id);
     try {
-      const consult = await open.mutateAsync(appt.id);
+      const consult = await load(appt.id);
       router.push({
         pathname: "/consult/[id]",
         params: {
@@ -209,7 +217,29 @@ export function AppointmentListScreen() {
       );
       return;
     }
+    // A plain open never moves a Reschedule visit, so it would stay Reschedule while
+    // the patient is treated. It goes through the same confirmation as Start consult.
+    if (normalizeStatusToken(appt.status) === "RESCHEDULE") {
+      onStartConsult(appt);
+      return;
+    }
     await navigateToConsult(appt);
+  };
+
+  /** Says what is missing and lets the doctor assert it, as Practice does. */
+  const onStartConsult = (appt: Appointment) => {
+    if (consultAccessLoading || !canOpenConsult) return;
+    AppAlert.alert(
+      "This patient has not been checked in",
+      `The front desk has not checked in ${patientDisplayName(appt)}.\n\nStarting the consult marks the visit as in progress, so it is recorded as attended rather than a no-show.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start consult",
+          onPress: () => void navigateToConsult(appt, start.mutateAsync),
+        },
+      ]
+    );
   };
 
   /** Same as Practice desk: resolve (or create) the visit's consultation, then record vitals on it. */
@@ -422,6 +452,7 @@ export function AppointmentListScreen() {
               onAddVitals={() => void onAddVitals(item)}
               onCheckIn={() => onCheckIn(item)}
               onOpenConsult={() => void onOpenConsult(item)}
+              onStartConsult={() => onStartConsult(item)}
               onFitInNextSlot={() => onFitInNextSlot(item)}
               actions={resolveAppointmentActions(item, actionPerms)}
               onOpenActions={() => setActionsTarget(item)}

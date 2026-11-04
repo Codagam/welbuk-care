@@ -13,6 +13,7 @@ import {
 import {
   openConsultForAppointment,
   readyForNextPatient,
+  startConsultForAppointment,
 } from "@/lib/api/endpoints/consult";
 import { isDoctorHome } from "@/lib/auth/roles";
 import { useAuthUser, useFacilityId } from "@/lib/auth/store";
@@ -135,6 +136,20 @@ export function useOpenConsult() {
   return useMutation({
     mutationFn: (appointmentId: string) =>
       openConsultForAppointment(appointmentId),
+  });
+}
+
+/** Moves the visit to In progress, so the list has to show that. */
+export function useStartConsult() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (appointmentId: string) =>
+      startConsultForAppointment(appointmentId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["appointments"] });
+      void qc.invalidateQueries({ queryKey: ["queue"] });
+    },
   });
 }
 

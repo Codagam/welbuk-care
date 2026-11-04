@@ -24,6 +24,7 @@
     "comingSoon": "Coming soon",
     "setFollowUpSlot": "Set time slot",
     "fitInNextSlot": "Fit in next slot",
+    "startConsult": "Start consult",
     "fitInSuccess": "Appointment re-slotted",
     "failedToFitIn": "Could not fit into next slot",
     "cancel": "Cancel",

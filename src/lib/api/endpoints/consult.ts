@@ -31,6 +31,25 @@ export async function openConsultForAppointment(
 }
 
 /**
+ * Start the visit for a patient the desk never checked in: the doctor asserting
+ * "this person is in front of me". A separate verb from the GET above, because reading
+ * a chart must not move an attendance record. The server records who did it, and
+ * never moves a visit whose consult is already finished.
+ */
+export async function startConsultForAppointment(
+  appointmentId: string
+): Promise<ConsultationContext> {
+  const res = await api<ConsultEnvelope>({
+    path: `/api/appointment/${appointmentId}/consult`,
+    method: "POST",
+  });
+  if (!res.consultation?.id) {
+    throw new Error("Could not start the consultation for this appointment.");
+  }
+  return res.consultation;
+}
+
+/**
  * Full consult load — patient header fields (patientId, dob, age, phone, name)
  * come from `response.patient`, not a separate details API.
  * Base URL: EXPO_PUBLIC_PRACTICE_URL via api client; Auth: Bearer JWT.

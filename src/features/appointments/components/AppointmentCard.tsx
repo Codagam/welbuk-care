@@ -13,6 +13,7 @@ import {
 import {
   canAddVitalsFromList,
   canOpenAppointmentFromList,
+  canStartConsultWithoutCheckIn,
   formatAppointmentDate,
   formatDoctorNameForDisplay,
   formatTime12h,
@@ -83,6 +84,8 @@ type Props = {
   onAddVitals?: () => void;
   onCheckIn?: () => void;
   onOpenConsult?: () => void;
+  /** A doctor starting a visit the desk has not checked in. Confirms first. */
+  onStartConsult?: () => void;
   onFitInNextSlot?: () => void;
   /** Permission- and status-checked edit / reschedule / cancel / delete. */
   actions?: AppointmentActions;
@@ -106,6 +109,7 @@ function AppointmentCardInner({
   onAddVitals,
   onCheckIn,
   onOpenConsult,
+  onStartConsult,
   onFitInNextSlot,
   actions,
   onOpenActions,
@@ -177,7 +181,13 @@ function AppointmentCardInner({
   const showVitalsTag = canAddVitals && vitalsAdded;
   const hasTags =
     hasSlot || followUp || showPhone || !!lateLabel || showVitalsTag || !!refundLabel;
-  const showFooter = primaryAction !== "none" || showAddVital;
+  // Beside Check-in or Fit in next slot, not instead of them: those stay the desk's.
+  const showStartConsult =
+    canOpenConsult &&
+    Boolean(onStartConsult) &&
+    canStartConsultWithoutCheckIn(appointment);
+  const showFooter =
+    primaryAction !== "none" || showAddVital || showStartConsult;
 
   return (
     <View
@@ -381,6 +391,18 @@ function AppointmentCardInner({
                 loading={openingVitals}
                 disabled={rowBusy}
                 onPress={onAddVitals}
+                style={{ height: 40, minWidth: 112 }}
+                className="rounded-xl border-brand-200 bg-brand-50"
+              />
+            ) : null}
+            {showStartConsult ? (
+              <Button
+                label={t("appointments.startConsult")}
+                variant="outline"
+                size="md"
+                loading={opening}
+                disabled={rowBusy}
+                onPress={onStartConsult}
                 style={{ height: 40, minWidth: 112 }}
                 className="rounded-xl border-brand-200 bg-brand-50"
               />
