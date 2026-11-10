@@ -34,7 +34,6 @@ import {
   DoctorNotesCard,
 } from "./components/NotesCards";
 import { PrescriptionCard } from "./components/PrescriptionCard";
-import { ReferSheet } from "./components/ReferSheet";
 import type { PickerAnchor } from "./components/regimen/pickerPlacement";
 import {
   useAllergyGate,
@@ -44,6 +43,12 @@ import {
 } from "./hooks/usePrescriptionDraft";
 import type { AllergyRecordLike } from "./types";
 import { AppAlert } from "@/ui/AppAlert";
+import { ConsultOrdersCard } from "@/features/consult/orders/ConsultOrdersCard";
+import {
+  useConsultReferrals,
+  useInvalidateConsultOrders,
+} from "@/features/consult/orders/hooks";
+import { sendAllConsultOrders } from "@/lib/api/endpoints/orders";
 
 function normalizeAllergies(
   raw: unknown
@@ -69,12 +74,8 @@ export function PlanOfCareSection({
   appointmentId,
   patientId,
   patientName,
-  patientAge,
   patientAgeYears,
-  patientGender,
-  patientPhone,
   doctorId,
-  doctorName,
   onStickyFooter,
   locked = false,
   flushNotes,
@@ -104,8 +105,6 @@ export function PlanOfCareSection({
   const facilityId = useFacilityId() ?? "";
   const user = useAuthUser();
   const resolvedDoctorId = doctorId || user?.id || "";
-  const resolvedDoctorName =
-    doctorName || user?.name || user?.email || "Doctor";
 
   const summaryQ = useSummary(consultationId);
   const historyQ = usePatientHistory(patientId, consultationId);
@@ -113,6 +112,8 @@ export function PlanOfCareSection({
     patientId,
     consultationId
   );
+  const referralsQ = useConsultReferrals(facilityId, patientId);
+  const invalidateOrders = useInvalidateConsultOrders(consultationId);
   const saveSummary = useSaveSummary(consultationId);
 
   const draft = usePrescriptionDraft(consultationId);
@@ -133,7 +134,6 @@ export function PlanOfCareSection({
     width: 0,
     height: 0,
   });
-  const [referOpen, setReferOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
@@ -188,6 +188,24 @@ export function PlanOfCareSection({
         if (flushNotes && !(await flushNotes())) {
           setError(
             "Could not save the clinical notes. Check the connection and try Complete again."
+          );
+          return;
+        }
+        // Complete sends every Orders tab that holds unsent lines and a
+        // destination. A failed send stops Complete and names the tab: a
+        // silently dropped lab order is worse than a refused Complete.
+        // Tabs on "Print only" are not sent; the prescription is their order.
+        try {
+          const sentRes = await sendAllConsultOrders(consultationId);
+          if (sentRes.sent.length > 0) {
+            await invalidateOrders();
+            invalidateHistory();
+          }
+        } catch (e) {
+          await invalidateOrders();
+          setError(
+            describeError(e) ||
+              "Could not send the orders. Fix them in Orders & referrals, or set them to Print only."
           );
           return;
         }
@@ -297,7 +315,15 @@ export function PlanOfCareSection({
         <LabsCard
           labReports={labReports}
           patientName={patientName || patientLine}
-          onRefer={() => setReferOpen(true)}
+          referrals={referralsQ.data ?? []}
+          ordersPanel={
+            facilityId ? (
+              <ConsultOrdersCard
+                consultationId={consultationId}
+                facilityId={facilityId}
+              />
+            ) : undefined
+          }
         />
       </View>
 
@@ -363,18 +389,7 @@ export function PlanOfCareSection({
         }}
       />
 
-      <ReferSheet
-        open={referOpen}
-        onClose={() => setReferOpen(false)}
-        patientId={patientId}
-        patientName={patientName || patientLine}
-        patientAge={patientAge ?? "—"}
-        patientGender={patientGender}
-        patientPhone={patientPhone}
-        doctorId={resolvedDoctorId}
-        doctorName={resolvedDoctorName}
-        onCreated={() => invalidateHistory()}
-      />
+
     </View>
   );
 }

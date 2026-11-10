@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -13,6 +13,7 @@ import { AppModal, Button } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import type { LabReportItem } from "@/features/consult/types";
+import type { ConsultReferralRow } from "@/features/consult/orders/hooks";
 import {
   isImageUrl,
   isReportAttachmentPdf,
@@ -32,10 +33,17 @@ export function LabsCard({
   labReports,
   onRefer,
   patientName,
+  ordersPanel,
+  referrals = [],
 }: {
   labReports: LabReportItem[];
-  onRefer: () => void;
+  /** Standalone Refer form. Hidden when `ordersPanel` is set (Practice parity). */
+  onRefer?: () => void;
   patientName?: string;
+  /** Consult Orders & referrals card. When set, it heads this card. */
+  ordersPanel?: ReactNode;
+  /** The patient's referrals at this facility, both directions, newest first. */
+  referrals?: ConsultReferralRow[];
 }) {
   const [viewOpen, setViewOpen] = useState(false);
   const [viewTitle, setViewTitle] = useState("Lab report");
@@ -79,30 +87,47 @@ export function LabsCard({
       className="w-full flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-5"
     >
       <View className="flex-row items-center justify-between gap-3">
-        <View className="min-w-0 flex-1 gap-0.5">
-          <Text className="text-lg font-semibold tracking-tight text-brand">
-            Labs
-          </Text>
-          <Text className="text-sm text-neutral-500">
-            Patient lab reports on file
-          </Text>
+        <View className="min-w-0 flex-1 flex-row items-center gap-2">
+          <Ionicons name="flask-outline" size={22} color="#111827" />
+          <View className="min-w-0 flex-1 gap-0.5">
+            <Text className="text-lg font-semibold tracking-tight text-brand">
+              {ordersPanel ? "Orders & referrals" : "Labs"}
+            </Text>
+            {!ordersPanel ? (
+              <Text className="text-sm text-neutral-500">
+                Patient lab reports on file
+              </Text>
+            ) : null}
+          </View>
         </View>
-        <Pressable
-          onPress={onRefer}
-          accessibilityRole="button"
-          accessibilityLabel="Refer"
-          className="min-h-[48px] min-w-[96px] items-center justify-center rounded-xl bg-brand px-5 py-3 active:bg-brand-600"
-        >
-          <Text className="text-base font-semibold text-white">Refer</Text>
-        </Pressable>
+        {onRefer && !ordersPanel ? (
+          <Pressable
+            onPress={onRefer}
+            accessibilityRole="button"
+            accessibilityLabel="Refer"
+            className="min-h-[48px] min-w-[96px] items-center justify-center rounded-xl bg-brand px-5 py-3 active:bg-brand-600"
+          >
+            <Text className="text-base font-semibold text-white">Refer</Text>
+          </Pressable>
+        ) : null}
       </View>
 
+      {ordersPanel}
+
+      {ordersPanel && (labReports.length > 0 || referrals.length > 0) ? (
+        <Text className="border-t border-neutral-200 pt-3 text-sm font-semibold text-neutral-900">
+          Reports and earlier referrals
+        </Text>
+      ) : null}
+
       {labReports.length === 0 ? (
+        ordersPanel ? null : (
         <View className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50 px-4 py-6">
           <Text className="text-center text-sm text-neutral-400">
             No patient lab reports on file.
           </Text>
         </View>
+        )
       ) : (
         <View className="gap-2">
           {labReports.map((r, i) => {
@@ -144,6 +169,8 @@ export function LabsCard({
           })}
         </View>
       )}
+
+      {referrals.length > 0 ? <ReferralsTable rows={referrals} /> : null}
 
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
 
@@ -216,3 +243,56 @@ export function LabsCard({
     </View>
   );
 }
+
+/** Practice consult page "referralTableContent": Date / Type / Mode / Tests / Status. */
+function ReferralsTable({ rows }: { rows: ConsultReferralRow[] }) {
+  const dash = "—";
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View
+        style={{ minWidth: "100%" }}
+        className="overflow-hidden rounded-xl border border-neutral-200"
+      >
+        <View className="flex-row border-b border-neutral-200 bg-neutral-50">
+          <Text style={COL.date} className={HEAD}>Date</Text>
+          <Text style={COL.type} className={HEAD}>Type</Text>
+          <Text style={COL.mode} className={HEAD}>Mode</Text>
+          <Text style={COL.tests} className={HEAD}>Tests</Text>
+          <Text style={COL.status} className={HEAD}>Status</Text>
+        </View>
+        {rows.map((r, i) => (
+          <View
+            key={r.id}
+            className={`flex-row ${i < rows.length - 1 ? "border-b border-neutral-100" : ""}`}
+          >
+            <Text style={COL.date} className={`${CELL} text-neutral-500`}>
+              {r.createdAt ? new Date(r.createdAt).toLocaleString() : dash}
+            </Text>
+            <Text style={COL.type} className={CELL}>
+              {r.referralType || dash}
+            </Text>
+            <Text style={COL.mode} className={`${CELL} capitalize`}>
+              {r.direction}
+            </Text>
+            <Text style={COL.tests} className={CELL}>
+              {r.tests.length > 0 ? r.tests.join(", ") : dash}
+            </Text>
+            <Text style={COL.status} className={`${CELL} capitalize`}>
+              {(r.status || dash).replace(/_/g, " ")}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+const HEAD = "px-3 py-2.5 text-sm font-semibold text-neutral-800";
+const CELL = "px-3 py-2.5 text-sm text-neutral-900";
+const COL = {
+  date: { width: 190 },
+  type: { width: 110 },
+  mode: { width: 110 },
+  tests: { flex: 1, minWidth: 220 },
+  status: { width: 130 },
+} as const;
