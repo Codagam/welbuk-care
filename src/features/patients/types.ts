@@ -16,6 +16,19 @@ export interface Patient {
   primaryPatientId?: string | null;
   relationshipToPrimary?: string | null;
   isLinkedToFacility?: boolean;
+  /** Facility file number (MRD), when this facility has numbered the link. */
+  mrdNumber?: string | number | null;
+  /** Set when an admin opens a patient unlinked from the selected facility. */
+  removedFromFacility?: boolean;
+  /** Server-decided name/DOB lock (Practice docs/PATIENT_IDENTITY_LOCK.md). */
+  identityLock?: PatientIdentityLock | null;
+}
+
+export interface PatientIdentityLock {
+  locked: boolean;
+  reason: string | null;
+  graceExpiresAt: string | null;
+  detail: string | null;
 }
 
 export interface PatientSearchParams {

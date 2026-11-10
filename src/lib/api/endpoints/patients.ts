@@ -23,11 +23,20 @@ export async function getPatient(
   facilityId: string
 ): Promise<Patient> {
   // Practice accepts display patientId (Int) or Mongo id via patientId / id.
-  const res = await api<{ patient: Patient }>({
+  const res = await api<{
+    patient: Patient;
+    removedFromFacility?: boolean;
+    identityLock?: Patient["identityLock"];
+  }>({
     path: "/api/patient/crud",
     query: { patientId: id, facilityId },
   });
-  return res.patient;
+  // Both sit beside `patient` in the response; keep them on the record.
+  return {
+    ...res.patient,
+    removedFromFacility: res.removedFromFacility === true,
+    identityLock: res.identityLock ?? null,
+  };
 }
 
 export function createPatient(

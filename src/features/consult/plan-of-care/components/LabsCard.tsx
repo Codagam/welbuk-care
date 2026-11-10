@@ -1,7 +1,5 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   Text,
@@ -9,25 +7,15 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { AppModal, Button } from "@/ui";
-import { describeError } from "@/lib/api/errors";
-import { fetchProxiedFileToCache } from "@/lib/api/fetchProxiedFile";
 import type { LabReportItem } from "@/features/consult/types";
 import type { ConsultReferralRow } from "@/features/consult/orders/hooks";
 import {
-  isImageUrl,
-  isReportAttachmentPdf,
-  labReportFileUrls,
   labReportHasViewableFiles,
   labReportSourceLabel,
 } from "@/features/consult/labReports";
-import {
-  FileViewerActions,
-  ImagePreviewWithFullView,
-  ModalSafeArea,
-} from "@/features/consult/components/ImagePreview";
+import { useLabReportViewer } from "@/features/consult/components/LabReportViewer";
 
-type LocalFile = { storageUrl: string; localUri: string };
+
 
 export function LabsCard({
   labReports,
@@ -45,41 +33,8 @@ export function LabsCard({
   /** The patient's referrals at this facility, both directions, newest first. */
   referrals?: ConsultReferralRow[];
 }) {
-  const [viewOpen, setViewOpen] = useState(false);
-  const [viewTitle, setViewTitle] = useState("Lab report");
-  const [viewNote, setViewNote] = useState<string | null>(null);
-  const [viewFiles, setViewFiles] = useState<LocalFile[]>([]);
-  const [viewLoading, setViewLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const openLabReport = async (item: LabReportItem) => {
-    const urls = labReportFileUrls(item.reportPayload);
-    const note =
-      item.reportPayload?.reportNote?.trim() ||
-      item.reportPayload?.radiologyReport?.trim() ||
-      null;
-    if (urls.length === 0 && !note) return;
-
-    setError(null);
-    setViewTitle(item.test?.trim() || "Lab report");
-    setViewNote(note);
-    setViewFiles([]);
-    setViewOpen(true);
-    setViewLoading(true);
-    try {
-      const locals: LocalFile[] = [];
-      for (const url of urls) {
-        const { localUri } = await fetchProxiedFileToCache(url);
-        locals.push({ storageUrl: url, localUri });
-      }
-      setViewFiles(locals);
-    } catch (e) {
-      setError(describeError(e));
-      if (!note) setViewOpen(false);
-    } finally {
-      setViewLoading(false);
-    }
-  };
+  const viewer = useLabReportViewer(patientName);
+  const openLabReport = (item: LabReportItem) => void viewer.openReport(item);
 
   return (
     <View
@@ -157,7 +112,7 @@ export function LabsCard({
                 </View>
                 {canView ? (
                   <Pressable
-                    onPress={() => void openLabReport(r)}
+                    onPress={() => openLabReport(r)}
                     className="h-8 w-8 items-center justify-center rounded-md bg-brand/10"
                     accessibilityLabel={`View ${r.test || "lab report"}`}
                   >
@@ -172,74 +127,10 @@ export function LabsCard({
 
       {referrals.length > 0 ? <ReferralsTable rows={referrals} /> : null}
 
-      {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
-
-      <AppModal
-        visible={viewOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setViewOpen(false)}
-      >
-        <ModalSafeArea>
-          <View className="flex-row items-center justify-between border-b border-neutral-200 px-4 py-3">
-            <Text
-              className="mr-3 flex-1 text-base font-semibold text-neutral-900"
-              numberOfLines={1}
-            >
-              {patientName ? `${patientName} — ${viewTitle}` : viewTitle}
-            </Text>
-            <Pressable onPress={() => setViewOpen(false)} hitSlop={12}>
-              <Ionicons name="close" size={24} color="#6b7280" />
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-            {viewLoading ? (
-              <View className="items-center py-10">
-                <ActivityIndicator color="#FD006A" />
-                <Text className="mt-2 text-xs text-neutral-500">
-                  Loading file…
-                </Text>
-              </View>
-            ) : null}
-            {viewNote ? (
-              <Text className="text-sm text-neutral-700">{viewNote}</Text>
-            ) : null}
-            {viewFiles.map((file) => {
-              const name =
-                file.storageUrl.split("/").pop()?.split("?")[0] || "lab-report";
-              if (isImageUrl(file.storageUrl)) {
-                return (
-                  <ImagePreviewWithFullView
-                    key={file.storageUrl}
-                    uri={file.localUri}
-                    title={viewTitle}
-                    fileName={name}
-                    height={320}
-                  />
-                );
-              }
-              return (
-                <View key={file.storageUrl} className="items-center gap-3">
-                  <Button
-                    label={
-                      isReportAttachmentPdf(file.storageUrl)
-                        ? "Open PDF"
-                        : "Open attachment"
-                    }
-                    variant="outline"
-                    onPress={() => void Linking.openURL(file.localUri)}
-                  />
-                  <FileViewerActions
-                    localUri={file.localUri}
-                    fileName={name}
-                    title={viewTitle}
-                  />
-                </View>
-              );
-            })}
-          </ScrollView>
-        </ModalSafeArea>
-      </AppModal>
+      {viewer.error ? (
+        <Text className="text-sm text-red-500">{viewer.error}</Text>
+      ) : null}
+      {viewer.modal}
     </View>
   );
 }

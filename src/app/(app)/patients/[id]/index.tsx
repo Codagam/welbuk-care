@@ -17,6 +17,11 @@ import { LabReportsCard } from "@/features/patients/sections/LabReportsCard";
 import { MedicalHistoryCard } from "@/features/patients/sections/MedicalHistoryCard";
 import { PatientHeaderCard } from "@/features/patients/sections/PatientHeaderCard";
 import { ReferralsCard } from "@/features/patients/sections/ReferralsCard";
+import { FamilyCard } from "@/features/patients/sections/FamilyCard";
+import { PrescriptionHistoryCard } from "@/features/patients/sections/PrescriptionHistoryCard";
+import { VaccineWellnessCard } from "@/features/patients/vaccimon/VaccineWellnessCard";
+import { useCanWrite } from "@/features/permissions/hooks";
+import { Ionicons } from "@expo/vector-icons";
 import { describeError } from "@/lib/api/errors";
 import { useFacilityId } from "@/lib/auth/store";
 import { Button, Screen, TopBar } from "@/ui";
@@ -29,6 +34,10 @@ export default function PatientDetailScreen() {
   const q = usePatient(id);
 
   const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
+  // Family, vaccine and growth writes are gated on patient.write by Practice.
+  const canEditPatient = useCanWrite("patient", facilityId);
+  // Withdrawing a prescription is a clinical act; it follows consult write.
+  const canWithdrawRx = useCanWrite("consult", facilityId);
 
   const mongoId = q.data?.id;
   const routeId = id ?? "";
@@ -42,6 +51,9 @@ export default function PatientDetailScreen() {
       qc.invalidateQueries({ queryKey: ["patient-referrals", mongoId] }),
       qc.invalidateQueries({ queryKey: ["patient-lab-reports", mongoId] }),
       qc.invalidateQueries({ queryKey: ["patient-documents", mongoId] }),
+      qc.invalidateQueries({ queryKey: ["patient-family"] }),
+      qc.invalidateQueries({ queryKey: ["vaccimon"] }),
+      qc.invalidateQueries({ queryKey: ["prescription-issues"] }),
     ]);
   };
 
@@ -103,6 +115,19 @@ export default function PatientDetailScreen() {
             }}
             className="mx-auto w-full max-w-6xl flex-col gap-3"
           >
+            {q.data.removedFromFacility ? (
+              <View
+                accessibilityRole="alert"
+                className="flex-row items-start gap-2.5 rounded-xl border border-amber-400/50 bg-amber-50 px-4 py-3"
+              >
+                <Ionicons name="warning-outline" size={16} color="#d97706" />
+                <Text className="min-w-0 flex-1 text-sm text-amber-900">
+                  This patient has been removed from the selected facility. You
+                  are viewing the record as an administrator; staff at this
+                  facility can no longer open it.
+                </Text>
+              </View>
+            ) : null}
             <PatientHeaderCard patient={q.data} />
             {mongoId ? (
               <AppointmentsCard
@@ -110,12 +135,45 @@ export default function PatientDetailScreen() {
                 routePatientId={routeId}
               />
             ) : null}
+            {facilityId ? (
+              <FamilyCard
+                patientId={routeId || mongoId!}
+                facilityId={facilityId}
+                patientName={[q.data.firstName, q.data.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+                canEdit={canEditPatient}
+              />
+            ) : null}
+            {facilityId ? (
+              <VaccineWellnessCard
+                patientId={routeId || mongoId!}
+                facilityId={facilityId}
+                canEdit={canEditPatient}
+                dateOfBirth={q.data.dob ? String(q.data.dob) : null}
+                gender={q.data.gender ?? null}
+              />
+            ) : null}
             <MedicalHistoryCard
               patientId={routeId || mongoId!}
               onEdit={() => setQuestionnaireOpen(true)}
             />
             {mongoId ? <ReferralsCard mongoPatientId={mongoId} /> : null}
-            {mongoId ? <LabReportsCard mongoPatientId={mongoId} /> : null}
+            {facilityId ? (
+              <PrescriptionHistoryCard
+                patientId={routeId || mongoId!}
+                facilityId={facilityId}
+                canWithdraw={canWithdrawRx}
+              />
+            ) : null}
+            {mongoId ? (
+              <LabReportsCard
+                mongoPatientId={mongoId}
+                patientName={[q.data.firstName, q.data.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+              />
+            ) : null}
             {mongoId ? <DocumentsCard patientId={mongoId} /> : null}
             {!facilityId ? (
               <Text className="text-xs text-amber-700">

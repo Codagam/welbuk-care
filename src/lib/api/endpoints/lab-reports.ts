@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client";
+import type { LabReportPayload } from "@/features/consult/types";
 
 export interface PatientLabReport {
   id: string;
@@ -7,8 +8,13 @@ export interface PatientLabReport {
   test?: string | null;
   status?: string | null;
   notes?: string | null;
+  /** Legacy; Practice no longer sends it. Files are in `reportPayload`. */
   fileUrl?: string | null;
+  /** Display summary only — empty, a file NAME, or note text. Never a URL. */
   result?: string | null;
+  source?: "upload" | "referral" | "visit";
+  facilityLabel?: string;
+  reportPayload?: LabReportPayload | null;
   createdAt?: string | Date | null;
   [key: string]: unknown;
 }
