@@ -35,7 +35,10 @@ export default function PatientDetailScreen() {
 
   const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
   // Family, vaccine and growth writes are gated on patient.write by Practice.
-  const canEditPatient = useCanWrite("patient", facilityId);
+  // A patient removed from this facility is view-only, even for the admin who
+  // can still open it (Practice does the same).
+  const canEditPatient =
+    useCanWrite("patient", facilityId) && !q.data?.removedFromFacility;
   // Withdrawing a prescription is a clinical act; it follows consult write.
   const canWithdrawRx = useCanWrite("consult", facilityId);
 
@@ -63,7 +66,7 @@ export default function PatientDetailScreen() {
         title=""
         backLabel="Back"
         right={
-          q.data ? (
+          q.data && canEditPatient ? (
             <Button
               label="Edit"
               size="md"
@@ -128,7 +131,10 @@ export default function PatientDetailScreen() {
                 </Text>
               </View>
             ) : null}
-            <PatientHeaderCard patient={q.data} />
+            <PatientHeaderCard
+              patient={q.data}
+              questionnairePatientId={routeId || mongoId!}
+            />
             {mongoId ? (
               <AppointmentsCard
                 mongoPatientId={mongoId}
@@ -156,9 +162,17 @@ export default function PatientDetailScreen() {
             ) : null}
             <MedicalHistoryCard
               patientId={routeId || mongoId!}
+              canEdit={canEditPatient}
               onEdit={() => setQuestionnaireOpen(true)}
             />
-            {mongoId ? <ReferralsCard mongoPatientId={mongoId} /> : null}
+            {mongoId ? (
+              <ReferralsCard
+                mongoPatientId={mongoId}
+                patientName={[q.data.firstName, q.data.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+              />
+            ) : null}
             {facilityId ? (
               <PrescriptionHistoryCard
                 patientId={routeId || mongoId!}

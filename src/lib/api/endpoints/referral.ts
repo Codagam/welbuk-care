@@ -12,6 +12,11 @@ export interface ReferralRow {
   toFacilityName?: string;
   doctorName?: string;
   toDoctorName?: string;
+  /** Set once the lab has delivered a report against this referral. */
+  reportPayload?: import("@/features/consult/types").LabReportPayload | null;
+  reportGeneratedAt?: string | null;
+  /** Added client-side: which list (`mode`) the row came from. */
+  direction?: "incoming" | "outgoing";
 }
 
 export async function listReferrals(params: {
