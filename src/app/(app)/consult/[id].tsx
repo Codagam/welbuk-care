@@ -76,10 +76,20 @@ function buildNavItems(chartKind: SpecialtyDef["chartKind"]): SectionNavItem[] {
 }
 
 export default function ConsultScreen() {
-  const { id, patientId: patientIdParam, appointmentId } = useLocalSearchParams<{
+  const {
+    id,
+    patientId: patientIdParam,
+    appointmentId,
+    section: sectionParam,
+    treatEntryId,
+  } = useLocalSearchParams<{
     id: string;
     patientId?: string;
     appointmentId?: string;
+    /** "dental": open scrolled to the dental chart (patient page "Treat"). */
+    section?: string;
+    /** Finding whose treatment plan opens on arrival (patient page "Treat"). */
+    treatEntryId?: string;
   }>();
   const facility = useActiveFacility();
   const user = useAuthUser();
@@ -188,11 +198,37 @@ export default function ConsultScreen() {
     };
   }, []);
 
+  /**
+   * Arriving from the patient page's Treat button: scroll to the dental chart.
+   * Sections above it keep growing while their data loads, so re-aim on each
+   * layout for a short while, and stop the moment the user scrolls.
+   */
+  const pendingFocusRef = useRef<{ id: string; until: number | null } | null>(
+    sectionParam === "dental" ? { id: CONSULT_SECTION_IDS.dental, until: null } : null
+  );
+
   const onSectionLayout = useCallback(
     (sectionId: string, _y: number, height: number) => {
       sectionH.current[sectionId] = height;
       recomputeSectionTops();
       syncActiveFromScroll();
+      const focus = pendingFocusRef.current;
+      if (!focus) return;
+      const top = sectionY.current[focus.id];
+      if (top == null) return;
+      const now = Date.now();
+      if (focus.until == null) focus.until = now + 2500;
+      if (now > focus.until) {
+        pendingFocusRef.current = null;
+        return;
+      }
+      scrollingToRef.current = focus.id;
+      setActiveId(focus.id);
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, CONTENT_PAD_TOP + top - SCROLL_MARGIN),
+        animated: false,
+      });
+      scrollingToRef.current = null;
     },
     [recomputeSectionTops, syncActiveFromScroll]
   );
@@ -259,7 +295,7 @@ export default function ConsultScreen() {
           subtitle="Dental chart, findings, and treatment plan"
           onLayoutY={onSectionLayout}
         >
-          <DentalDiagnosisPanel />
+          <DentalDiagnosisPanel prefillTreatEntryId={treatEntryId} />
         </ConsultSectionCard>
       ) : null}
 
@@ -358,6 +394,9 @@ export default function ConsultScreen() {
                 keyboardDismissMode="interactive"
                 automaticallyAdjustKeyboardInsets
                 onScroll={onScroll}
+                onScrollBeginDrag={() => {
+                  pendingFocusRef.current = null;
+                }}
                 onContentSizeChange={(_w, h) => {
                   lastScrollRef.current.contentH = h;
                   syncActiveFromScroll();

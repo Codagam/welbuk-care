@@ -23,6 +23,7 @@ import {
     randomId,
     planRowNetFeesByName,
     selectedActualsTreatmentFee,
+    feeForTreatmentName,
     toDateOnly,
     todayYmd,
 } from "../utils";
@@ -250,6 +251,32 @@ export function PlanEditorSheet({
   const selectedActuals = draft.selectedActuals ?? [];
   const remainingSuggested = suggestedOptions.filter(
     (opt) => !selectedActuals.some((a) => a.name === opt)
+  );
+  // Same fee lookup and de-duplication as selectedActualsTreatmentFee, so the
+  // rows add up to the treatment part of the total.
+  const treatedRows = (() => {
+    const fees = feesMapFrom(finding, draft.findingSummary);
+    const seen = new Set<string>();
+    const out: { name: string; dateLabel: string; fee: number }[] = [];
+    for (const a of selectedActuals) {
+      const name = String(a.name ?? "").trim();
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        name,
+        dateLabel: formatPlanRowDate(a.date),
+        fee: feeForTreatmentName(name, fees, catalog),
+      });
+    }
+    return out;
+  })();
+  const planTotal = combinedPlanTotal(
+    draft.providers,
+    selectedActuals,
+    finding,
+    draft.findingSummary,
+    catalog
   );
   const treatmentCost = selectedActualsTreatmentFee(
     selectedActuals,
@@ -635,10 +662,55 @@ export function PlanEditorSheet({
                 );
                 setDraft((d) => (d ? { ...d, providers, totalFee } : d));
               }}
-              showTotal
+              showTotal={false}
               hideTitle
               hideAddProvider={isLinked}
             />
+
+            {/* Practice's "Treated list": each treated procedure with its
+                date and fee, so the total below is explained line by line. */}
+            {treatedRows.length > 0 ? (
+              <View className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">
+                <View className="flex-row border-b border-neutral-200 px-3 py-2">
+                  <Text className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Treated list
+                  </Text>
+                  <Text className="w-24 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Date
+                  </Text>
+                  <Text className="w-24 text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Fee
+                  </Text>
+                </View>
+                {treatedRows.map((row, i) => (
+                  <View
+                    key={row.name}
+                    className={`flex-row items-center px-3 py-2 ${
+                      i < treatedRows.length - 1
+                        ? "border-b border-neutral-200"
+                        : ""
+                    }`}
+                  >
+                    <Text
+                      className="flex-1 pr-2 text-xs text-neutral-900"
+                      numberOfLines={1}
+                    >
+                      {row.name}
+                    </Text>
+                    <Text className="w-24 text-xs text-neutral-500">
+                      {row.dateLabel}
+                    </Text>
+                    <Text className="w-24 text-right text-xs font-medium text-neutral-900">
+                      ₹ {row.fee.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            <Text className="text-right text-sm font-semibold text-brand">
+              Total: ₹{" "}
+              {planTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            </Text>
           </View>
 
           {!canSave && usesSuggestedPicker ? (
