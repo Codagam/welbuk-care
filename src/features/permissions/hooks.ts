@@ -258,6 +258,24 @@ export function useCanAccessInpatient(facilityId?: string | null) {
 }
 
 /**
+ * Who may register a new patient at the active facility.
+ *
+ * Gated on the PERMISSION, never a role name — Practice's
+ * `POST /api/patient/crud` checks `patient.create`, and a clinic grants it per
+ * role through the HRMS matrix (Patients → Create). By default Receptionist,
+ * Facility Admin and Super Admin hold it; a Nurse or Doctor holds it only when
+ * the clinic ticked it for their role. Elevated admins pass without waiting on
+ * the permission fetch, matching `useSectionAccess`.
+ */
+export function useCanCreatePatient(facilityId?: string | null) {
+  const user = useAuthUser();
+  const { permissions, isResolved } = usePermissions(facilityId);
+  const elevated = isSuperAdminUser(user) || isFacilityAdminUser(user);
+  const canCreate = elevated || permissions.includes("patient.create");
+  return { canCreate, isLoading: !elevated && !isResolved };
+}
+
+/**
  * Consult / clinical strip parity: non-doctors lose `consult.*` from the API.
  * Facility Admin / Super Admin keep access (and are not stripped server-side).
  */

@@ -1,11 +1,4 @@
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { Screen, TopBar } from "@/ui";
@@ -19,7 +12,8 @@ export default function EditPatientScreen() {
   const q = usePatient(id);
 
   return (
-    <Screen bgClassName="bg-white">
+    // Bottom inset is handled by the form's pinned action bar.
+    <Screen bgClassName="bg-neutral-50" edges={["left", "right"]}>
       <TopBar title="Edit patient" />
       {q.isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -32,16 +26,11 @@ export default function EditPatientScreen() {
           </Text>
         </View>
       ) : (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          className="flex-1"
-        >
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <View className="mx-auto w-full max-w-2xl p-6">
-              <PatientForm patient={q.data} onSaved={() => router.back()} />
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        <PatientForm
+          patient={q.data}
+          onSaved={() => router.back()}
+          onCancel={() => router.back()}
+        />
       )}
     </Screen>
   );

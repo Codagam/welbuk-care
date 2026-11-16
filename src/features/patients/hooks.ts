@@ -9,6 +9,7 @@ import {
   createPatient,
   getPatient,
   searchPatients,
+  searchPatientsByPhone,
   unlinkPatient,
   updatePatient,
 } from "@/lib/api/endpoints/patients";
@@ -27,6 +28,18 @@ import type {
 } from "./types";
 
 const PAGE_SIZE = 20;
+
+/** Records already on this 10-digit mobile (registration family/onboard card). */
+export function useSameMobilePatients(mobile10: string, enabled: boolean) {
+  const facilityId = useFacilityId();
+  const on = enabled && Boolean(facilityId) && /^\d{10}$/.test(mobile10);
+  return useQuery({
+    queryKey: ["patients-by-phone", facilityId, mobile10],
+    enabled: on,
+    staleTime: 30_000,
+    queryFn: ({ signal }) => searchPatientsByPhone(facilityId!, mobile10, signal),
+  });
+}
 
 /** Infinite, DB-paginated patient search scoped to the active facility. */
 export function usePatientSearch(search: string) {

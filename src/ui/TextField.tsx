@@ -12,6 +12,8 @@ export interface TextFieldProps extends TextInputProps {
   labelClassName?: string;
   /** Renders inside the field on the right (e.g. password visibility toggle). */
   rightAccessory?: ReactNode;
+  /** Multiline only: grow to fill the parent's height (parent must flex). */
+  fill?: boolean;
 }
 
 export function TextField({
@@ -21,6 +23,7 @@ export function TextField({
   containerClassName = "",
   labelClassName = "text-neutral-700",
   rightAccessory,
+  fill = false,
   multiline,
   style,
   onFocus,
@@ -36,7 +39,7 @@ export function TextField({
       : "border-neutral-300";
 
   return (
-    <View className={`gap-1.5 ${containerClassName}`}>
+    <View className={`gap-1.5 ${fill ? "flex-1" : ""} ${containerClassName}`}>
       {label ? (
         <FieldLabel
           label={label}
@@ -44,7 +47,7 @@ export function TextField({
           className={labelClassName}
         />
       ) : null}
-      <View className="relative justify-center">
+      <View className={`relative justify-center ${fill ? "flex-1" : ""}`}>
         <TextInput
           placeholderTextColor="#9ca3af"
           multiline={multiline}
@@ -61,6 +64,7 @@ export function TextField({
                   paddingVertical: 0,
                 },
             rightAccessory ? { paddingRight: 48 } : null,
+            fill && multiline ? { flex: 1, minHeight: 96 } : null,
             style,
           ]}
           {...props}

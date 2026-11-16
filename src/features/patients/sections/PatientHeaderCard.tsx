@@ -51,7 +51,16 @@ const isPdfPath = (s: string) =>
 const isOpenable = (s: string) =>
   s.startsWith("data:") || s.startsWith("/") || /^https?:\/\//i.test(s);
 
+const MONTH_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 function validTillText(raw: string): string {
+  // The questionnaire stores validity as "YYYY-MM" (month + year, as on
+  // Practice); show "May 2027", not a made-up day.
+  const ym = /^(\d{4})-(\d{2})$/.exec(raw.trim());
+  if (ym) return `${MONTH_SHORT[Number(ym[2]) - 1] ?? ym[2]} ${ym[1]}`;
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? raw : formatShortDate(raw);
 }

@@ -13,6 +13,7 @@ import { Screen, TextField } from "@/ui";
 import { describeError } from "@/lib/api/errors";
 import {
   useCanAccessInpatient,
+  useCanCreatePatient,
   useInpatientAvailability,
 } from "@/features/permissions/hooks";
 import { usePatientSearch } from "@/features/patients/hooks";
@@ -39,6 +40,9 @@ export default function PatientsScreen() {
     available: inpatientAvailable,
     isLoading: inpatientAvailabilityLoading,
   } = useInpatientAvailability();
+  // Any role the clinic granted `patient.create` (receptionist by default;
+  // nurse/doctor when ticked in the HRMS matrix; facility/super admin always).
+  const { canCreate: canCreatePatient } = useCanCreatePatient();
 
   const showInpatients =
     !inpatientAccessLoading &&
@@ -59,19 +63,41 @@ export default function PatientsScreen() {
           <Text className="text-xl font-semibold tracking-tight text-neutral-900">
             Patients
           </Text>
-          {showInpatients ? (
-            <Pressable
-              onPress={() => router.push("/inpatient")}
-              accessibilityRole="button"
-              accessibilityLabel="View inpatients"
-              className="flex-row items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 active:bg-brand-100"
-            >
-              <Ionicons name="bed-outline" size={16} color="#FD006A" />
-              <Text className="text-sm font-semibold text-brand-700">
-                Inpatients
-              </Text>
-            </Pressable>
-          ) : null}
+          {/* shrink-0 + numberOfLines: the labels must never wrap onto two lines. */}
+          <View className="shrink-0 flex-row items-center gap-2">
+            {showInpatients ? (
+              <Pressable
+                onPress={() => router.push("/inpatient")}
+                accessibilityRole="button"
+                accessibilityLabel="View inpatients"
+                className="shrink-0 flex-row items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 active:bg-brand-100"
+              >
+                <Ionicons name="bed-outline" size={16} color="#FD006A" />
+                <Text
+                  numberOfLines={1}
+                  className="shrink-0 text-sm font-semibold text-brand-700"
+                >
+                  Inpatients
+                </Text>
+              </Pressable>
+            ) : null}
+            {canCreatePatient ? (
+              <Pressable
+                onPress={() => router.push("/patients/new")}
+                accessibilityRole="button"
+                accessibilityLabel="Add patient"
+                className="shrink-0 flex-row items-center gap-2 rounded-xl bg-brand px-5 py-3 active:bg-brand-600"
+              >
+                <Ionicons name="person-add-outline" size={18} color="#FFFFFF" />
+                <Text
+                  numberOfLines={1}
+                  className="shrink-0 text-sm font-semibold text-brand-foreground"
+                >
+                  Add patient
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         <TextField
           placeholder="Search name, phone, ABHA…"
