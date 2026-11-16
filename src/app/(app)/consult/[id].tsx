@@ -82,10 +82,13 @@ export default function ConsultScreen() {
     appointmentId,
     section: sectionParam,
     treatEntryId,
+    autoRecord: autoRecordParam,
   } = useLocalSearchParams<{
     id: string;
     patientId?: string;
     appointmentId?: string;
+    /** "1": opened by Live Conversation "Record Again" — start recording here. */
+    autoRecord?: string;
     /** "dental": open scrolled to the dental chart (patient page "Treat"). */
     section?: string;
     /** Finding whose treatment plan opens on arrival (patient page "Treat"). */
@@ -130,6 +133,13 @@ export default function ConsultScreen() {
     undefined;
 
   const navItems = useMemo(() => buildNavItems(chartKind), [chartKind]);
+
+  // Record Again lands here with autoRecord=1: record once, for this consult only.
+  // Derived (not copied into state) so a reused screen with a new id still works.
+  const [autoRecordHandledFor, setAutoRecordHandledFor] = useState<string | null>(null);
+  const autoRecordFor =
+    autoRecordParam === "1" && autoRecordHandledFor !== id ? id : null;
+  const clearAutoRecord = useCallback(() => setAutoRecordHandledFor(id), [id]);
 
   const notesFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -284,6 +294,9 @@ export default function ConsultScreen() {
             appointment={appointment}
             showExtended={open}
             locked={isLocked}
+            doctorId={consultDoctorId}
+            autoStartRecording={autoRecordFor === id && !headerLoading}
+            onAutoStartRecordingHandled={clearAutoRecord}
           />
         )}
       </ConsultSectionCard>

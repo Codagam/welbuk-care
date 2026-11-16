@@ -21,6 +21,10 @@ import { useFacilityId } from "@/lib/auth/store";
 import { refetchConsultIfCompletedLock } from "@/features/consult/consultLock";
 import type { Prescription } from "@/features/consult/types";
 
+import {
+  medicinesToDraftLines,
+  useAiMedicinesInbox,
+} from "../../ai/aiMedicines";
 import { matchPrescriptionLinesToAllergies } from "../allergy";
 import {
   clearPrescriptionDraft,
@@ -180,6 +184,39 @@ export function usePrescriptionDraft(consultationId: string) {
     },
     [persist]
   );
+
+  // Medicines from a finalized SpeakADoc conversation (Live Conversation):
+  // taken only after hydration, so they are de-duplicated against what the
+  // consult already has, exactly as Practice does after loadSummary.
+  useEffect(() => {
+    if (!hydrated) return;
+    const drain = () => {
+      const items = useAiMedicinesInbox.getState().take(consultationId);
+      if (!items.length) return;
+      setPrescriptions((prev) => {
+        let next = prev;
+        const counts: number[] = [];
+        for (const item of items) {
+          const lines = medicinesToDraftLines(
+            item.medicines,
+            next.map((p) => p.name)
+          );
+          counts.push(lines.length);
+          next = lines.length ? [...next, ...lines] : next;
+        }
+        // Resolve outside the updater; the callers only show a toast.
+        setTimeout(() => items.forEach((it, i) => it.resolve(counts[i] ?? 0)), 0);
+        return next;
+      });
+    };
+    // Anything that arrived before hydration, then whatever arrives later.
+    const first = setTimeout(drain, 0);
+    const unsubscribe = useAiMedicinesInbox.subscribe(drain);
+    return () => {
+      clearTimeout(first);
+      unsubscribe();
+    };
+  }, [hydrated, consultationId, setPrescriptions]);
 
   const addPrescription = useCallback(
     (item: Omit<PlanPrescription, "id"> & { id?: string }) => {

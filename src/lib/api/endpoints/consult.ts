@@ -68,7 +68,12 @@ export function createConsultation(body: {
   patientId: string;
   doctorId: string;
   facilityId: string;
-}): Promise<ConsultLoadResponse> {
+  /**
+   * Never hand back an existing open consultation (Live Conversation "Record
+   * Again"). The response still carries `reused: true` if the server did.
+   */
+  forceNew?: boolean;
+}): Promise<ConsultLoadResponse & { reused?: boolean }> {
   return api({
     path: "/api/consult/create",
     method: "POST",

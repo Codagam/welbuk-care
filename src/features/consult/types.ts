@@ -153,7 +153,12 @@ export interface PreviousNote {
 export interface ConversationMessage {
   id: string;
   speaker: "doctor" | "patient" | string;
+  /** Name from SpeakADoc's speaker drawer; absent on typed / older rows. */
+  speakerName?: string | null;
   text: string;
+  /** SpeakADoc rows carry both languages; typed rows only `text`. */
+  textEn?: string | null;
+  textTa?: string | null;
   timestamp: string;
 }
 
