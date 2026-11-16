@@ -45,17 +45,17 @@ export type GridProps = {
   picker?: ReactNode;
   defaultUnit: DurationUnit;
   dirty: Set<string>;
-  regimenChoice: Record<string, boolean>;
   showErrors: boolean;
   saving: boolean;
   adding: number;
   notice: Notice | null;
   onChangeLine: (id: string, patch: Partial<PlanPrescription>) => void;
   onRemove: (id: string) => void;
-  onRegimenChoice: (id: string, on: boolean) => void;
   onApplyDuration: (value: number, unit: DurationUnit) => void;
   onSave: () => void;
   onDiscard: () => void;
+  /** Opens the regimen dialog for one row. */
+  onEditRegimen?: (id: string) => void;
 };
 
 function FoodCell({
@@ -154,17 +154,16 @@ export function PrescriptionGrid(props: GridProps) {
     picker,
     defaultUnit,
     dirty,
-    regimenChoice,
     showErrors,
     saving,
     adding,
     notice,
     onChangeLine,
     onRemove,
-    onRegimenChoice,
     onApplyDuration,
     onSave,
     onDiscard,
+    onEditRegimen,
   } = props;
   const [allValue, setAllValue] = useState<number | null>(null);
   const [allUnit, setAllUnit] = useState<DurationUnit | null>(null);
@@ -322,7 +321,6 @@ export function PrescriptionGrid(props: GridProps) {
                   : p.fillSource === "new"
                     ? "new"
                     : null;
-            const checked = regimenChoice[p.id] ?? status === "new";
 
             const medicine = (
               <View>
@@ -470,34 +468,25 @@ export function PrescriptionGrid(props: GridProps) {
                 {errs.qty ? (
                   <Text className="text-[11px] text-red-500">{errs.qty}</Text>
                 ) : null}
-                {status === "new" || status === "update" ? (
-                  <Pressable
-                    onPress={() => onRegimenChoice(p.id, !checked)}
-                    hitSlop={6}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked }}
-                    className="flex-row items-center gap-1.5"
-                  >
-                    <View
-                      className={`h-5 w-5 items-center justify-center rounded border ${
-                        checked
-                          ? "border-brand bg-brand"
-                          : "border-neutral-400 bg-white"
-                      }`}
-                    >
-                      {checked ? (
-                        <Ionicons name="checkmark" size={14} color="#fff" />
-                      ) : null}
-                    </View>
-                    <Text className="min-w-0 flex-1 text-xs text-neutral-800">
-                      {status === "new" ? "Save as regimen" : "Update regimen"}
-                    </Text>
-                  </Pressable>
-                ) : null}
                 {status === "matches" ? (
                   <Text className="text-xs text-neutral-500">
                     regimen v{regimen?.currentVersion}
                   </Text>
+                ) : null}
+                {onEditRegimen ? (
+                  <Pressable
+                    onPress={() => onEditRegimen(p.id)}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${regimen ? "Edit" : "Set"} regimen for ${p.name}`}
+                    className="flex-row items-center justify-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-2 active:bg-neutral-50"
+                    style={{ height: 44 }}
+                  >
+                    <Ionicons name="pencil" size={14} color="#374151" />
+                    <Text className="text-sm font-medium text-neutral-800">
+                      {regimen ? "Edit" : "Set"}
+                    </Text>
+                  </Pressable>
                 ) : null}
               </View>
             );

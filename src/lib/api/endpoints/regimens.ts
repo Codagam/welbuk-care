@@ -15,6 +15,8 @@ export type RegimenLookup = {
   canSave: boolean;
   /** A batch failed, so some medicines may be blank that have a regimen. */
   failed: boolean;
+  /** The consult's doctor, to say whose regimen someone else cannot change. */
+  doctorName: string | null;
 };
 
 /** The CONSULT's doctor's regimens: an assistant entering it is filled from them. */
@@ -28,6 +30,7 @@ export async function lookupRegimens(
     lastUsed: {},
     canSave: false,
     failed: false,
+    doctorName: null,
   };
   for (let i = 0; i < drugIds.length; i += LOOKUP_BATCH) {
     try {
@@ -35,6 +38,7 @@ export async function lookupRegimens(
         regimens?: Record<string, RegimenView>;
         lastUsed?: Record<string, LastUsed>;
         canSave?: boolean;
+        doctorName?: string | null;
       }>({
         path: "/api/consult/regimens/lookup",
         query: {
@@ -46,6 +50,7 @@ export async function lookupRegimens(
       Object.assign(out.regimens, data.regimens ?? {});
       Object.assign(out.lastUsed, data.lastUsed ?? {});
       out.canSave = Boolean(data.canSave);
+      out.doctorName = data.doctorName ?? out.doctorName;
     } catch {
       out.failed = true;
     }

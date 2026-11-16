@@ -8,12 +8,15 @@ import {
   draftFromLastUsed,
   draftFromLine,
   draftFromRegimen,
+  describeSig,
   EMPTY_DRAFT,
+  formatShortDate,
   isExpiryPrescribable,
+  isTextDose,
   medicineNameKey,
-  regimenStatus,
   rowErrors,
   type LastUsed,
+  type LineDraft,
   type RegimenView,
 } from "../../lineDraft";
 import { newPrescriptionId } from "../../prescriptionDraftStore";
@@ -26,6 +29,7 @@ import {
 import type { PlanPrescription } from "../../types";
 import { MedicinePicker, type PickedDrug } from "./MedicinePicker";
 import { PrescriptionGrid, type Notice } from "./PrescriptionGrid";
+import { RegimenDialog } from "./RegimenDialog";
 
 /** Below this age an automatically filled adult dose is flagged for checking. */
 const CHILD_AGE_YEARS = 12;
@@ -44,6 +48,10 @@ const SIG_FIELDS = [
  * prescription-editor.tsx). Picking medicines adds every row at once, filled from
  * the consult doctor's regimen, else their last prescription of it, else blank.
  * One Save checks the changed rows and applies their regimen checkboxes.
+ *
+ * A medicine added with no regimen opens the regimen dialog, one at a time; a
+ * row's Edit button opens the same dialog. Both edit a line that is ALREADY on
+ * the prescription, so skipping or cancelling never loses a medicine.
  *
  * Save does not write the prescription: that is Complete, as on the web.
  */
@@ -82,13 +90,18 @@ export function PrescriptionEditor({
   const [snapshots, setSnapshots] = useState<
     Record<string, PlanPrescription | null>
   >({});
-  /** The doctor's explicit checkbox choices; unset = the status default. */
-  const [regimenChoice, setRegimenChoice] = useState<Record<string, boolean>>(
-    {}
-  );
   const [showErrors, setShowErrors] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  /** The consult's doctor, to say whose regimen someone else cannot change. */
+  const [regimenDoctorName, setRegimenDoctorName] = useState<string | null>(
+    null
+  );
+  /** Line ids of medicines just added with no regimen, asked one after another. */
+  const [dialogQueue, setDialogQueue] = useState<string[]>([]);
+  /** Dialogs already answered in this run, for "Set regimen 2 of 3". */
+  const [dialogDone, setDialogDone] = useState(0);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [dialogBusy, setDialogBusy] = useState(false);
   const fetched = useRef(new Set<string>());
   // Saves and late lookups land after the list may have moved on, so they always
   // write over the latest lines, never the ones captured when they started.
@@ -126,6 +139,7 @@ export function PrescriptionEditor({
       if (cancelled) return;
       setRegimenByDrug((m) => ({ ...m, ...r.regimens }));
       if (!r.failed) setCanSave(r.canSave);
+      if (r.doctorName) setRegimenDoctorName(r.doctorName);
     });
     return () => {
       cancelled = true;
@@ -163,6 +177,7 @@ export function PrescriptionEditor({
     } else {
       setCanSave(r.canSave);
     }
+    if (r.doctorName) setRegimenDoctorName(r.doctorName);
     usable.forEach((d) => fetched.current.add(d.id));
     setRegimenByDrug((m) => ({ ...m, ...regimens }));
 
@@ -216,6 +231,18 @@ export function PrescriptionEditor({
       for (const line of added) next[line.id] = null;
       return next;
     });
+    // A medicine with no regimen asks for one. The row is already on the list
+    // (filled from history or blank), so a skipped dialog leaves a row to finish
+    // inline, never a missing medicine.
+    const ask = added
+      .filter((line) => line.fillSource !== "regimen")
+      .map((line) => line.id);
+    if (ask.length > 0) {
+      const live = new Set(latest.current.map((p) => p.id));
+      // Nothing left to ask from an earlier run: this run counts from 1.
+      if (!dialogQueue.some((id) => live.has(id))) setDialogDone(0);
+      setDialogQueue((q) => [...q.filter((id) => live.has(id)), ...ask]);
+    }
   };
 
   const handlePick = async (picked: PickedDrug[]) => {
@@ -284,6 +311,108 @@ export function PrescriptionEditor({
     setSnapshots((s) => (id in s ? s : { ...s, [id]: prev }));
   };
 
+  // ── Regimen dialog (row Edit button + medicines added with no regimen) ──
+  // A queued row removed before its turn is simply skipped.
+  const liveQueue = dialogQueue.filter((id) =>
+    prescriptions.some((p) => p.id === id)
+  );
+  const queuedLine = liveQueue[0]
+    ? prescriptions.find((p) => p.id === liveQueue[0])
+    : undefined;
+  const editLine = editId
+    ? prescriptions.find((p) => p.id === editId)
+    : undefined;
+  // The row Edit button wins over the queue; the queue resumes after it.
+  const dialogLine = editLine ?? queuedLine;
+  const dialogFromQueue = !editLine && Boolean(queuedLine);
+
+  const closeDialog = (id: string) => {
+    if (editId === id) {
+      setEditId(null);
+      return;
+    }
+    if (liveQueue[0] === id) {
+      const rest = liveQueue.slice(1);
+      setDialogQueue(rest);
+      // A finished run starts counting again from 1.
+      setDialogDone((n) => (rest.length === 0 ? 0 : n + 1));
+    }
+  };
+
+  const saveLineFromDialog = async (
+    id: string,
+    draft: LineDraft,
+    updateFuture: boolean
+  ) => {
+    const prev = latest.current.find((p) => p.id === id);
+    if (!prev) return closeDialog(id);
+    let next: PlanPrescription = {
+      ...applyDraft(prev, draft),
+      autoFilled: false,
+    };
+    if (draft.durationUnit) setLastUnit(draft.durationUnit);
+
+    if (updateFuture && canSave && next.drugId) {
+      setDialogBusy(true);
+      try {
+        // A new version of the doctor's regimen; the API keeps every version.
+        const regimen = await saveRegimen({
+          facilityId,
+          consultationId,
+          drugId: next.drugId,
+          draft: draftFromLine(next),
+        });
+        next = {
+          ...next,
+          regimenId: regimen.id,
+          regimenVersion: regimen.currentVersion,
+          fillSource: "regimen",
+        };
+        setRegimenByDrug((m) => ({ ...m, [regimen.drugId]: regimen }));
+        setNotice({
+          tone: "success",
+          text: `Regimen for ${next.name} saved (v${regimen.currentVersion})`,
+        });
+      } catch (e) {
+        // The dialog stays open so the doctor can retry or untick the box.
+        setNotice({ tone: "error", text: `${next.name}: ${describeError(e)}` });
+        return;
+      } finally {
+        setDialogBusy(false);
+      }
+    }
+
+    const current = latest.current.find((p) => p.id === id) ?? prev;
+    const lines = latest.current.map((p) =>
+      p.id === id ? { ...next, qtyPrescribed: current.qtyPrescribed } : p
+    );
+    latest.current = lines;
+    onUpdate(lines);
+    // The row stays a change until the table's Save, like an inline edit.
+    setSnapshots((s) => (id in s ? s : { ...s, [id]: prev }));
+    closeDialog(id);
+  };
+
+  // The dialog is keyed on the row and reads this only when it opens, so later
+  // renders cannot reset what the doctor is typing.
+  const dialogInitial = dialogLine ? draftFromLine(dialogLine) : EMPTY_DRAFT;
+  const dialogRegimen = dialogLine?.drugId
+    ? regimenByDrug[dialogLine.drugId]
+    : undefined;
+  const dialogHistoryNotice =
+    dialogFromQueue &&
+    dialogLine?.fillSource === "history" &&
+    dialogInitial.dosePattern
+      ? `Found on your previous prescription${
+          dialogLine.historyDate
+            ? ` (${formatShortDate(dialogLine.historyDate)})`
+            : ""
+        }: ${describeSig(dialogInitial)}. Use it?`
+      : null;
+  const doctorLabel = regimenDoctorName
+    ? `Dr. ${regimenDoctorName.replace(/^dr\.?\s*/i, "")}`
+    : "the consult's doctor";
+
   const removeLine = (id: string) => {
     onRemove(id);
     setSnapshots((s) => {
@@ -336,12 +465,10 @@ export function PrescriptionEditor({
     latest.current = restored;
     onUpdate(restored);
     setSnapshots({});
-    setRegimenChoice({});
     setShowErrors(false);
   };
 
-  const save = async () => {
-    if (saving) return;
+  const save = () => {
     const lines = latest.current.filter((p) => dirty.has(p.id));
     if (lines.length === 0) return;
     const invalid = lines.filter((p) => Object.keys(rowErrors(p)).length > 0);
@@ -357,86 +484,61 @@ export function PrescriptionEditor({
       return;
     }
 
-    const toSave = lines.filter((p) => {
-      const status = regimenStatus(
-        p,
-        p.drugId ? regimenByDrug[p.drugId] : undefined,
-        canSave
-      );
-      if (status !== "new" && status !== "update") return false;
-      return regimenChoice[p.id] ?? status === "new";
+    // Regimens change only through the Set / Edit dialog, never as a side effect
+    // of this Save, which just confirms the rows are complete.
+    setSnapshots({});
+    setShowErrors(false);
+    setNotice({
+      tone: "success",
+      text: `${lines.length} medicine${lines.length === 1 ? "" : "s"} checked`,
     });
-
-    setSaving(true);
-    try {
-      const failures: string[] = [];
-      const stamped: Record<string, RegimenView> = {};
-      const failed = new Set<string>();
-      await Promise.all(
-        toSave.map(async (p) => {
-          try {
-            stamped[p.id] = await saveRegimen({
-              facilityId,
-              consultationId,
-              drugId: p.drugId!,
-              draft: draftFromLine(p),
-            });
-          } catch (e) {
-            failed.add(p.id);
-            failures.push(`${p.name}: ${describeError(e)}`);
-          }
-        })
-      );
-      const saved = Object.keys(stamped).length;
-      if (saved > 0) {
-        setRegimenByDrug((m) => {
-          const next = { ...m };
-          for (const r of Object.values(stamped)) next[r.drugId] = r;
-          return next;
-        });
-        const updated = latest.current.map((p) =>
-          stamped[p.id]
-            ? {
-                ...p,
-                regimenId: stamped[p.id]!.id,
-                regimenVersion: stamped[p.id]!.currentVersion,
-                fillSource: "regimen" as const,
-              }
-            : p
-        );
-        latest.current = updated;
-        onUpdate(updated);
-      }
-      // A row whose regimen failed stays changed so Save can be pressed again.
-      setSnapshots((s) => {
-        const next: Record<string, PlanPrescription | null> = {};
-        for (const id of failed) if (id in s) next[id] = s[id] ?? null;
-        return next;
-      });
-      setRegimenChoice((c) => {
-        const next: Record<string, boolean> = {};
-        for (const id of failed) if (id in c) next[id] = c[id]!;
-        return next;
-      });
-      setShowErrors(false);
-      setNotice(
-        failures.length > 0
-          ? { tone: "error", text: failures.join("\n") }
-          : {
-              tone: "success",
-              text:
-                saved > 0
-                  ? `Done · ${saved} regimen${saved === 1 ? "" : "s"} saved`
-                  : `${lines.length} medicine${lines.length === 1 ? "" : "s"} checked`,
-            }
-      );
-    } finally {
-      setSaving(false);
-    }
   };
 
   return (
-    <PrescriptionGrid
+    <>
+      {dialogLine && !readOnly ? (
+        <RegimenDialog
+          key={dialogLine.id}
+          drugName={dialogLine.name}
+          step={
+            dialogFromQueue
+              ? {
+                  index: dialogDone + 1,
+                  total: dialogDone + liveQueue.length,
+                }
+              : undefined
+          }
+          initial={dialogInitial}
+          initialTextMode={isTextDose(
+            dialogInitial.dosePattern,
+            dialogLine.dosageForm
+          )}
+          currentRegimen={
+            dialogRegimen
+              ? {
+                  label: describeSig(dialogRegimen),
+                  version: dialogRegimen.currentVersion,
+                }
+              : null
+          }
+          historyNotice={dialogHistoryNotice}
+          childAge={childAge}
+          defaultUnit={lastUnit}
+          canSaveRegimen={canSave && Boolean(dialogLine.drugId)}
+          updateFutureDefault={!dialogRegimen}
+          regimenLockedReason={
+            !dialogLine.drugId
+              ? "This medicine is not from the catalogue, so it cannot be saved as a regimen."
+              : `Only ${doctorLabel} can change their regimen. Signed in as someone else, this saves for this prescription only.`
+          }
+          busy={dialogBusy}
+          onCancel={() => closeDialog(dialogLine.id)}
+          onSave={(draft, updateFuture) =>
+            void saveLineFromDialog(dialogLine.id, draft, updateFuture)
+          }
+        />
+      ) : null}
+      <PrescriptionGrid
       prescriptions={prescriptions}
       regimenByDrug={regimenByDrug}
       readOnly={readOnly}
@@ -455,23 +557,17 @@ export function PrescriptionEditor({
       }
       defaultUnit={lastUnit}
       dirty={dirty}
-      regimenChoice={regimenChoice}
       showErrors={showErrors}
-      saving={saving}
+      saving={false}
       adding={adding}
       notice={notice}
       onChangeLine={changeLine}
       onRemove={removeLine}
-      onRegimenChoice={(id, on) => {
-        setRegimenChoice((c) => ({ ...c, [id]: on }));
-        // A tick needs Save to take effect, so the row must bring up the Save bar
-        // even if its values were changed before the last Save.
-        const line = latest.current.find((p) => p.id === id);
-        if (line) setSnapshots((s) => (id in s ? s : { ...s, [id]: line }));
-      }}
       onApplyDuration={applyDurationToAll}
-      onSave={() => void save()}
+      onSave={save}
       onDiscard={discard}
+      onEditRegimen={setEditId}
     />
+    </>
   );
 }
