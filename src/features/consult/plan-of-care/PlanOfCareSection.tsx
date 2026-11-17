@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Keyboard,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -156,7 +157,18 @@ export function PlanOfCareSection({
     ]);
   };
 
+  /**
+   * Busy from the first tap. Complete flushes the dental chart and the notes
+   * and sends orders BEFORE the complete call, and the spinner used to follow
+   * only that last call, so the button looked dead for seconds and invited a
+   * second tap.
+   */
+  const [completeBusy, setCompleteBusy] = useState(false);
+  const completeBusyRef = useRef(false);
+
   const runComplete = async () => {
+    if (completeBusyRef.current) return;
+    Keyboard.dismiss();
     setError(null);
     setDone(null);
     if (allergy.allergyPrintBlocked) {
@@ -172,20 +184,25 @@ export function PlanOfCareSection({
     );
 
     const proceed = async () => {
+      if (completeBusyRef.current) return;
+      completeBusyRef.current = true;
+      setCompleteBusy(true);
       try {
         if (locked) {
           setError(CONSULT_LOCKED_COMPLETE_REASON);
           return;
         }
+        // The two flushes write different records, so they run together.
         // Flush would 409 on a completed consult — skip when already locked.
-        if (flushDental && !locked) {
-          const ok = await flushDental();
-          if (!ok) {
-            setError("Could not flush dental chart/plan before complete.");
-            return;
-          }
+        const [dentalOk, notesOk] = await Promise.all([
+          flushDental && !locked ? flushDental() : Promise.resolve(true),
+          flushNotes ? flushNotes() : Promise.resolve(true),
+        ]);
+        if (!dentalOk) {
+          setError("Could not flush dental chart/plan before complete.");
+          return;
         }
-        if (flushNotes && !(await flushNotes())) {
+        if (!notesOk) {
           setError(
             "Could not save the clinical notes. Check the connection and try Complete again."
           );
@@ -225,6 +242,9 @@ export function PlanOfCareSection({
         goToQueueAfterComplete(doneLabel);
       } catch (e) {
         setError(describeError(e));
+      } finally {
+        completeBusyRef.current = false;
+        setCompleteBusy(false);
       }
     };
 
@@ -257,7 +277,7 @@ export function PlanOfCareSection({
     onStickyFooter(
       <CompleteFooter
         onComplete={() => void runCompleteRef.current()}
-        completing={complete.isPending}
+        completing={completeBusy || complete.isPending}
         completeDisabled={completeDisabled}
         completeDisabledReason={completeDisabledReason}
         error={error}
@@ -267,6 +287,7 @@ export function PlanOfCareSection({
     return () => onStickyFooter(null);
   }, [
     onStickyFooter,
+    completeBusy,
     complete.isPending,
     completeDisabled,
     completeDisabledReason,

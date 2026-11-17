@@ -50,6 +50,7 @@ import {
   useCheckInAppointment,
   useLateArrivalAppointment,
   useOpenConsult,
+  useOpenConsultForVitals,
   useReadyForNext,
 } from "../hooks/useAppointmentList";
 import {
@@ -104,6 +105,7 @@ export function AppointmentListScreen() {
 
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
+  const openForVitals = useOpenConsultForVitals();
   const checkIn = useCheckInAppointment();
   const lateArrival = useLateArrivalAppointment();
   const readyForNext = useReadyForNext();
@@ -217,7 +219,7 @@ export function AppointmentListScreen() {
     if (openingVitalsId !== null) return;
     setOpeningVitalsId(appt.id);
     try {
-      const consult = await open.mutateAsync(appt.id);
+      const consult = await openForVitals.mutateAsync(appt.id);
       setVitalsTarget({
         consultationId: consult.id,
         appointmentId: appt.id,
