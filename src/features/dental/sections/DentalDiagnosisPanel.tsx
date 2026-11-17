@@ -14,7 +14,15 @@ import type { DentalTreatmentPlanRow, DiagnosisDetailsEntry } from "../types";
 /**
  * Practice Diagnosis Panel: odontogram + findings in one scroll block.
  */
-export function DentalDiagnosisPanel() {
+export function DentalDiagnosisPanel({
+  prefillTreatEntryId,
+}: {
+  /**
+   * Opened from the patient page's Treat button: open this finding's
+   * treatment plan once the chart has loaded (Practice's dental plan prefill).
+   */
+  prefillTreatEntryId?: string;
+} = {}) {
   const dental = useDentalConsult();
   const [planDraft, setPlanDraft] = useState<DentalTreatmentPlanRow | null>(
     null
@@ -35,6 +43,31 @@ export function DentalDiagnosisPanel() {
     setPlanFinding(entry);
     setPlanDraft(buildPlanFromFinding(entry, dental.defaultDoctorId));
   };
+
+  // Decided once, during render (React's "adjust state while rendering"
+  // pattern, not an effect). `loading` starts false before the first fetch, so
+  // a finding that is not there yet only counts as gone after a load has run.
+  const [prefillHandled, setPrefillHandled] = useState(!prefillTreatEntryId);
+  const [sawLoad, setSawLoad] = useState(false);
+  if (!prefillHandled) {
+    const entry = dental.entries.find((e) => e.id === prefillTreatEntryId);
+    if (entry && !dental.loading) {
+      setPrefillHandled(true);
+      if (!dental.locked) {
+        const existing = dental.planItems.find(
+          (p) => p.diagnosisEntryId === entry.id
+        );
+        setPlanFinding(entry);
+        setPlanDraft(
+          existing ?? buildPlanFromFinding(entry, dental.defaultDoctorId)
+        );
+      }
+    } else if (dental.loading && !sawLoad) {
+      setSawLoad(true);
+    } else if (sawLoad && !dental.loading) {
+      setPrefillHandled(true);
+    }
+  }
 
   if (dental.loading) {
     return (

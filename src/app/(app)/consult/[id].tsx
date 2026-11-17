@@ -27,6 +27,11 @@ import {
 } from "@/features/consult/sectionIds";
 import { NotesSection } from "@/features/consult/sections/NotesSection";
 import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
+import { calculateAge } from "@/features/consult/patientHeader";
+import {
+  resolveConsultSpecialty,
+  type SpecialtyDef,
+} from "@/features/consult/specialties";
 import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHeader";
 import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
@@ -44,32 +49,20 @@ const SECTION_GAP = 32;
 const ACTIVE_LINE = 80;
 const BOTTOM_SNAP = 48;
 
-function isDentalType(consultationType?: string | null): boolean {
-  const t = (consultationType ?? "").toLowerCase();
-  return t.includes("dent");
-}
-
-function isEyeType(consultationType?: string | null): boolean {
-  const t = (consultationType ?? "").toLowerCase();
-  return (
-    t.includes("eye") || t.includes("ophthal") || t.includes("optom")
-  );
-}
-
 /** Practice-aligned nav rail — audio lives inside Patient details (Live Conversation). */
-function buildNavItems(consultationType?: string | null): SectionNavItem[] {
+function buildNavItems(chartKind: SpecialtyDef["chartKind"]): SectionNavItem[] {
   const items: SectionNavItem[] = [
     {
       id: CONSULT_SECTION_IDS.consultation,
       label: "Patient details",
     },
   ];
-  if (isDentalType(consultationType)) {
+  if (chartKind === "dental") {
     items.push({
       id: CONSULT_SECTION_IDS.dental,
       label: "Diagnosis Panel",
     });
-  } else if (isEyeType(consultationType)) {
+  } else if (chartKind === "eye") {
     items.push({
       id: CONSULT_SECTION_IDS.eye,
       label: "Diagnosis Panel",
@@ -83,10 +76,23 @@ function buildNavItems(consultationType?: string | null): SectionNavItem[] {
 }
 
 export default function ConsultScreen() {
-  const { id, patientId: patientIdParam, appointmentId } = useLocalSearchParams<{
+  const {
+    id,
+    patientId: patientIdParam,
+    appointmentId,
+    section: sectionParam,
+    treatEntryId,
+    autoRecord: autoRecordParam,
+  } = useLocalSearchParams<{
     id: string;
     patientId?: string;
     appointmentId?: string;
+    /** "1": opened by Live Conversation "Record Again" — start recording here. */
+    autoRecord?: string;
+    /** "dental": open scrolled to the dental chart (patient page "Treat"). */
+    section?: string;
+    /** Finding whose treatment plan opens on arrival (patient page "Treat"). */
+    treatEntryId?: string;
   }>();
   const facility = useActiveFacility();
   const user = useAuthUser();
@@ -98,13 +104,27 @@ export default function ConsultScreen() {
     error: headerErr,
     consultation,
     appointment,
+    doctor: consultDoctor,
     doctorId: consultDoctorId,
     lock,
     isLocked,
   } = useConsultPatientHeader(id);
   const headerName = header?.name || "Consultation";
-  const dental = isDentalType(facility?.consultationType);
-  const eye = isEyeType(facility?.consultationType);
+  // Not header.age: that reads 0 when the age is unknown, and 0 here is a newborn.
+  const patientAgeYears: number | null = patient?.dob
+    ? calculateAge(patient.dob)
+    : typeof patient?.age === "number" && patient.age >= 0
+      ? patient.age
+      : null;
+  // Nothing until the consult loads: its doctor decides which chart this is.
+  const chartKind = consultation
+    ? resolveConsultSpecialty({
+        doctorSpecialization: consultDoctor?.specialization,
+        facilityConsultationType: facility?.consultationType,
+      }).chartKind
+    : null;
+  const dental = chartKind === "dental";
+  const eye = chartKind === "eye";
 
   const resolvedPatientId =
     patientIdParam ||
@@ -112,13 +132,18 @@ export default function ConsultScreen() {
     consultation?.patientId ||
     undefined;
 
-  const navItems = useMemo(
-    () => buildNavItems(facility?.consultationType),
-    [facility?.consultationType]
-  );
+  const navItems = useMemo(() => buildNavItems(chartKind), [chartKind]);
 
+  // Record Again lands here with autoRecord=1: record once, for this consult only.
+  // Derived (not copied into state) so a reused screen with a new id still works.
+  const [autoRecordHandledFor, setAutoRecordHandledFor] = useState<string | null>(null);
+  const autoRecordFor =
+    autoRecordParam === "1" && autoRecordHandledFor !== id ? id : null;
+  const clearAutoRecord = useCallback(() => setAutoRecordHandledFor(id), [id]);
+
+  const notesFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const sectionY = useRef<Record<string, number>>({});
+  const sectionY =useRef<Record<string, number>>({});
   const sectionH = useRef<Record<string, number>>({});
   const [activeId, setActiveId] = useState<string>(
     () => navItems[0]?.id ?? CONSULT_SECTION_IDS.consultation
@@ -183,11 +208,37 @@ export default function ConsultScreen() {
     };
   }, []);
 
+  /**
+   * Arriving from the patient page's Treat button: scroll to the dental chart.
+   * Sections above it keep growing while their data loads, so re-aim on each
+   * layout for a short while, and stop the moment the user scrolls.
+   */
+  const pendingFocusRef = useRef<{ id: string; until: number | null } | null>(
+    sectionParam === "dental" ? { id: CONSULT_SECTION_IDS.dental, until: null } : null
+  );
+
   const onSectionLayout = useCallback(
     (sectionId: string, _y: number, height: number) => {
       sectionH.current[sectionId] = height;
       recomputeSectionTops();
       syncActiveFromScroll();
+      const focus = pendingFocusRef.current;
+      if (!focus) return;
+      const top = sectionY.current[focus.id];
+      if (top == null) return;
+      const now = Date.now();
+      if (focus.until == null) focus.until = now + 2500;
+      if (now > focus.until) {
+        pendingFocusRef.current = null;
+        return;
+      }
+      scrollingToRef.current = focus.id;
+      setActiveId(focus.id);
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, CONTENT_PAD_TOP + top - SCROLL_MARGIN),
+        animated: false,
+      });
+      scrollingToRef.current = null;
     },
     [recomputeSectionTops, syncActiveFromScroll]
   );
@@ -243,6 +294,9 @@ export default function ConsultScreen() {
             appointment={appointment}
             showExtended={open}
             locked={isLocked}
+            doctorId={consultDoctorId}
+            autoStartRecording={autoRecordFor === id && !headerLoading}
+            onAutoStartRecordingHandled={clearAutoRecord}
           />
         )}
       </ConsultSectionCard>
@@ -254,7 +308,7 @@ export default function ConsultScreen() {
           subtitle="Dental chart, findings, and treatment plan"
           onLayoutY={onSectionLayout}
         >
-          <DentalDiagnosisPanel />
+          <DentalDiagnosisPanel prefillTreatEntryId={treatEntryId} />
         </ConsultSectionCard>
       ) : null}
 
@@ -279,7 +333,12 @@ export default function ConsultScreen() {
         subtitle="SOAP notes and diagnosis codes"
         onLayoutY={onSectionLayout}
       >
-        <NotesSection consultationId={id} locked={isLocked} />
+        <NotesSection
+          key={id}
+          consultationId={id}
+          locked={isLocked}
+          flushRef={notesFlushRef}
+        />
       </ConsultSectionCard>
 
       <ConsultSectionCard
@@ -294,11 +353,13 @@ export default function ConsultScreen() {
           patientId={resolvedPatientId}
           patientName={header?.name}
           patientAge={header?.age ?? patient?.age ?? undefined}
+          patientAgeYears={patientAgeYears}
           patientPhone={header?.phone ?? patient?.phone ?? undefined}
           doctorId={consultDoctorId ?? user?.id}
           doctorName={user?.name ?? user?.email}
           onStickyFooter={setStickyFooter}
           locked={isLocked}
+          flushNotes={() => notesFlushRef.current?.() ?? Promise.resolve(true)}
         />
       </ConsultSectionCard>
     </View>
@@ -336,6 +397,7 @@ export default function ConsultScreen() {
             facilityId={facility?.id}
             defaultDoctorId={consultDoctorId ?? user?.id ?? ""}
             locked={isLocked}
+            enabled={dental}
           >
             <View className="flex-1">
               <ScrollView
@@ -345,6 +407,9 @@ export default function ConsultScreen() {
                 keyboardDismissMode="interactive"
                 automaticallyAdjustKeyboardInsets
                 onScroll={onScroll}
+                onScrollBeginDrag={() => {
+                  pendingFocusRef.current = null;
+                }}
                 onContentSizeChange={(_w, h) => {
                   lastScrollRef.current.contentH = h;
                   syncActiveFromScroll();

@@ -16,12 +16,21 @@ interface ConsultEnvelope {
   patient?: ConsultLoadResponse["patient"];
 }
 
-/** Get-or-create the consultation for an appointment (preferred entry point). */
+/**
+ * Get-or-create the consultation for an appointment (preferred entry point).
+ *
+ * `intent: "vitals"` is the desk's Add vital: Practice then accepts the vitals
+ * keys (`appointment.update` / `patient.write`) instead of `consult.create`,
+ * which a nurse never holds, and does not move the visit to IN_PROGRESS.
+ * Saving the vitals moves it to WAITING. Same call as Practice's list.
+ */
 export async function openConsultForAppointment(
-  appointmentId: string
+  appointmentId: string,
+  opts?: { intent?: "vitals" }
 ): Promise<ConsultationContext> {
+  const query = opts?.intent ? `?intent=${opts.intent}` : "";
   const res = await api<ConsultEnvelope & Partial<ConsultationContext>>({
-    path: `/api/appointment/${appointmentId}/consult`,
+    path: `/api/appointment/${appointmentId}/consult${query}`,
   });
   const consult = res.consultation ?? (res as ConsultationContext);
   if (!consult?.id) {
@@ -68,7 +77,12 @@ export function createConsultation(body: {
   patientId: string;
   doctorId: string;
   facilityId: string;
-}): Promise<ConsultLoadResponse> {
+  /**
+   * Never hand back an existing open consultation (Live Conversation "Record
+   * Again"). The response still carries `reused: true` if the server did.
+   */
+  forceNew?: boolean;
+}): Promise<ConsultLoadResponse & { reused?: boolean }> {
   return api({
     path: "/api/consult/create",
     method: "POST",

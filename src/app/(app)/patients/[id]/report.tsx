@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   Text,
   View,
@@ -9,6 +8,12 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
+import {
+  followUpPrintDetail,
+  formatFollowUpForPrint,
+} from "@/features/consult/plan-of-care/followUp";
+import { formatDuration } from "@/features/consult/plan-of-care/sig";
+import { formatDiagnosisCodes } from "@/features/consult/soapText";
 import { writeConsultationReportPdfToCache } from "@/features/patients/buildConsultationReportPdf";
 import { usePatient } from "@/features/patients/hooks";
 import {
@@ -26,6 +31,7 @@ import { printLocalPdf } from "@/lib/api/printLocalPdf";
 import { shareLocalFileOrAlert } from "@/lib/api/shareLocalFile";
 import { useActiveFacility } from "@/lib/auth/store";
 import { Button, Screen, TopBar } from "@/ui";
+import { AppAlert } from "@/ui/AppAlert";
 
 function formatDateLabel(value?: string | null): string {
   if (!value) return "—";
@@ -120,7 +126,7 @@ export default function PatientAppointmentReportScreen() {
 
   useEffect(() => {
     if (consultAccessLoading || canAccessConsult) return;
-    Alert.alert(
+    AppAlert.alert(
       "You don't have permission",
       "Consult isn't available for your role. Ask a facility administrator if you need access."
     );
@@ -159,13 +165,11 @@ export default function PatientAppointmentReportScreen() {
   const doctorLabel = consultQ.data?.doctor?.name?.trim() || "Doctor";
   const notes =
     summaryQ.data?.doctorNotes?.trim() || "No doctor notes available.";
-  const diagnosis = (() => {
-    const codes = summaryQ.data?.diagnosisCodes ?? [];
-    if (Array.isArray(codes) && codes.length > 0) {
-      return codes.map((c) => c.code).filter(Boolean).join(", ");
-    }
-    return summaryQ.data?.assessment?.trim() || "N/A";
-  })();
+  // Saved codes first, as Practice prints them, then the Assessment text.
+  const diagnosis =
+    formatDiagnosisCodes(summaryQ.data?.diagnosisCodes) ||
+    summaryQ.data?.assessment?.trim() ||
+    "N/A";
   const timeLabel = formatTimeLabel(appointmentTime);
   const dateTimeLabel =
     consultDateLabel === "—"
@@ -187,7 +191,11 @@ export default function PatientAppointmentReportScreen() {
     diagnosis,
     notes,
     prescriptionRows,
+    followUp: summaryQ.data?.followUp ?? null,
   };
+
+  const nextVisit = formatFollowUpForPrint(summaryQ.data?.followUp);
+  const nextVisitDetail = followUpPrintDetail(summaryQ.data?.followUp);
 
   const busy = downloading || printing;
 
@@ -202,7 +210,7 @@ export default function PatientAppointmentReportScreen() {
         dialogTitle: "Download PDF",
       });
     } catch (e) {
-      Alert.alert("Download failed", describeError(e));
+      AppAlert.alert("Download failed", describeError(e));
     } finally {
       setDownloading(false);
     }
@@ -216,7 +224,7 @@ export default function PatientAppointmentReportScreen() {
       await printLocalPdf(uri);
     } catch (e) {
       if (isPrintCanceled(e)) return;
-      Alert.alert("Print failed", describeError(e));
+      AppAlert.alert("Print failed", describeError(e));
     } finally {
       setPrinting(false);
     }
@@ -322,8 +330,8 @@ export default function PatientAppointmentReportScreen() {
                   <Text className="flex-[1.3] text-sm font-semibold text-white">
                     Dosage & Frequency
                   </Text>
-                  <Text className="w-14 text-right text-sm font-semibold text-white">
-                    Days
+                  <Text className="w-24 text-right text-sm font-semibold text-white">
+                    Duration
                   </Text>
                 </View>
 
@@ -344,16 +352,23 @@ export default function PatientAppointmentReportScreen() {
                       <Text className="flex-[1.7] text-base text-neutral-900">
                         {line.name || "—"}
                       </Text>
-                      <Text className="flex-[1.3] text-base text-neutral-700">
-                        {[
-                          line.dosePattern,
-                          foodTimingLabel(line.foodTiming),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </Text>
-                      <Text className="w-14 text-right text-base text-neutral-700">
-                        {line.duration ? String(line.duration) : "—"}
+                      <View className="flex-[1.3]">
+                        <Text className="text-base text-neutral-700">
+                          {[
+                            line.dosePattern,
+                            foodTimingLabel(line.foodTiming),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </Text>
+                        {line.doseNote?.trim() ? (
+                          <Text className="mt-0.5 text-sm text-neutral-500">
+                            {line.doseNote.trim()}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text className="w-24 text-right text-base text-neutral-700">
+                        {formatDuration(line) || "—"}
                       </Text>
                     </View>
                   ))
@@ -370,9 +385,14 @@ export default function PatientAppointmentReportScreen() {
                       className="text-base font-medium text-emerald-800"
                       numberOfLines={1}
                     >
-                      As advised
+                      {nextVisit}
                     </Text>
                   </View>
+                  {nextVisitDetail ? (
+                    <Text className="text-xs text-neutral-500">
+                      {nextVisitDetail}
+                    </Text>
+                  ) : null}
                 </View>
                 <View className="min-w-0 flex-1 items-end gap-1.5">
                   <Text className="text-xs uppercase tracking-wide text-neutral-500">

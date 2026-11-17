@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -31,6 +30,7 @@ import {
   ModalSafeArea,
 } from "./ImagePreview";
 import { SectionChrome } from "./SectionChrome";
+import { AppAlert } from "@/ui/AppAlert";
 
 type LocalFile = { storageUrl: string; localUri: string };
 
@@ -143,7 +143,7 @@ export function ReportsPanel({
     message: string;
     onConfirm: () => void;
   }) => {
-    Alert.alert(opts.title, opts.message, [
+    AppAlert.alert(opts.title, opts.message, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: opts.onConfirm },
     ]);

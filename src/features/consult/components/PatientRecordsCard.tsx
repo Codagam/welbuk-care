@@ -6,6 +6,8 @@ import type {
   AllergyRecord,
   MedicalCondition,
   MedicationRecord,
+  PastHistory,
+  PastHistoryAnswer,
 } from "../types";
 import { SectionChrome } from "./SectionChrome";
 
@@ -61,35 +63,52 @@ function RecordGroup({
   );
 }
 
+function PastHistoryText({ value }: { value: PastHistoryAnswer }) {
+  return (
+    <Text className="pl-5 text-sm text-neutral-900">
+      <Text className="font-semibold">{value.answer}</Text>
+      {value.details ? ` — ${value.details}` : ""}
+    </Text>
+  );
+}
+
 export function PatientRecordsCard({
   medicalHistory,
   medications,
   allergies,
+  pastHistory,
 }: {
   medicalHistory?: MedicalCondition[] | unknown;
   medications?: MedicationRecord[] | unknown[];
   allergies?: AllergyRecord[] | unknown[];
+  pastHistory?: PastHistory | null;
 }) {
   const history = asNamedList(medicalHistory);
   const meds = asNamedList(medications);
+  const previousSurgeries = pastHistory?.previousSurgeries ?? null;
+  const hospitalizations = pastHistory?.hospitalizations ?? null;
+  // Names only, as in Practice. The intake form has no severity field and the
+  // Allergy table defaults every row to MODERATE, so a grade here would be one nobody
+  // recorded. Allergies print even when the rest of the record is empty.
   const allergyItems = Array.isArray(allergies)
     ? allergies.map((a) => {
-        if (typeof a === "string") {
-          return { name: a, severity: "MODERATE" };
-        }
+        if (typeof a === "string") return { name: a };
         const o = a as AllergyRecord & Record<string, unknown>;
         return {
           name:
             o.name ||
             (typeof o.allergen === "string" ? o.allergen : "") ||
             "—",
-          severity: o.severity || "MODERATE",
         };
       })
     : [];
 
   const hasAny =
-    history.length > 0 || meds.length > 0 || allergyItems.length > 0;
+    history.length > 0 ||
+    meds.length > 0 ||
+    allergyItems.length > 0 ||
+    previousSurgeries != null ||
+    hospitalizations != null;
 
   if (!hasAny) {
     return (
@@ -110,6 +129,8 @@ export function PatientRecordsCard({
     history.length > 0,
     meds.length > 0,
     allergyItems.length > 0,
+    previousSurgeries != null,
+    hospitalizations != null,
   ].filter(Boolean).length;
 
   let shown = 0;
@@ -139,6 +160,26 @@ export function PatientRecordsCard({
           </RecordGroup>
         ) : null}
 
+        {previousSurgeries ? (
+          <RecordGroup
+            icon="cut-outline"
+            label="Previous Surgeries"
+            isLast={++shown === groups}
+          >
+            <PastHistoryText value={previousSurgeries} />
+          </RecordGroup>
+        ) : null}
+
+        {hospitalizations ? (
+          <RecordGroup
+            icon="business-outline"
+            label="Hospitalizations (Past 5 Years)"
+            isLast={++shown === groups}
+          >
+            <PastHistoryText value={hospitalizations} />
+          </RecordGroup>
+        ) : null}
+
         {meds.length > 0 ? (
           <RecordGroup
             icon="medkit-outline"
@@ -165,28 +206,13 @@ export function PatientRecordsCard({
             isLast={++shown === groups}
           >
             <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1.5 pl-5">
-              {allergyItems.map((item, idx) => {
-                const high =
-                  item.severity === "High" ||
-                  item.severity === "CRITICAL" ||
-                  item.severity === "critical";
-                return (
-                  <View key={idx} className="flex-row items-center gap-1">
-                    <View
-                      className={`rounded-full px-2 py-0.5 ${
-                        high ? "bg-red-600" : "bg-amber-500"
-                      }`}
-                    >
-                      <Text className="text-xs font-medium text-white">
-                        {item.name}
-                      </Text>
-                    </View>
-                    <Text className="text-[10px] text-neutral-500">
-                      ({item.severity})
-                    </Text>
-                  </View>
-                );
-              })}
+              {allergyItems.map((item, idx) => (
+                <View key={idx} className="rounded-full bg-amber-500 px-2 py-0.5">
+                  <Text className="text-xs font-medium text-white">
+                    {item.name}
+                  </Text>
+                </View>
+              ))}
             </View>
           </RecordGroup>
         ) : null}

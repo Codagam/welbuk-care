@@ -1,203 +1,335 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Pressable, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { describeError } from "@/lib/api/errors";
-import { Button, TextField } from "@/ui";
-import { useDiagnosisSearch, useSaveSummary, useSummary } from "../hooks";
+import { TextField } from "@/ui";
+
+import { CodeInsertPicker } from "../components/CodeInsertPicker";
 import { CONSULT_LOCKED_MESSAGE } from "../consultLock";
-import type { DiagnosisCode } from "../types";
-import { useCardFocusHighlight } from "../useCardFocusHighlight";
+import { useSaveSummary, useSummary } from "../hooks";
+import { formatCodeLine, insertAsLines } from "../soapText";
+import type { ConsultSummary, DiagnosisCode } from "../types";
 
 type SoapKey = "subjective" | "objective" | "assessment" | "plan";
 
-const SOAP: { key: SoapKey; label: string; placeholder: string }[] = [
-  { key: "subjective", label: "Subjective", placeholder: "Complaints, history…" },
-  { key: "objective", label: "Objective", placeholder: "Exam findings…" },
-  { key: "assessment", label: "Assessment", placeholder: "Diagnosis, impression…" },
-  { key: "plan", label: "Plan", placeholder: "Treatment plan, follow-up…" },
+const SOAP_KEYS: SoapKey[] = ["subjective", "objective", "assessment", "plan"];
+
+const SOAP: { key: SoapKey; label: string; hint: string }[] = [
+  {
+    key: "subjective",
+    label: "Subjective",
+    hint: "History, symptoms in the patient's words",
+  },
+  {
+    key: "objective",
+    label: "Objective",
+    hint: "Exam findings, vitals, investigation results",
+  },
+  {
+    key: "assessment",
+    label: "Assessment",
+    hint: "Diagnosis / clinical impression. Insert code adds an ICD-10 or SNOMED code",
+  },
+  {
+    key: "plan",
+    label: "Plan",
+    hint: "Treatment, investigations, follow-up",
+  },
 ];
 
+const AUTOSAVE_MS = 1500;
+
+const EMPTY: Record<SoapKey, string> = {
+  subjective: "",
+  objective: "",
+  assessment: "",
+  plan: "",
+};
+
+type SaveStatus = "idle" | "saving" | "saved";
+
+/**
+ * SOAP notes (Practice ClinicalNotesSection). Each note saves itself 1.5 s after
+ * typing stops, on leaving the box, and on leaving the screen, so nothing typed
+ * depends on remembering a button. Codes go into Assessment as plain text.
+ *
+ * `flushRef` lets Complete write what is pending first. A button tap does not take
+ * focus from a text box here, so without it the last words would reach the server
+ * after the consult had locked, and be refused.
+ */
 export function NotesSection({
   consultationId,
   locked = false,
+  flushRef,
 }: {
   consultationId: string;
   locked?: boolean;
+  flushRef?: RefObject<(() => Promise<boolean>) | null>;
 }) {
   const q = useSummary(consultationId);
   const save = useSaveSummary(consultationId);
-  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
-  const [form, setForm] = useState<Record<SoapKey, string>>({
-    subjective: "",
-    objective: "",
-    assessment: "",
-    plan: "",
-  });
-  const [codes, setCodes] = useState<DiagnosisCode[]>([]);
-  const [dxQuery, setDxQuery] = useState("");
-  const [dxOpen, setDxOpen] = useState(false);
-  const dx = useDiagnosisSearch(dxQuery, dxOpen);
+  const [form, setForm] = useState<Record<SoapKey, string>>(EMPTY);
+  const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  /** Saved codes just moved into the text, hidden until the server agrees. */
+  const [codesMoved, setCodesMoved] = useState(false);
 
+  const formRef = useRef(form);
+  /** The value each note last saved as (or arrived as). Decides what is pending. */
+  const savedRef = useRef<Record<SoapKey, string>>({ ...EMPTY });
+  const focusedRef = useRef<SoapKey | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Saves run one at a time, so two writes cannot land in the wrong order. */
+  const queueRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const inFlightRef = useRef(0);
+  /** Last caret in Assessment, so a code lands where the doctor was typing. */
+  const caretRef = useRef<{ start: number; end: number } | null>(null);
+
+  // Take the server's copy, except a note being typed in, one with unsaved changes,
+  // or while a save is running (the answer would be older than what is on screen).
   useEffect(() => {
-    if (q.data) {
-      setForm({
-        subjective: q.data.subjective ?? "",
-        objective: q.data.objective ?? "",
-        assessment: q.data.assessment ?? "",
-        plan: q.data.plan ?? "",
-      });
-      setCodes(q.data.diagnosisCodes ?? []);
+    const data = q.data;
+    if (!data || inFlightRef.current > 0) return;
+    const next = { ...formRef.current };
+    for (const key of SOAP_KEYS) {
+      if (focusedRef.current === key) continue;
+      if (formRef.current[key] !== savedRef.current[key]) continue;
+      const incoming = data[key] ?? "";
+      next[key] = incoming;
+      savedRef.current[key] = incoming;
     }
+    formRef.current = next;
+    setForm(next);
   }, [q.data]);
 
-  const set = (k: SoapKey, v: string) => {
-    setForm((f) => ({ ...f, [k]: v }));
-    setSaved(false);
-  };
-
-  const addCode = (c: DiagnosisCode) => {
-    if (locked) return;
-    if (codes.some((x) => x.code === c.code)) return;
-    setCodes([...codes, { ...c, isPrimary: codes.length === 0 }]);
-    setDxQuery("");
-    setSaved(false);
-  };
-  const removeCode = (code: string) => {
-    if (locked) return;
-    setCodes(codes.filter((c) => c.code !== code));
-    setSaved(false);
-  };
-
-  const onSave = async () => {
-    if (locked) return;
-    setError(null);
-    try {
-      await save.mutateAsync({ ...form, diagnosisCodes: codes });
-      setSaved(true);
-    } catch (e) {
-      setError(describeError(e));
+  const persist = (extra?: Partial<ConsultSummary>): Promise<boolean> => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
+    if (locked) return Promise.resolve(true);
+
+    const patch: Partial<Record<SoapKey, string>> = {};
+    const previous: Partial<Record<SoapKey, string>> = {};
+    for (const key of SOAP_KEYS) {
+      if (formRef.current[key] !== savedRef.current[key]) {
+        patch[key] = formRef.current[key];
+        previous[key] = savedRef.current[key];
+        savedRef.current[key] = formRef.current[key];
+      }
+    }
+    if (Object.keys(patch).length === 0 && !extra) return queueRef.current;
+
+    inFlightRef.current += 1;
+    setStatus("saving");
+    setError(null);
+    const run = queueRef.current.then(async () => {
+      try {
+        await save.mutateAsync({ ...patch, ...extra });
+        inFlightRef.current -= 1;
+        if (inFlightRef.current === 0) setStatus("saved");
+        return true;
+      } catch (e) {
+        // Mark it unsaved again, so the next save or Complete retries it.
+        for (const key of SOAP_KEYS) {
+          if (key in previous && savedRef.current[key] === patch[key]) {
+            savedRef.current[key] = previous[key] ?? "";
+          }
+        }
+        inFlightRef.current -= 1;
+        setStatus("idle");
+        setError(describeError(e));
+        return false;
+      }
+    });
+    queueRef.current = run;
+    return run;
+  };
+
+  // Handed out through refs so the cleanup below always calls the current one.
+  const persistRef = useRef(persist);
+  useEffect(() => {
+    persistRef.current = persist;
+    if (flushRef) flushRef.current = () => persist();
+  });
+
+  // Leaving the screen writes what is pending rather than dropping it.
+  useEffect(() => {
+    return () => {
+      void persistRef.current();
+    };
+  }, []);
+
+  const setField = (key: SoapKey, value: string) => {
+    const next = { ...formRef.current, [key]: value };
+    formRef.current = next;
+    setForm(next);
+  };
+
+  const onType = (key: SoapKey, value: string) => {
+    setField(key, value);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      void persist();
+    }, AUTOSAVE_MS);
+  };
+
+  const addToAssessment = (text: string): void => {
+    const current = formRef.current.assessment;
+    const sel = caretRef.current ?? {
+      start: current.length,
+      end: current.length,
+    };
+    const start = Math.min(sel.start, current.length);
+    const end = Math.min(Math.max(sel.end, start), current.length);
+    const { value, caret } = insertAsLines(current, text, start, end);
+    setField("assessment", value);
+    caretRef.current = { start: caret, end: caret };
+  };
+
+  const insertCode = (line: string) => {
+    addToAssessment(line);
+    void persist();
+  };
+
+  const savedCodes: DiagnosisCode[] = codesMoved
+    ? []
+    : (q.data?.diagnosisCodes ?? []);
+
+  /**
+   * Older consults hold codes in `diagnosisCodes`, which prints AHEAD of Assessment.
+   * Moving them is ONE request, so a printout neither shows them twice nor loses them.
+   */
+  const copySavedCodes = () => {
+    const lines = [...savedCodes]
+      .sort(
+        (a, b) => Number(Boolean(b.isPrimary)) - Number(Boolean(a.isPrimary))
+      )
+      .map((d) => formatCodeLine(d.code, d.system, d.label))
+      .filter(Boolean)
+      .join("\n");
+    if (lines) addToAssessment(lines);
+    setCodesMoved(true);
+    void persist({ diagnosisCodes: [] }).then((ok) => {
+      if (!ok) setCodesMoved(false);
+    });
   };
 
   return (
-    <View
-      className={`gap-4 rounded-2xl border bg-white p-5 ${
-        highlighted ? "border-brand" : "border-neutral-200"
-      }`}
-    >
-      <View className="flex-row items-center justify-between">
-        <Text className="text-lg font-semibold text-brand">
-          Clinical notes (SOAP)
-        </Text>
-        {q.data?.isAIGenerated ? (
-          <View className="rounded-full bg-violet-50 px-2.5 py-1">
-            <Text className="text-[11px] font-medium text-violet-700">
-              AI draft — review
-            </Text>
-          </View>
+    <View className="gap-4 rounded-2xl border border-neutral-200 bg-white p-5">
+      <View className="flex-row flex-wrap items-center justify-between gap-2">
+        <View className="min-w-0 flex-1">
+          <Text className="text-lg font-semibold text-brand">
+            Clinical notes (SOAP)
+          </Text>
+          <Text className="text-xs text-neutral-500">
+            Subjective / Objective / Assessment / Plan. Codes are inserted as
+            text you can edit.
+          </Text>
+        </View>
+        {status === "saving" ? (
+          <Text className="text-xs text-neutral-500">Saving…</Text>
+        ) : status === "saved" && !error ? (
+          <Text className="text-xs text-emerald-600">Saved</Text>
         ) : null}
       </View>
 
-      {SOAP.map((f) => (
-        <TextField
-          key={f.key}
-          label={f.label}
-          labelClassName="text-brand"
-          value={form[f.key]}
-          onChangeText={(v) => set(f.key, v)}
-          placeholder={f.placeholder}
-          multiline
-          editable={!locked}
-          style={{ minHeight: 72, textAlignVertical: "top" }}
-          onFocus={onFocus}
-          onBlur={onBlur}
-        />
-      ))}
-
-      <View className="gap-2">
-        <Text className="text-sm font-medium text-brand">
-          Diagnosis (ICD-10)
-        </Text>
-        {codes.length ? (
-          <View className="flex-row flex-wrap gap-2">
-            {codes.map((c) => (
-              <Pressable
-                key={c.code}
-                onPress={() => removeCode(c.code)}
-                disabled={locked}
-                className="flex-row items-center gap-1 rounded-full bg-brand-50 px-3 py-1"
-              >
-                <Text className="text-xs font-medium text-brand-700">
-                  {c.code}
-                  {c.isPrimary ? " ★" : ""}
-                </Text>
-                {locked ? null : (
-                  <Text className="text-xs text-brand-400">✕</Text>
-                )}
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        <TextField
-          value={dxQuery}
-          onChangeText={setDxQuery}
-          placeholder="Search ICD-10 code or term…"
-          autoCapitalize="none"
-          editable={!locked}
-          onFocus={(e) => {
-            if (locked) return;
-            setDxOpen(true);
-            onFocus(e);
-          }}
-          onBlur={(e) => {
-            // Delay close so a tap on a suggestion still registers
-            setTimeout(() => setDxOpen(false), 200);
-            onBlur(e);
-          }}
-        />
-        {dxOpen ? (
-          <View className="overflow-hidden rounded-xl border border-neutral-200">
-            {dx.isPending && !(dx.data ?? []).length ? (
-              <Text className="px-3 py-2 text-sm text-neutral-400">
-                {dxQuery.trim() ? "Searching…" : "Loading diagnoses…"}
+      <View className="flex-row flex-wrap gap-4">
+        {SOAP.map((f) => (
+          <View
+            key={f.key}
+            className="gap-1.5"
+            style={{ flexGrow: 1, flexBasis: 320, minWidth: 0 }}
+          >
+            <View
+              className="flex-row items-center justify-between gap-2"
+              style={{ minHeight: 36 }}
+            >
+              <Text className="text-sm font-semibold text-neutral-900">
+                {f.label}
               </Text>
-            ) : (dx.data ?? []).length === 0 ? (
-              <Text className="px-3 py-2 text-sm text-neutral-400">
-                {dxQuery.trim() ? "No matches." : "No diagnosis codes available."}
-              </Text>
-            ) : (
-              (dx.data ?? []).slice(0, 8).map((c) => (
-                <Pressable
-                  key={c.code}
-                  onPress={() => addCode(c)}
-                  disabled={locked}
-                  className="border-b border-neutral-100 px-3 py-2 active:bg-neutral-50"
-                >
-                  <Text className="text-sm font-medium text-neutral-900">
-                    {c.code}
-                  </Text>
-                  <Text className="text-xs text-neutral-500" numberOfLines={1}>
-                    {c.label}
-                  </Text>
-                </Pressable>
-              ))
-            )}
+              {f.key === "assessment" && !locked ? (
+                <CodeInsertPicker onInsert={insertCode} />
+              ) : null}
+            </View>
+            <TextField
+              value={form[f.key]}
+              onChangeText={(v) => onType(f.key, v)}
+              placeholder={f.hint}
+              multiline
+              editable={!locked}
+              accessibilityLabel={f.label}
+              style={{
+                minHeight: 88,
+                textAlignVertical: "top",
+                opacity: locked ? 0.7 : 1,
+              }}
+              onFocus={() => {
+                focusedRef.current = f.key;
+              }}
+              onBlur={() => {
+                if (focusedRef.current === f.key) focusedRef.current = null;
+                void persist();
+              }}
+              onSelectionChange={
+                f.key === "assessment"
+                  ? (e) => {
+                      caretRef.current = e.nativeEvent.selection;
+                    }
+                  : undefined
+              }
+            />
+
+            {f.key === "assessment" && savedCodes.length > 0 ? (
+              <View className="flex-row flex-wrap items-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2">
+                <Text className="text-xs text-neutral-500">Saved codes:</Text>
+                {savedCodes.map((d) => (
+                  <View
+                    key={`${d.system ?? ""}:${d.code}`}
+                    className="flex-row items-center gap-1 rounded bg-white px-1.5 py-0.5"
+                    style={{ maxWidth: 240 }}
+                  >
+                    <Text className="text-xs font-semibold text-neutral-900">
+                      {d.code}
+                    </Text>
+                    {d.label ? (
+                      <Text
+                        numberOfLines={1}
+                        className="shrink text-xs text-neutral-500"
+                      >
+                        {d.label}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+                {!locked ? (
+                  <Pressable
+                    onPress={copySavedCodes}
+                    style={{ flexShrink: 0 }}
+                    className="ml-auto h-9 flex-row items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 active:bg-neutral-50"
+                  >
+                    <Ionicons
+                      name="clipboard-outline"
+                      size={15}
+                      color="#111827"
+                    />
+                    <Text
+                      numberOfLines={1}
+                      className="text-sm font-medium text-neutral-900"
+                    >
+                      Copy to Assessment
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
           </View>
-        ) : null}
+        ))}
       </View>
 
       {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
-      {saved ? <Text className="text-sm text-emerald-600">Notes saved.</Text> : null}
-
-      <Button
-        label="Save notes"
-        onPress={onSave}
-        loading={save.isPending}
-        disabled={locked}
-      />
       {locked ? (
         <Text className="text-xs text-amber-700">{CONSULT_LOCKED_MESSAGE}</Text>
       ) : null}

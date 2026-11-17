@@ -59,14 +59,6 @@ export async function uploadFile(
   if (ctx.consultationId) parameters.consultationId = ctx.consultationId;
 
   const file = new File(fileUri);
-  console.log("[uploadFile] starting", {
-    url,
-    purpose,
-    fileName,
-    mimeType,
-    uri: fileUri,
-    parameters,
-  });
 
   const result = await file.upload(url, {
     httpMethod: "POST",
@@ -81,10 +73,6 @@ export async function uploadFile(
   });
 
   const data = result.body ? safeJson(result.body) : null;
-  console.log("[uploadFile] response", {
-    status: result.status,
-    body: data,
-  });
 
   if (result.status < 200 || result.status >= 300) {
     const message = extractMessage(data, result.status);

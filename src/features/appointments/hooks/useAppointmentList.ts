@@ -138,6 +138,14 @@ export function useOpenConsult() {
   });
 }
 
+/** Resolve the visit's consultation to record vitals on, without starting it. */
+export function useOpenConsultForVitals() {
+  return useMutation({
+    mutationFn: (appointmentId: string) =>
+      openConsultForAppointment(appointmentId, { intent: "vitals" }),
+  });
+}
+
 export function useCheckInAppointment() {
   const qc = useQueryClient();
 

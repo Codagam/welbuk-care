@@ -46,16 +46,17 @@ export function saveSummary(
 
 // ---- ICD-10 diagnosis search -------------------------------------------
 
-export async function searchDiagnosisCodes(
+/** One page of the ICD-10 list. An empty `q` returns the common codes. */
+export async function searchDiagnosisCodesPage(
   q: string,
-  signal?: AbortSignal
-): Promise<DiagnosisCode[]> {
-  const res = await api<{ codes: DiagnosisCode[] }>({
+  page: number,
+  pageSize: number
+): Promise<{ codes: DiagnosisCode[]; total: number }> {
+  const res = await api<{ codes?: DiagnosisCode[]; total?: number }>({
     path: "/api/consult/diagnosis-codes",
-    query: { q, limit: 20 },
-    signal,
+    query: { system: "icd10", q, page, pageSize },
   });
-  return res.codes ?? [];
+  return { codes: res.codes ?? [], total: res.total ?? 0 };
 }
 
 // ---- Prescriptions ------------------------------------------------------
@@ -134,38 +135,16 @@ export async function patchReportAttachmentUrls(
     ),
   };
 
-  console.log("[PATCH /api/consult/report/attachments] request body", body);
-
-  try {
-    const res = await api<{ attachmentUrls?: string[] }>({
-      path: "/api/consult/report/attachments",
-      method: "PATCH",
-      body,
-    });
-    console.log("[PATCH /api/consult/report/attachments] 200 response", res);
-    return {
-      attachmentUrls: Array.isArray(res?.attachmentUrls)
-        ? res.attachmentUrls
-        : body.attachmentUrls,
-    };
-  } catch (err) {
-    console.log("[PATCH /api/consult/report/attachments] failed", {
-      message: err instanceof Error ? err.message : String(err),
-      status:
-        err && typeof err === "object" && "status" in err
-          ? (err as { status: unknown }).status
-          : undefined,
-      code:
-        err && typeof err === "object" && "code" in err
-          ? (err as { code: unknown }).code
-          : undefined,
-      data:
-        err && typeof err === "object" && "data" in err
-          ? (err as { data: unknown }).data
-          : undefined,
-    });
-    throw err;
-  }
+  const res = await api<{ attachmentUrls?: string[] }>({
+    path: "/api/consult/report/attachments",
+    method: "PATCH",
+    body,
+  });
+  return {
+    attachmentUrls: Array.isArray(res?.attachmentUrls)
+      ? res.attachmentUrls
+      : body.attachmentUrls,
+  };
 }
 
 // ---- Lab reports --------------------------------------------------------

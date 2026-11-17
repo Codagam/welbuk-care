@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { AppModal, Button, TextField } from "@/ui";
@@ -17,6 +17,7 @@ import {
 } from "../utils";
 import { PageStaffButton } from "./PageStaffButton";
 import { PatientAvatar } from "./PatientAvatar";
+import { AppAlert } from "@/ui/AppAlert";
 
 export function StayIdentityCard({
   admission,
@@ -239,7 +240,7 @@ function AttenderSheet({
       });
       onClose();
     } catch (err) {
-      Alert.alert("Could not save attender", describeError(err));
+      AppAlert.alert("Could not save attender", describeError(err));
     }
   };
 

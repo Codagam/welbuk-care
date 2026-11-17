@@ -14,7 +14,9 @@ import { PatientRecordsCard } from "../components/PatientRecordsCard";
 import { ReportsPanel } from "../components/ReportsPanel";
 import { VitalsCard } from "../components/VitalsCard";
 import type { ConsultAppointment } from "../consultPatient";
-import { useAiEnable, usePatientHistory, useVitals } from "../hooks";
+import { useFacilityId } from "@/lib/auth/store";
+import { useAiFeatureGate } from "../ai/hooks";
+import { usePatientHistory, useVitals } from "../hooks";
 import type { PatientHeaderProps } from "../patientHeader";
 import type { DoctorNote, LabReportItem } from "../types";
 import { mergeDisplayVitals } from "../vitalsFormat";
@@ -34,9 +36,17 @@ export function PatientDetailsSection({
   /** When false, hide records / conversation / reports; vitals + identity stay. */
   showExtended = true,
   locked = false,
+  doctorId,
+  autoStartRecording = false,
+  onAutoStartRecordingHandled,
 }: {
   consultationId: string;
   patientId?: string;
+  /** The consult's doctor, for Live Conversation "Record Again". */
+  doctorId?: string | null;
+  /** Record Again opened this consult: start recording once consent is known. */
+  autoStartRecording?: boolean;
+  onAutoStartRecordingHandled?: () => void;
   header?: PatientHeaderProps | null;
   headerLoading?: boolean;
   headerError?: unknown;
@@ -49,8 +59,10 @@ export function PatientDetailsSection({
 
   const vitalsQ = useVitals(consultationId);
   const historyQ = usePatientHistory(patientId, consultationId);
-  const aiEnableQ = useAiEnable();
-  const aiEnabled = aiEnableQ.data === true;
+  // Same gate as Practice: site ai_enable AND Facility.aiEnable AND the
+  // consult.ai-consultation entitlement. Off while loading.
+  const facilityId = useFacilityId();
+  const aiEnabled = useAiFeatureGate(facilityId);
 
   const displayVitals = mergeDisplayVitals(
     vitalsQ.data,
@@ -147,11 +159,22 @@ export function PatientDetailsSection({
               medicalHistory={medicalHistory}
               medications={medications}
               allergies={allergies}
+              pastHistory={historyQ.data?.pastHistory}
             />
           )}
 
-          {aiEnabled ? (
-            <LiveConversationPanel consultationId={consultationId} />
+          {aiEnabled && facilityId ? (
+            <LiveConversationPanel
+              // Remount per consultation so nothing carries over (Record Again).
+              key={consultationId}
+              consultationId={consultationId}
+              patientId={patientId}
+              facilityId={facilityId}
+              doctorId={doctorId}
+              locked={locked}
+              autoStartRecording={autoStartRecording}
+              onAutoStartRecordingHandled={onAutoStartRecordingHandled}
+            />
           ) : null}
 
           <ReportsPanel
