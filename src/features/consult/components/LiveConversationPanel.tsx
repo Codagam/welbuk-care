@@ -33,7 +33,7 @@ import {
   SpeakadocRecorderSheet,
   type SpeakadocResultMeta,
 } from "../ai/SpeakadocRecorderSheet";
-import { useConversation } from "../hooks";
+import { detectedSymptomsKey, useConversation } from "../hooks";
 import type { ConversationMessage } from "../types";
 
 type Role = "doctor" | "patient";
@@ -549,6 +549,7 @@ export function LiveConversationPanel({
       setSummarised(true);
       // Saved server-side (summary, SOAP, Detected Symptoms): reload to show them.
       void qc.invalidateQueries({ queryKey: ["summary", consultationId] });
+      void qc.invalidateQueries({ queryKey: detectedSymptomsKey(consultationId) });
       void qc.invalidateQueries({ queryKey: ["consultation", consultationId] });
       return true;
     } catch (e) {

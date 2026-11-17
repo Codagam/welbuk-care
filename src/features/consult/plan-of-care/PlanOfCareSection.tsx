@@ -1,5 +1,6 @@
 ﻿﻿import { useRouter } from "expo-router";
 import {
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -32,7 +33,7 @@ import { FollowUpSheet } from "./components/FollowUpSheet";
 import { LabsCard } from "./components/LabsCard";
 import {
   ConversationSummaryCard,
-  DoctorNotesCard,
+  FinalSummaryCard,
 } from "./components/NotesCards";
 import { PrescriptionCard } from "./components/PrescriptionCard";
 import type { PickerAnchor } from "./components/regimen/pickerPlacement";
@@ -166,6 +167,15 @@ export function PlanOfCareSection({
   const [completeBusy, setCompleteBusy] = useState(false);
   const completeBusyRef = useRef(false);
 
+  /** The Final Summary box's current text (saved or not), for Complete. */
+  const finalDraftRef = useRef<{ consultationId: string; text: string } | null>(null);
+  const onFinalDraftChange = useCallback(
+    (text: string) => {
+      finalDraftRef.current = { consultationId, text };
+    },
+    [consultationId]
+  );
+
   const runComplete = async () => {
     if (completeBusyRef.current) return;
     Keyboard.dismiss();
@@ -207,6 +217,29 @@ export function PlanOfCareSection({
             "Could not save the clinical notes. Check the connection and try Complete again."
           );
           return;
+        }
+        // FINAL SUMMARY, as in Practice: saved as shown when it differs from
+        // what is saved (the doctor's unsaved edit, or the AI prefill). A
+        // failure stops Complete: once locked it cannot be added without
+        // reopening. After the notes flush, which writes the same record.
+        const savedFinal = summaryQ.data?.doctorNotes ?? "";
+        const draftFinal = finalDraftRef.current;
+        const finalText =
+          draftFinal && draftFinal.consultationId === consultationId
+            ? draftFinal.text
+            : savedFinal.trim()
+              ? savedFinal
+              : (summaryQ.data?.summary ?? "");
+        if (finalText.trim() && finalText !== savedFinal) {
+          try {
+            await saveSummary.mutateAsync({ doctorNotes: finalText });
+          } catch (e) {
+            setError(
+              describeError(e) ||
+                "Could not save the Final Summary. Try Complete again."
+            );
+            return;
+          }
         }
         // Complete sends every Orders tab that holds unsent lines and a
         // destination. A failed send stops Complete and names the tab: a
@@ -348,39 +381,41 @@ export function PlanOfCareSection({
         />
       </View>
 
-      {/* 3. Doctor Notes + Conversation Summary */}
+      {/* 3. Conversation Summary (AI, read-only) + Final Summary, as in Practice */}
       {tablet ? (
         <View style={styles.notesRow}>
           <View style={styles.notesCol}>
-            <DoctorNotesCard
-              consultationId={consultationId}
-              initialNotes={summaryQ.data?.doctorNotes}
+            <ConversationSummaryCard
+              summary={summaryQ.data?.summary}
+              isAIGenerated={!!summaryQ.data?.isAIGenerated}
               fill
-              locked={locked}
             />
           </View>
           <View style={styles.notesCol}>
-            <ConversationSummaryCard
+            <FinalSummaryCard
+              key={consultationId}
               consultationId={consultationId}
-              initialSummary={summaryQ.data?.summary}
-              isAIGenerated={!!summaryQ.data?.isAIGenerated}
+              savedNotes={summaryQ.data?.doctorNotes}
+              aiSummary={summaryQ.data?.summary}
               fill
               locked={locked}
+              onDraftChange={onFinalDraftChange}
             />
           </View>
         </View>
       ) : (
         <View style={styles.stackTight}>
-          <DoctorNotesCard
-            consultationId={consultationId}
-            initialNotes={summaryQ.data?.doctorNotes}
-            locked={locked}
-          />
           <ConversationSummaryCard
-            consultationId={consultationId}
-            initialSummary={summaryQ.data?.summary}
+            summary={summaryQ.data?.summary}
             isAIGenerated={!!summaryQ.data?.isAIGenerated}
+          />
+          <FinalSummaryCard
+            key={consultationId}
+            consultationId={consultationId}
+            savedNotes={summaryQ.data?.doctorNotes}
+            aiSummary={summaryQ.data?.summary}
             locked={locked}
+            onDraftChange={onFinalDraftChange}
           />
         </View>
       )}

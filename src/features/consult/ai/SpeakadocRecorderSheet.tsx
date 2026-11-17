@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AudioModule } from "expo-audio";
+import { useKeepAwake } from "expo-keep-awake";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import { AppAlert, AppModal, Button } from "@/ui";
@@ -78,6 +79,15 @@ function RecorderCard({
   patientId?: string;
   onResult: (data: unknown, meta: SpeakadocResultMeta) => void;
 }) {
+  /**
+   * The screen must not sleep while the widget records. A dimmed or locked
+   * tablet suspends the WebView, so the mic stops until someone wakes it and
+   * the transcript loses the middle of the conversation (start and end are
+   * there, because waking the screen to press Stop resumes it). Practice runs
+   * in a desktop browser, which never sleeps. Held only while this card is
+   * open: the component is mounted only while the recorder is visible.
+   */
+  useKeepAwake("speakadoc-recorder");
   const { width, height } = useWindowDimensions();
   const [widgetUrl, setWidgetUrl] = useState<string | null>(null);
   // Same value as widgetOriginRef, derived for render (refs are not read there).

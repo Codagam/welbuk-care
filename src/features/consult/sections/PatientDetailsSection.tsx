@@ -8,6 +8,7 @@ import {
 
 import { describeError } from "@/lib/api/errors";
 import { AppointmentIntakeCard } from "../components/AppointmentIntakeCard";
+import { DetectedSymptomsCard } from "../components/DetectedSymptomsCard";
 import { DocumentsCard } from "../components/DocumentsCard";
 import { LiveConversationPanel } from "../components/LiveConversationPanel";
 import { PatientRecordsCard } from "../components/PatientRecordsCard";
@@ -162,6 +163,9 @@ export function PatientDetailsSection({
               pastHistory={historyQ.data?.pastHistory}
             />
           )}
+
+          {/* Under Patient Records, as in Practice. */}
+          <DetectedSymptomsCard consultationId={consultationId} />
 
           {aiEnabled && facilityId ? (
             <LiveConversationPanel
