@@ -27,7 +27,7 @@ import { FacilityQrDialog, FacilityQrTriggerButton } from "./FacilityQrDialog";
 // }
 
 /**
- * Sticky header actions: Attend → Notifications (unread) → Facility QR.
+ * Sticky header actions: Notifications (unread) → Facility QR.
  * Hidden when no facility is selected. `showNotifications={false}` drops the
  * bell where the notifications panel is already docked on screen.
  */
@@ -46,7 +46,6 @@ export function HeaderActions({
   return (
     <>
       <View className="flex-row items-center gap-0.5">
-        <AttendIconButton light={light} />
         {showNotifications ? <NotificationQueue light={light} /> : null}
         <FacilityQrTriggerButton
           light={light}
