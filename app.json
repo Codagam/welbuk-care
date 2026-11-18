@@ -2,15 +2,12 @@
   "expo": {
     "name": "Welbuk Care",
     "slug": "welbuk-care",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "welbukcare",
     "userInterfaceStyle": "light",
-    "platforms": [
-      "ios",
-      "android"
-    ],
+    "platforms": ["ios", "android"],
     "androidStatusBar": {
       "backgroundColor": "#FD006A",
       "barStyle": "light-content",
