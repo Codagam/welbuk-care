@@ -1,6 +1,6 @@
 import { File, UploadType } from "expo-file-system";
 
-import { api, getAuthToken } from "@/lib/api/client";
+import { api, practiceHeaders } from "@/lib/api/client";
 import { ApiError, mapErrorCode } from "@/lib/api/errors";
 import { config } from "@/lib/config";
 
@@ -113,7 +113,6 @@ export async function uploadPatientDocument(params: {
     );
   }
 
-  const token = await getAuthToken();
   const url = `${config.practiceUrl}/api/documents/upload`;
   const file = new File(uri);
 
@@ -128,7 +127,7 @@ export async function uploadPatientDocument(params: {
     },
     headers: {
       Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(await practiceHeaders({ url })),
     },
   });
 
