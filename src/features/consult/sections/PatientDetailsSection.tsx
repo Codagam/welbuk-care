@@ -7,15 +7,16 @@ import {
 } from "react-native";
 
 import { describeError } from "@/lib/api/errors";
+import { useFacilityId } from "@/lib/auth/store";
+import { useAiFeatureGate } from "../ai/hooks";
 import { AppointmentIntakeCard } from "../components/AppointmentIntakeCard";
+import { DetectedSymptomsCard } from "../components/DetectedSymptomsCard";
 import { DocumentsCard } from "../components/DocumentsCard";
 import { LiveConversationPanel } from "../components/LiveConversationPanel";
 import { PatientRecordsCard } from "../components/PatientRecordsCard";
 import { ReportsPanel } from "../components/ReportsPanel";
 import { VitalsCard } from "../components/VitalsCard";
 import type { ConsultAppointment } from "../consultPatient";
-import { useFacilityId } from "@/lib/auth/store";
-import { useAiFeatureGate } from "../ai/hooks";
 import { usePatientHistory, useVitals } from "../hooks";
 import type { PatientHeaderProps } from "../patientHeader";
 import type { DoctorNote, LabReportItem } from "../types";
@@ -162,6 +163,9 @@ export function PatientDetailsSection({
               pastHistory={historyQ.data?.pastHistory}
             />
           )}
+
+          {/* Under Patient Records, as in Practice. */}
+          <DetectedSymptomsCard consultationId={consultationId} />
 
           {aiEnabled && facilityId ? (
             <LiveConversationPanel

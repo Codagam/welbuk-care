@@ -1,3 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -7,12 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
 
-import { AppAlert, AppModal, Button } from "@/ui";
-import { describeError, isConsultCompletedLock } from "@/lib/api/errors";
 import { createConsultation } from "@/lib/api/endpoints/consult";
 import {
   deleteConversationMessage,
@@ -21,9 +19,10 @@ import {
   saveSpeakadocResult,
   type ConversationHistoryItem,
 } from "@/lib/api/endpoints/speakadoc";
-import { consultOrdersQueryKey } from "../orders/hooks";
-import { readExtraction, sendMedicinesToDraft } from "../ai/aiMedicines";
+import { describeError, isConsultCompletedLock } from "@/lib/api/errors";
+import { AppAlert, AppModal, Button } from "@/ui";
 import { AiConsentSheet } from "../ai/AiConsentSheet";
+import { readExtraction, sendMedicinesToDraft } from "../ai/aiMedicines";
 import {
   useAiCaptureConsent,
   useConversationHistory,
@@ -33,7 +32,8 @@ import {
   SpeakadocRecorderSheet,
   type SpeakadocResultMeta,
 } from "../ai/SpeakadocRecorderSheet";
-import { useConversation } from "../hooks";
+import { detectedSymptomsKey, useConversation } from "../hooks";
+import { consultOrdersQueryKey } from "../orders/hooks";
 import type { ConversationMessage } from "../types";
 
 type Role = "doctor" | "patient";
@@ -549,6 +549,7 @@ export function LiveConversationPanel({
       setSummarised(true);
       // Saved server-side (summary, SOAP, Detected Symptoms): reload to show them.
       void qc.invalidateQueries({ queryKey: ["summary", consultationId] });
+      void qc.invalidateQueries({ queryKey: detectedSymptomsKey(consultationId) });
       void qc.invalidateQueries({ queryKey: ["consultation", consultationId] });
       return true;
     } catch (e) {

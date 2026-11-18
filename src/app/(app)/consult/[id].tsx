@@ -12,14 +12,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
 
-import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
 import { ConsultLockBanner } from "@/features/consult/components/ConsultLockBanner";
+import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
 import { SectionNavigator } from "@/features/consult/components/SectionNavigator";
+import { OrdersReferralsSection } from "@/features/consult/orders/OrdersReferralsSection";
+import { calculateAge } from "@/features/consult/patientHeader";
 import { PlanOfCareSection } from "@/features/consult/plan-of-care/PlanOfCareSection";
 import {
   CONSULT_SECTION_IDS,
@@ -27,7 +30,6 @@ import {
 } from "@/features/consult/sectionIds";
 import { NotesSection } from "@/features/consult/sections/NotesSection";
 import { PatientDetailsSection } from "@/features/consult/sections/PatientDetailsSection";
-import { calculateAge } from "@/features/consult/patientHeader";
 import {
   resolveConsultSpecialty,
   type SpecialtyDef,
@@ -36,9 +38,12 @@ import { useConsultPatientHeader } from "@/features/consult/useConsultPatientHea
 import { DentalConsultProvider } from "@/features/dental/DentalConsultContext";
 import { DentalDiagnosisPanel } from "@/features/dental/sections/DentalDiagnosisPanel";
 import { EyeSection } from "@/features/eye/sections/EyeSection";
-import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { NotificationQueue } from "@/features/notifications/NotificationQueue";
-import { Screen, TopBar } from "@/ui";
+import { useWellChild } from "@/features/well-child/hooks";
+import { isPediatricSpecialty } from "@/features/well-child/pediatric";
+import { WellChildSection } from "@/features/well-child/WellChildSection";
+import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
+import { Button, Screen, TopBar } from "@/ui";
 
 const SCROLL_MARGIN = 12;
 /** Must match ScrollView contentContainerStyle.paddingTop */
@@ -50,7 +55,10 @@ const ACTIVE_LINE = 80;
 const BOTTOM_SNAP = 48;
 
 /** Practice-aligned nav rail — audio lives inside Patient details (Live Conversation). */
-function buildNavItems(chartKind: SpecialtyDef["chartKind"]): SectionNavItem[] {
+function buildNavItems(
+  chartKind: SpecialtyDef["chartKind"],
+  showWellChild: boolean
+): SectionNavItem[] {
   const items: SectionNavItem[] = [
     {
       id: CONSULT_SECTION_IDS.consultation,
@@ -68,10 +76,12 @@ function buildNavItems(chartKind: SpecialtyDef["chartKind"]): SectionNavItem[] {
       label: "Diagnosis Panel",
     });
   }
-  items.push(
-    { id: CONSULT_SECTION_IDS.clinical, label: "Clinical notes" },
-    { id: CONSULT_SECTION_IDS.plan, label: "Plan of care" }
-  );
+  items.push({ id: CONSULT_SECTION_IDS.clinical, label: "Clinical notes" });
+  if (showWellChild) {
+    items.push({ id: CONSULT_SECTION_IDS.wellChild, label: "Well-child check" });
+  }
+  items.push({ id: CONSULT_SECTION_IDS.plan, label: "Plan of care" });
+  items.push({ id: CONSULT_SECTION_IDS.orders, label: "Orders & referrals" });
   return items;
 }
 
@@ -132,7 +142,26 @@ export default function ConsultScreen() {
     consultation?.patientId ||
     undefined;
 
-  const navItems = useMemo(() => buildNavItems(chartKind), [chartKind]);
+  /**
+   * The well-child check is a SECTION, not a Diagnosis Panel, as in Practice:
+   * shown when the doctor's specialty is a children's one, when this consult
+   * already holds well-child data, or when the clinician adds it. A minor's
+   * consult offers "Add well-child check" otherwise.
+   */
+  const wellChildQ = useWellChild(consultation ? id : null);
+  const [wellChildAddedFor, setWellChildAddedFor] = useState<string | null>(null);
+  const patientIsMinor = patientAgeYears !== null && patientAgeYears < 18;
+  const showWellChild =
+    !!consultation &&
+    (isPediatricSpecialty(consultDoctor?.specialization) ||
+      wellChildQ.data?.hasData === true ||
+      wellChildAddedFor === id);
+  const offerWellChild = !!consultation && !showWellChild && patientIsMinor && !isLocked;
+
+  const navItems = useMemo(
+    () => buildNavItems(chartKind, showWellChild),
+    [chartKind, showWellChild]
+  );
 
   // Record Again lands here with autoRecord=1: record once, for this consult only.
   // Derived (not copied into state) so a reused screen with a new id still works.
@@ -341,10 +370,33 @@ export default function ConsultScreen() {
         />
       </ConsultSectionCard>
 
+      {showWellChild ? (
+        <ConsultSectionCard
+          id={CONSULT_SECTION_IDS.wellChild}
+          title="Well-child check"
+          subtitle="Growth measurements and hearing / vision / development screening"
+          onLayoutY={onSectionLayout}
+        >
+          <WellChildSection consultationId={id} locked={isLocked} embedded />
+        </ConsultSectionCard>
+      ) : offerWellChild ? (
+        <View className="flex-row flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-neutral-300 bg-white px-4 py-3">
+          <Text className="min-w-0 flex-1 text-sm text-neutral-500">
+            Seeing a child? Record growth and hearing / vision screening on their record.
+          </Text>
+          <Button
+            label="Add well-child check"
+            size="md"
+            variant="outline"
+            onPress={() => setWellChildAddedFor(id)}
+          />
+        </View>
+      ) : null}
+
       <ConsultSectionCard
         id={CONSULT_SECTION_IDS.plan}
         title="Plan of care"
-        subtitle="Prescription, labs, notes, and follow-up"
+        subtitle="Prescription, notes, and follow-up"
         onLayoutY={onSectionLayout}
       >
         <PlanOfCareSection
@@ -360,6 +412,19 @@ export default function ConsultScreen() {
           onStickyFooter={setStickyFooter}
           locked={isLocked}
           flushNotes={() => notesFlushRef.current?.() ?? Promise.resolve(true)}
+        />
+      </ConsultSectionCard>
+
+      <ConsultSectionCard
+        id={CONSULT_SECTION_IDS.orders}
+        title="Orders & referrals"
+        subtitle="Lab tests, scans and referrals for this visit"
+        onLayoutY={onSectionLayout}
+      >
+        <OrdersReferralsSection
+          consultationId={id}
+          patientId={resolvedPatientId}
+          patientName={header?.name}
         />
       </ConsultSectionCard>
     </View>
