@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 
 import { DOSE_SLOT_PICKS, normalizeDoseSlotInput } from "../../sig";
 
@@ -111,15 +111,16 @@ export function DoseCell({
           className={`min-w-0 flex-1 rounded-lg border bg-white px-2 text-sm text-neutral-900 ${
             invalid ? "border-red-400" : "border-neutral-300"
           }`}
-          style={{ height: 44, paddingVertical: 0 }}
+          style={{ height: 36, paddingVertical: 0 }}
         />
         <Pressable
           onPress={onToggleText}
           hitSlop={6}
           accessibilityLabel="Use morning, afternoon, night dose"
-          className="h-11 w-8 items-center justify-center rounded-lg active:bg-neutral-100"
+          className="items-center justify-center rounded-lg active:bg-neutral-100"
+          style={{ width: 28, height: 36 }}
         >
-          <Ionicons name="grid-outline" size={16} color="#6b7280" />
+          <Feather name="grid" size={16} color="#6b7280" />
         </Pressable>
       </View>
     );
@@ -157,23 +158,24 @@ export function DoseCell({
               // Let a quick pick land before the row of picks goes away.
               setTimeout(() => setFocused((f) => (f === i ? null : f)), 150);
             }}
-            className={`rounded-lg border bg-white text-center text-base font-semibold text-neutral-900 ${
+            className={`rounded-lg border bg-white text-center text-sm font-semibold text-neutral-900 ${
               focused === i
                 ? "border-brand"
                 : invalid && !slots.some(Boolean)
                   ? "border-red-400"
                   : "border-neutral-300"
             }`}
-            style={{ width: 44, height: 44, padding: 0 }}
+            style={{ width: 36, height: 36, padding: 0 }}
           />
         ))}
         <Pressable
           onPress={onToggleText}
           hitSlop={6}
           accessibilityLabel="Write the dose as text"
-          className="h-11 w-8 items-center justify-center rounded-lg active:bg-neutral-100"
+          className="items-center justify-center rounded-lg active:bg-neutral-100"
+          style={{ width: 28, height: 36 }}
         >
-          <Ionicons name="text-outline" size={16} color="#6b7280" />
+          <Feather name="type" size={16} color="#6b7280" />
         </Pressable>
       </View>
 

@@ -12,6 +12,7 @@ export {
   useCheckInAppointment,
   useLateArrivalAppointment,
   useOpenConsult,
+  useOpenConsultForVitals,
   useReadyForNext,
 } from "./hooks/useAppointmentList";
 export {

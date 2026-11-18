@@ -1,5 +1,6 @@
 ﻿﻿import { useRouter } from "expo-router";
 import {
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -7,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Keyboard,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -28,10 +30,9 @@ import { CONSULT_LOCKED_COMPLETE_REASON } from "@/features/consult/consultLock";
 import { CompleteBar } from "./components/CompleteBar";
 import { CompleteFooter } from "./components/CompleteFooter";
 import { FollowUpSheet } from "./components/FollowUpSheet";
-import { LabsCard } from "./components/LabsCard";
 import {
   ConversationSummaryCard,
-  DoctorNotesCard,
+  FinalSummaryCard,
 } from "./components/NotesCards";
 import { PrescriptionCard } from "./components/PrescriptionCard";
 import type { PickerAnchor } from "./components/regimen/pickerPlacement";
@@ -43,11 +44,7 @@ import {
 } from "./hooks/usePrescriptionDraft";
 import type { AllergyRecordLike } from "./types";
 import { AppAlert } from "@/ui/AppAlert";
-import { ConsultOrdersCard } from "@/features/consult/orders/ConsultOrdersCard";
-import {
-  useConsultReferrals,
-  useInvalidateConsultOrders,
-} from "@/features/consult/orders/hooks";
+import { useInvalidateConsultOrders } from "@/features/consult/orders/hooks";
 import { sendAllConsultOrders } from "@/lib/api/endpoints/orders";
 
 function normalizeAllergies(
@@ -112,7 +109,6 @@ export function PlanOfCareSection({
     patientId,
     consultationId
   );
-  const referralsQ = useConsultReferrals(facilityId, patientId);
   const invalidateOrders = useInvalidateConsultOrders(consultationId);
   const saveSummary = useSaveSummary(consultationId);
 
@@ -137,12 +133,8 @@ export function PlanOfCareSection({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const labReports = historyQ.data?.labReports ?? [];
   const followUpLine = summaryQ.data?.followUp ?? null;
 
-  const patientLine =
-    patientName ||
-    (patientId ? `Patient ${patientId.slice(-6)}` : "Patient");
 
   const goToQueueAfterComplete = (detail?: string | null) => {
     const message = detail?.trim()
@@ -156,7 +148,27 @@ export function PlanOfCareSection({
     ]);
   };
 
+  /**
+   * Busy from the first tap. Complete flushes the dental chart and the notes
+   * and sends orders BEFORE the complete call, and the spinner used to follow
+   * only that last call, so the button looked dead for seconds and invited a
+   * second tap.
+   */
+  const [completeBusy, setCompleteBusy] = useState(false);
+  const completeBusyRef = useRef(false);
+
+  /** The Final Summary box's current text (saved or not), for Complete. */
+  const finalDraftRef = useRef<{ consultationId: string; text: string } | null>(null);
+  const onFinalDraftChange = useCallback(
+    (text: string) => {
+      finalDraftRef.current = { consultationId, text };
+    },
+    [consultationId]
+  );
+
   const runComplete = async () => {
+    if (completeBusyRef.current) return;
+    Keyboard.dismiss();
     setError(null);
     setDone(null);
     if (allergy.allergyPrintBlocked) {
@@ -172,24 +184,52 @@ export function PlanOfCareSection({
     );
 
     const proceed = async () => {
+      if (completeBusyRef.current) return;
+      completeBusyRef.current = true;
+      setCompleteBusy(true);
       try {
         if (locked) {
           setError(CONSULT_LOCKED_COMPLETE_REASON);
           return;
         }
+        // The two flushes write different records, so they run together.
         // Flush would 409 on a completed consult — skip when already locked.
-        if (flushDental && !locked) {
-          const ok = await flushDental();
-          if (!ok) {
-            setError("Could not flush dental chart/plan before complete.");
-            return;
-          }
+        const [dentalOk, notesOk] = await Promise.all([
+          flushDental && !locked ? flushDental() : Promise.resolve(true),
+          flushNotes ? flushNotes() : Promise.resolve(true),
+        ]);
+        if (!dentalOk) {
+          setError("Could not flush dental chart/plan before complete.");
+          return;
         }
-        if (flushNotes && !(await flushNotes())) {
+        if (!notesOk) {
           setError(
             "Could not save the clinical notes. Check the connection and try Complete again."
           );
           return;
+        }
+        // FINAL SUMMARY, as in Practice: saved as shown when it differs from
+        // what is saved (the doctor's unsaved edit, or the AI prefill). A
+        // failure stops Complete: once locked it cannot be added without
+        // reopening. After the notes flush, which writes the same record.
+        const savedFinal = summaryQ.data?.doctorNotes ?? "";
+        const draftFinal = finalDraftRef.current;
+        const finalText =
+          draftFinal && draftFinal.consultationId === consultationId
+            ? draftFinal.text
+            : savedFinal.trim()
+              ? savedFinal
+              : (summaryQ.data?.summary ?? "");
+        if (finalText.trim() && finalText !== savedFinal) {
+          try {
+            await saveSummary.mutateAsync({ doctorNotes: finalText });
+          } catch (e) {
+            setError(
+              describeError(e) ||
+                "Could not save the Final Summary. Try Complete again."
+            );
+            return;
+          }
         }
         // Complete sends every Orders tab that holds unsent lines and a
         // destination. A failed send stops Complete and names the tab: a
@@ -225,6 +265,9 @@ export function PlanOfCareSection({
         goToQueueAfterComplete(doneLabel);
       } catch (e) {
         setError(describeError(e));
+      } finally {
+        completeBusyRef.current = false;
+        setCompleteBusy(false);
       }
     };
 
@@ -257,7 +300,7 @@ export function PlanOfCareSection({
     onStickyFooter(
       <CompleteFooter
         onComplete={() => void runCompleteRef.current()}
-        completing={complete.isPending}
+        completing={completeBusy || complete.isPending}
         completeDisabled={completeDisabled}
         completeDisabledReason={completeDisabledReason}
         error={error}
@@ -267,6 +310,7 @@ export function PlanOfCareSection({
     return () => onStickyFooter(null);
   }, [
     onStickyFooter,
+    completeBusy,
     complete.isPending,
     completeDisabled,
     completeDisabledReason,
@@ -283,6 +327,15 @@ export function PlanOfCareSection({
           setFollowUpAnchor(anchor);
           setFollowUpOpen(true);
         }}
+        onPrintPrescription={
+          patientId
+            ? () =>
+                router.push({
+                  pathname: "/patients/[id]/report",
+                  params: { id: patientId, consultationId, appointmentId: appointmentId ?? "" },
+                })
+            : undefined
+        }
         locked={locked}
       />
 
@@ -310,56 +363,44 @@ export function PlanOfCareSection({
         />
       </View>
 
-      {/* 2. Labs — full width, never shares a row with notes */}
-      <View style={styles.block}>
-        <LabsCard
-          labReports={labReports}
-          patientName={patientName || patientLine}
-          referrals={referralsQ.data ?? []}
-          ordersPanel={
-            facilityId ? (
-              <ConsultOrdersCard
-                consultationId={consultationId}
-                facilityId={facilityId}
-              />
-            ) : undefined
-          }
-        />
-      </View>
+      {/* Labs, orders and referrals moved to their own section after this one
+          (OrdersReferralsSection), as in Practice. */}
 
-      {/* 3. Doctor Notes + Conversation Summary */}
+      {/* 3. Conversation Summary (AI, read-only) + Final Summary, as in Practice */}
       {tablet ? (
         <View style={styles.notesRow}>
           <View style={styles.notesCol}>
-            <DoctorNotesCard
-              consultationId={consultationId}
-              initialNotes={summaryQ.data?.doctorNotes}
+            <ConversationSummaryCard
+              summary={summaryQ.data?.summary}
+              isAIGenerated={!!summaryQ.data?.isAIGenerated}
               fill
-              locked={locked}
             />
           </View>
           <View style={styles.notesCol}>
-            <ConversationSummaryCard
+            <FinalSummaryCard
+              key={consultationId}
               consultationId={consultationId}
-              initialSummary={summaryQ.data?.summary}
-              isAIGenerated={!!summaryQ.data?.isAIGenerated}
+              savedNotes={summaryQ.data?.doctorNotes}
+              aiSummary={summaryQ.data?.summary}
               fill
               locked={locked}
+              onDraftChange={onFinalDraftChange}
             />
           </View>
         </View>
       ) : (
         <View style={styles.stackTight}>
-          <DoctorNotesCard
-            consultationId={consultationId}
-            initialNotes={summaryQ.data?.doctorNotes}
-            locked={locked}
-          />
           <ConversationSummaryCard
-            consultationId={consultationId}
-            initialSummary={summaryQ.data?.summary}
+            summary={summaryQ.data?.summary}
             isAIGenerated={!!summaryQ.data?.isAIGenerated}
+          />
+          <FinalSummaryCard
+            key={consultationId}
+            consultationId={consultationId}
+            savedNotes={summaryQ.data?.doctorNotes}
+            aiSummary={summaryQ.data?.summary}
             locked={locked}
+            onDraftChange={onFinalDraftChange}
           />
         </View>
       )}

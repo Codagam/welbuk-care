@@ -1,6 +1,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -8,14 +10,13 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Button } from "@/ui";
+import { AppModal, Button } from "@/ui";
 
 import {
   FOOD_LABEL,
   formatShortDate,
   isTextDose,
   lineMatchesRegimen,
-  regimenStatus,
   rowErrors,
   type RegimenView,
   type RowErrors,
@@ -29,10 +30,35 @@ import type { PlanPrescription } from "../../types";
 import { DoseCell } from "./DoseCell";
 import { DurationInput } from "./DurationInput";
 
-/** Below this the row no longer fits on one line, and folds as it does on the web. */
-const ONE_LINE_MIN_WIDTH = 820;
 
-const COL = { dose: 176, food: 108, duration: 136, regimen: 96, remove: 36 };
+// Column widths match Practice prescription-grid.tsx COLS exactly
+// (9.25rem / 6rem / 9rem / minmax(7rem,0.8fr) / 6.5rem / 2rem at 16px). The
+// medicine and the note share the spare width 1.4 : 0.8, as there. `note` is
+// the fixed width used where the row folds (portrait) and in the read-only view.
+const COL = { dose: 148, food: 96, duration: 144, note: 160, noteMin: 112, regimen: 104, remove: 32 };
+const FLEX = { medicine: 1.4, note: 0.8 };
+const MEDICINE_MIN = 144;
+
+/**
+ * Every input box in a row is this tall: the dose slots, food, duration, note
+ * and qty, in landscape and in portrait.
+ */
+// Heights are set in pixels, never with `h-9`: NativeWind's rem is 14px, so
+// `h-9` is 31.5px while the dose slots (styled 36) stay 36, and the row's
+// boxes came out at two different heights.
+const BOX_HEIGHT = 36;
+/** The Edit button alone is compact, as in Practice (h-7). */
+const EDIT_HEIGHT = 28;
+
+/**
+ * Below this the row no longer fits on one line (landscape) and folds onto two
+ * (portrait): the fixed columns, the gaps between them, the row padding and a
+ * medicine name of at least 160. Derived, so a column change cannot leave the
+ * medicine squeezed to nothing just above the break.
+ */
+const ONE_LINE_MIN_WIDTH =
+  COL.dose + COL.food + COL.duration + COL.noteMin + COL.regimen + COL.remove +
+  6 * 8 + 24 + 4 + MEDICINE_MIN;
 
 export type Notice = { tone: "success" | "error"; text: string };
 
@@ -45,17 +71,17 @@ export type GridProps = {
   picker?: ReactNode;
   defaultUnit: DurationUnit;
   dirty: Set<string>;
-  regimenChoice: Record<string, boolean>;
   showErrors: boolean;
   saving: boolean;
   adding: number;
   notice: Notice | null;
   onChangeLine: (id: string, patch: Partial<PlanPrescription>) => void;
   onRemove: (id: string) => void;
-  onRegimenChoice: (id: string, on: boolean) => void;
   onApplyDuration: (value: number, unit: DurationUnit) => void;
   onSave: () => void;
   onDiscard: () => void;
+  /** Opens the regimen dialog for one row. */
+  onEditRegimen?: (id: string) => void;
 };
 
 function FoodCell({
@@ -67,8 +93,8 @@ function FoodCell({
 }) {
   return (
     <View
-      className="h-11 flex-row gap-0.5 rounded-lg border border-neutral-300 bg-white p-0.5"
-      style={{ width: COL.food }}
+      className="flex-row gap-0.5 rounded-lg border border-neutral-300 bg-white p-0.5"
+      style={{ width: COL.food, height: BOX_HEIGHT }}
     >
       {(["BF", "AF"] as const).map((code) => {
         const active = value === code;
@@ -96,6 +122,130 @@ function FoodCell({
   );
 }
 
+/**
+ * The line's note as a compact box: the first words plus an info icon. Tapping
+ * opens a dialog with the whole note, editable while the consult is open and
+ * read-only once it is completed (Practice prescription-grid.tsx NoteCell,
+ * 2026-11-17). A full-width input showed only the start of a note that prints in
+ * full, so the doctor could not read back what the patient would get.
+ */
+function NoteCell({
+  medicineName,
+  value,
+  readOnly,
+  onChange,
+}: {
+  medicineName: string;
+  value: string;
+  readOnly?: boolean;
+  onChange?: (note: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const shown = value.trim();
+  const openDialog = () => {
+    setDraft(value);
+    setOpen(true);
+  };
+  const commit = () => {
+    onChange?.(draft.trim() ? draft : "");
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <Pressable
+        onPress={openDialog}
+        accessibilityRole="button"
+        accessibilityLabel={`${readOnly ? "View" : shown ? "Edit" : "Add"} note for ${medicineName}`}
+        className="flex-row items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-2 active:bg-neutral-50"
+        style={{ height: BOX_HEIGHT }}
+      >
+        <Ionicons name="information-circle-outline" size={16} color="#FD006A" />
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          className={`min-w-0 flex-1 text-sm ${shown ? "text-neutral-900" : "text-neutral-400"}`}
+        >
+          {shown || (readOnly ? "—" : "Add note")}
+        </Text>
+      </Pressable>
+      {open ? (
+        <AppModal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOpen(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            className="flex-1 items-center justify-center bg-black/40 px-4"
+          >
+            <View
+              className="w-full gap-4 rounded-2xl bg-white p-6"
+              style={{ maxWidth: 480 }}
+            >
+              <View className="flex-row items-start gap-3">
+                <View className="min-w-0 flex-1 gap-1">
+                  <Text className="text-lg font-semibold text-neutral-900">
+                    Note · {medicineName}
+                  </Text>
+                  <Text className="text-sm text-neutral-500">
+                    {readOnly
+                      ? "This consultation is completed. Reopen it to change the note."
+                      : "Printed under the medicine on the prescription."}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setOpen(false)}
+                  hitSlop={8}
+                  accessibilityLabel="Close"
+                  className="p-1"
+                >
+                  <Ionicons name="close" size={20} color="#6b7280" />
+                </Pressable>
+              </View>
+              {readOnly ? (
+                <Text className="min-h-16 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900">
+                  {shown || "No note."}
+                </Text>
+              ) : (
+                <TextInput
+                  value={draft}
+                  onChangeText={setDraft}
+                  maxLength={500}
+                  multiline
+                  autoFocus
+                  placeholder="e.g. 1½ tab in the morning, crush in milk"
+                  placeholderTextColor="#9ca3af"
+                  accessibilityLabel={`Note for ${medicineName}`}
+                  className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
+                  style={{ minHeight: 96, textAlignVertical: "top" }}
+                />
+              )}
+              <View className="flex-row justify-end gap-2">
+                {readOnly ? (
+                  <Button label="Close" size="md" onPress={() => setOpen(false)} />
+                ) : (
+                  <>
+                    <Button
+                      label="Cancel"
+                      variant="ghost"
+                      size="md"
+                      onPress={() => setOpen(false)}
+                    />
+                    <Button label="Save note" size="md" onPress={commit} />
+                  </>
+                )}
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </AppModal>
+      ) : null}
+    </>
+  );
+}
+
 function ReadOnlyTable({ prescriptions }: { prescriptions: PlanPrescription[] }) {
   return (
     <View className="overflow-hidden rounded-xl border border-neutral-200">
@@ -117,20 +267,21 @@ function ReadOnlyTable({ prescriptions }: { prescriptions: PlanPrescription[] })
             >
               {p.name}
             </Text>
-            <View style={{ flexGrow: 1, flexBasis: 120 }}>
-              <Text className="text-sm font-semibold text-neutral-900">
-                {p.dosePattern}
-              </Text>
-              {p.doseNote?.trim() ? (
-                <Text className="text-xs text-neutral-500">{p.doseNote}</Text>
-              ) : null}
-            </View>
+            <Text
+              className="text-sm font-semibold text-neutral-900"
+              style={{ flexGrow: 1, flexBasis: 120 }}
+            >
+              {p.dosePattern}
+            </Text>
             <Text className="text-sm text-neutral-700" style={{ width: 96 }}>
               {FOOD_LABEL[p.foodTiming] ?? p.foodTiming}
             </Text>
             <Text className="text-sm text-neutral-700" style={{ width: 96 }}>
               {formatDuration(p)}
             </Text>
+            <View style={{ width: COL.note }}>
+              <NoteCell medicineName={p.name} value={p.doseNote ?? ""} readOnly />
+            </View>
           </View>
         ))
       )}
@@ -140,9 +291,9 @@ function ReadOnlyTable({ prescriptions }: { prescriptions: PlanPrescription[] })
 
 /**
  * The prescription as an editable table. Every cell is a direct input, edits apply
- * immediately so nothing typed is lost, and one Save checks the changed rows and
- * applies their regimen checkboxes. "Next" on the keyboard moves to the same cell
- * on the next row, so a column can be filled top to bottom.
+ * immediately so nothing typed is lost, and one Save checks the changed rows. A
+ * regimen is saved only from the Edit dialog. "Next" on the keyboard moves to the
+ * same cell on the next row, so a column can be filled top to bottom.
  */
 export function PrescriptionGrid(props: GridProps) {
   const {
@@ -150,21 +301,19 @@ export function PrescriptionGrid(props: GridProps) {
     regimenByDrug,
     readOnly,
     childAge,
-    canSave,
     picker,
     defaultUnit,
     dirty,
-    regimenChoice,
     showErrors,
     saving,
     adding,
     notice,
     onChangeLine,
     onRemove,
-    onRegimenChoice,
     onApplyDuration,
     onSave,
     onDiscard,
+    onEditRegimen,
   } = props;
   const [allValue, setAllValue] = useState<number | null>(null);
   const [allUnit, setAllUnit] = useState<DurationUnit | null>(null);
@@ -207,7 +356,7 @@ export function PrescriptionGrid(props: GridProps) {
             <Text
               numberOfLines={1}
               className="text-xs font-medium text-neutral-500"
-              style={{ lineHeight: 44 }}
+              style={{ lineHeight: 36 }}
             >
               Set duration for all
             </Text>
@@ -231,7 +380,8 @@ export function PrescriptionGrid(props: GridProps) {
               onPress={() => {
                 if (allValue && allUnit) onApplyDuration(allValue, allUnit);
               }}
-              className="h-11 justify-center py-0"
+              className="justify-center py-0"
+              style={{ height: BOX_HEIGHT }}
             />
           </View>
         ) : null}
@@ -266,7 +416,10 @@ export function PrescriptionGrid(props: GridProps) {
         <>
           {oneLine ? (
             <View className="flex-row gap-2 border-b border-neutral-200 bg-neutral-100 px-3 py-2">
-              <Text className="min-w-0 flex-1 text-xs font-semibold text-neutral-500">
+              <Text
+                className="min-w-0 text-xs font-semibold text-neutral-500"
+                style={{ flex: FLEX.medicine }}
+              >
                 Medicine
               </Text>
               <Text
@@ -289,7 +442,7 @@ export function PrescriptionGrid(props: GridProps) {
               </Text>
               <Text
                 className="min-w-0 text-xs font-semibold text-neutral-500"
-                style={{ flex: 1.2 }}
+                style={{ flex: FLEX.note, minWidth: COL.noteMin }}
               >
                 Note
               </Text>
@@ -305,7 +458,6 @@ export function PrescriptionGrid(props: GridProps) {
 
           {prescriptions.map((p, row) => {
             const regimen = p.drugId ? regimenByDrug[p.drugId] : undefined;
-            const status = regimenStatus(p, regimen, canSave);
             const textMode =
               textOverride[p.id] ?? isTextDose(p.dosePattern, p.dosageForm);
             const isDirty = dirty.has(p.id);
@@ -322,7 +474,6 @@ export function PrescriptionGrid(props: GridProps) {
                   : p.fillSource === "new"
                     ? "new"
                     : null;
-            const checked = regimenChoice[p.id] ?? status === "new";
 
             const medicine = (
               <View>
@@ -349,11 +500,6 @@ export function PrescriptionGrid(props: GridProps) {
                         check dose
                       </Text>
                     </View>
-                  ) : null}
-                  {status === "update" && regimen ? (
-                    <Text className="text-[11px] text-amber-700">
-                      edited for this patient
-                    </Text>
                   ) : null}
                 </View>
               </View>
@@ -420,24 +566,15 @@ export function PrescriptionGrid(props: GridProps) {
             );
 
             const note = (
-              <TextInput
-                ref={cellRef(`${row}:note`)}
+              <NoteCell
+                medicineName={p.name}
                 value={p.doseNote ?? ""}
-                maxLength={500}
-                placeholder="Note"
-                placeholderTextColor="#9ca3af"
-                returnKeyType="next"
-                submitBehavior="submit"
-                onSubmitEditing={focusNextRow(row, "note")}
-                accessibilityLabel={`Note for ${p.name}`}
-                onChangeText={(doseNote) => onChangeLine(p.id, { doseNote })}
-                className="rounded-lg border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                style={{ height: 44, paddingVertical: 0 }}
+                onChange={(doseNote) => onChangeLine(p.id, { doseNote })}
               />
             );
 
             const regimenQty = (
-              <View className="gap-1" style={{ width: COL.regimen }}>
+              <View className="gap-1" style={{ width: COL.regimen, minHeight: BOX_HEIGHT, justifyContent: "center" }}>
                 {textMode ? (
                   <View className="flex-row items-center gap-1.5">
                     <Text className="text-xs text-neutral-500">Qty</Text>
@@ -463,41 +600,27 @@ export function PrescriptionGrid(props: GridProps) {
                       className={`rounded-lg border bg-white px-2 text-sm text-neutral-900 ${
                         errs.qty ? "border-red-400" : "border-neutral-300"
                       }`}
-                      style={{ width: 56, height: 36, paddingVertical: 0 }}
+                      style={{ width: 56, height: BOX_HEIGHT, paddingVertical: 0 }}
                     />
                   </View>
                 ) : null}
                 {errs.qty ? (
                   <Text className="text-[11px] text-red-500">{errs.qty}</Text>
                 ) : null}
-                {status === "new" || status === "update" ? (
+                {onEditRegimen ? (
                   <Pressable
-                    onPress={() => onRegimenChoice(p.id, !checked)}
-                    hitSlop={6}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked }}
-                    className="flex-row items-center gap-1.5"
+                    onPress={() => onEditRegimen(p.id)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit dose for ${p.name}`}
+                    className="flex-row items-center justify-center gap-1 self-start rounded-md border border-neutral-300 bg-white px-2 active:bg-neutral-50"
+                    style={{ height: EDIT_HEIGHT }}
                   >
-                    <View
-                      className={`h-5 w-5 items-center justify-center rounded border ${
-                        checked
-                          ? "border-brand bg-brand"
-                          : "border-neutral-400 bg-white"
-                      }`}
-                    >
-                      {checked ? (
-                        <Ionicons name="checkmark" size={14} color="#fff" />
-                      ) : null}
-                    </View>
-                    <Text className="min-w-0 flex-1 text-xs text-neutral-800">
-                      {status === "new" ? "Save as regimen" : "Update regimen"}
+                    <Ionicons name="pencil" size={12} color="#374151" />
+                    <Text className="text-xs font-medium text-neutral-800">
+                      Edit
                     </Text>
                   </Pressable>
-                ) : null}
-                {status === "matches" ? (
-                  <Text className="text-xs text-neutral-500">
-                    regimen v{regimen?.currentVersion}
-                  </Text>
                 ) : null}
               </View>
             );
@@ -507,8 +630,8 @@ export function PrescriptionGrid(props: GridProps) {
                 onPress={() => onRemove(p.id)}
                 hitSlop={6}
                 accessibilityLabel={`Remove ${p.name}`}
-                className="h-11 items-center justify-center rounded-lg active:bg-neutral-100"
-                style={{ width: COL.remove }}
+                className="items-center justify-center rounded-lg active:bg-neutral-100"
+                style={{ width: COL.remove, height: BOX_HEIGHT }}
               >
                 <Ionicons name="trash-outline" size={18} color="#ef4444" />
               </Pressable>
@@ -527,30 +650,37 @@ export function PrescriptionGrid(props: GridProps) {
               >
                 {oneLine ? (
                   <View className="flex-row items-start gap-2">
-                    <View className="min-w-0 flex-1 pt-1">{medicine}</View>
+                    <View
+                      className="min-w-0"
+                      style={{ flex: FLEX.medicine, minHeight: BOX_HEIGHT, justifyContent: "center" }}
+                    >
+                      {medicine}
+                    </View>
                     {dose}
                     {food}
                     {duration}
-                    <View className="min-w-0" style={{ flex: 1.2 }}>
+                    <View style={{ flex: FLEX.note, minWidth: COL.noteMin }}>
                       {note}
                     </View>
                     {regimenQty}
                     {remove}
                   </View>
                 ) : (
+                  // Folded (portrait, e.g. iPad): the medicine on its own line,
+                  // then the boxes wrapping as the width allows, with Delete at
+                  // the end of the boxes' first line, level with them. It used
+                  // to sit on the medicine line, above the boxes.
                   <View className="gap-2">
+                    <View className="min-w-0">{medicine}</View>
                     <View className="flex-row items-start gap-2">
-                      <View className="min-w-0 flex-1">{medicine}</View>
+                      <View className="min-w-0 flex-1 flex-row flex-wrap items-start gap-2">
+                        {dose}
+                        {food}
+                        {duration}
+                        <View style={{ width: COL.note }}>{note}</View>
+                        {regimenQty}
+                      </View>
                       {remove}
-                    </View>
-                    <View className="flex-row flex-wrap items-start gap-2">
-                      {dose}
-                      {food}
-                      {duration}
-                    </View>
-                    <View className="flex-row items-start gap-2">
-                      <View className="min-w-0 flex-1">{note}</View>
-                      {regimenQty}
                     </View>
                   </View>
                 )}

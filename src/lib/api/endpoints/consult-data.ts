@@ -176,3 +176,21 @@ export function createPatientLabReport(
     body,
   });
 }
+
+// ---- Detected Symptoms --------------------------------------------------
+
+export type DetectedSymptom = { name: string; since: string };
+
+/**
+ * The consultation's Detected Symptoms (Practice `GET /api/consult/symptoms`).
+ * Written by Summarise / Promote on the conversation, which replaces the list.
+ */
+export async function getDetectedSymptoms(
+  consultationId: string
+): Promise<DetectedSymptom[]> {
+  const res = await api<{ symptoms?: DetectedSymptom[] }>({
+    path: "/api/consult/symptoms",
+    query: { consultationId },
+  });
+  return Array.isArray(res.symptoms) ? res.symptoms : [];
+}

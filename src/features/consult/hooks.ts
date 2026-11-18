@@ -11,6 +11,7 @@ import {
   deletePrescriptionLine,
   finalizePrescription,
   getConversation,
+  getDetectedSymptoms,
   getPatientHistory,
   getPrescriptions,
   getSummary,
@@ -82,6 +83,21 @@ export function useSaveSummary(id: string) {
     mutationFn: (summary: Partial<ConsultSummary>) => saveSummary(id, summary),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["summary", id] }),
     onError: (err) => refetchConsultIfCompletedLock(qc, id, err),
+  });
+}
+
+// ---- Detected Symptoms ------------------------------------------------
+
+export function detectedSymptomsKey(id: string) {
+  return ["detected-symptoms", id] as const;
+}
+
+/** Replaced server-side by Summarise / Promote; invalidate after either. */
+export function useDetectedSymptoms(id: string) {
+  return useQuery({
+    queryKey: detectedSymptomsKey(id),
+    enabled: !!id,
+    queryFn: () => getDetectedSymptoms(id),
   });
 }
 

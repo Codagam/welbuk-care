@@ -46,38 +46,67 @@ function NotesShell({
   );
 }
 
-export function DoctorNotesCard({
+/**
+ * FINAL SUMMARY, as in Practice: the doctor-approved summary, saved to
+ * ConsultationSummary.doctorNotes, so it prints as the prescription's Notes
+ * and shows in Previous Consultation Notes on later visits.
+ *
+ * While nothing is saved it starts from the AI Conversation Summary. Complete
+ * saves whatever this box shows (an unsaved edit or the AI prefill), through
+ * `onDraftChange`, because a completed consult cannot take it afterwards.
+ */
+export function FinalSummaryCard({
   consultationId,
-  initialNotes,
+  savedNotes,
+  aiSummary,
   fill,
   locked = false,
+  onDraftChange,
 }: {
   consultationId: string;
-  initialNotes?: string | null;
+  /** The saved Final Summary (doctorNotes). */
+  savedNotes?: string | null;
+  /** The AI Conversation Summary, used as the starting text while nothing is saved. */
+  aiSummary?: string | null;
   /** Stretch to match sibling column height on tablet */
   fill?: boolean;
   locked?: boolean;
+  /** The box's current text, saved or not, for Complete to save. */
+  onDraftChange?: (text: string) => void;
 }) {
   const save = useSaveSummary(consultationId);
   const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
-  const [notes, setNotes] = useState(initialNotes ?? "");
-  const [savedBaseline, setSavedBaseline] = useState(initialNotes ?? "");
+  const saved = savedNotes ?? "";
+  const fromAi = !saved.trim() && !!aiSummary?.trim();
+  const initial = saved.trim() ? saved : (aiSummary ?? "");
+
+  const [notes, setNotes] = useState(initial);
+  const [baseline, setBaseline] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  useEffect(() => {
-    setNotes(initialNotes ?? "");
-    setSavedBaseline(initialNotes ?? "");
-  }, [initialNotes]);
+  // A new saved value, or a regenerated AI summary while nothing is saved:
+  // reset during render (React's "adjusting state when a prop changes").
+  const [seenInitial, setSeenInitial] = useState(initial);
+  if (seenInitial !== initial) {
+    setSeenInitial(initial);
+    setNotes(initial);
+    setBaseline(initial);
+  }
 
-  const dirty = notes !== savedBaseline;
+  useEffect(() => {
+    onDraftChange?.(notes);
+  }, [notes, onDraftChange]);
+
+  // The AI prefill is not saved yet, so Save is offered for it too.
+  const dirty = notes !== saved;
 
   const onSave = async () => {
     setError(null);
     setDone(false);
     try {
       await save.mutateAsync({ doctorNotes: notes });
-      setSavedBaseline(notes);
+      setBaseline(notes);
       setDone(true);
     } catch (e) {
       setError(describeError(e));
@@ -85,17 +114,22 @@ export function DoctorNotesCard({
   };
 
   const onCancel = () => {
-    setNotes(savedBaseline);
+    setNotes(baseline);
     setError(null);
     setDone(false);
   };
 
   return (
-    <NotesShell title="Doctor Notes" fill={fill} highlighted={highlighted}>
+    <NotesShell title="Final Summary" fill={fill} highlighted={highlighted}>
+      {fromAi && !locked ? (
+        <Text className="text-xs text-amber-700">
+          From the AI summary, not saved yet. Edit if needed and Save to keep it.
+        </Text>
+      ) : null}
       <TextField
         value={notes}
         onChangeText={setNotes}
-        placeholder="Clinical notes for this visit…"
+        placeholder="The summary that prints on the prescription…"
         multiline
         numberOfLines={8}
         textAlignVertical="top"
@@ -113,7 +147,7 @@ export function DoctorNotesCard({
             size="md"
             onPress={onSave}
             loading={save.isPending}
-            disabled={!dirty || locked}
+            disabled={!dirty || !notes.trim() || locked}
           />
         </View>
         <View className="flex-1">
@@ -122,7 +156,7 @@ export function DoctorNotesCard({
             size="md"
             variant="primary"
             onPress={onCancel}
-            disabled={!dirty || save.isPending}
+            disabled={notes === baseline || save.isPending}
           />
         </View>
       </View>
@@ -130,92 +164,42 @@ export function DoctorNotesCard({
   );
 }
 
+/**
+ * Conversation Summary, as in Practice: AI-generated from the conversation
+ * (Summarise / Promote), shown and never edited here. The doctor's own
+ * wording goes in Final Summary.
+ */
 export function ConversationSummaryCard({
-  consultationId,
-  initialSummary,
+  summary,
   isAIGenerated,
   fill,
-  locked = false,
 }: {
-  consultationId: string;
-  initialSummary?: string | null;
+  summary?: string | null;
   isAIGenerated?: boolean;
   fill?: boolean;
-  locked?: boolean;
 }) {
-  const save = useSaveSummary(consultationId);
-  const { highlighted, onFocus, onBlur } = useCardFocusHighlight();
-  const [summary, setSummary] = useState(initialSummary ?? "");
-  const [savedBaseline, setSavedBaseline] = useState(initialSummary ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    setSummary(initialSummary ?? "");
-    setSavedBaseline(initialSummary ?? "");
-  }, [initialSummary]);
-
-  const dirty = summary !== savedBaseline;
-
-  const onSave = async () => {
-    setError(null);
-    setDone(false);
-    try {
-      await save.mutateAsync({ summary });
-      setSavedBaseline(summary);
-      setDone(true);
-    } catch (e) {
-      setError(describeError(e));
-    }
-  };
-
-  const onCancel = () => {
-    setSummary(savedBaseline);
-    setError(null);
-    setDone(false);
-  };
-
+  const text = summary?.trim() ?? "";
   return (
     <NotesShell
       title="Conversation Summary"
       badge={isAIGenerated ? "AI" : undefined}
       fill={fill}
-      highlighted={highlighted}
     >
-      <TextField
-        value={summary}
-        onChangeText={setSummary}
-        placeholder="Visit conversation summary…"
-        multiline
-        numberOfLines={8}
-        textAlignVertical="top"
-        style={{ minHeight: fill ? 160 : 120 }}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        editable={!locked}
-      />
-      {error ? <Text className="text-sm text-red-500">{error}</Text> : null}
-      {done ? <Text className="text-sm text-emerald-600">Saved.</Text> : null}
-      <View className="mt-auto flex-row gap-2 pt-1">
-        <View className="flex-1">
-          <Button
-            label="Save"
-            size="md"
-            onPress={onSave}
-            loading={save.isPending}
-            disabled={!dirty || locked}
-          />
+      {text ? (
+        <View
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3"
+          style={{ minHeight: fill ? 160 : 120 }}
+        >
+          <Text selectable className="text-base leading-6 text-neutral-900">
+            {text}
+          </Text>
         </View>
-        <View className="flex-1">
-          <Button
-            label="Cancel"
-            size="md"
-            variant="primary"
-            onPress={onCancel}
-            disabled={!dirty || save.isPending}
-          />
-        </View>
-      </View>
+      ) : (
+        <Text className="text-sm italic text-neutral-400">
+          No summary yet. Summarise the conversation in Patient details to
+          generate one.
+        </Text>
+      )}
     </NotesShell>
   );
 }
