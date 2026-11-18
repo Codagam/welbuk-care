@@ -16,6 +16,8 @@ export type ReportPdfRxLine = {
   durationValue?: number | null;
   durationUnit?: string | null;
   doseNote?: string | null;
+  dosageForm?: string | null;
+  genericName?: string | null;
 };
 
 export type ConsultationReportPdfInput = {
@@ -27,7 +29,8 @@ export type ConsultationReportPdfInput = {
   patientMeta: string;
   doctorLabel: string;
   diagnosis: string;
-  notes: string;
+  /** SOAP Plan, printed as "Clinical notes" under the prescription. Omitted when empty. */
+  clinicalNotes?: string | null;
   prescriptionRows: ReportPdfRxLine[];
   /** The summary's follow-up line. Empty prints "As advised". */
   followUp?: string | null;
@@ -49,6 +52,19 @@ function foodTimingLabel(value?: string | null): string {
   if (value === "AF") return "After Food";
   if (value === "BF") return "Before Food";
   return value;
+}
+
+/** "tablet" prints as "Tablet". */
+function formLabel(form?: string | null): string {
+  const f = form?.trim() ?? "";
+  return f ? f.charAt(0).toUpperCase() + f.slice(1) : "";
+}
+
+/** The generic under the brand, unless the line's own name already says it. */
+function genericToShow(line: { name?: string | null; genericName?: string | null }): string {
+  const generic = line.genericName?.trim() ?? "";
+  if (!generic) return "";
+  return (line.name ?? "").toLowerCase().includes(generic.toLowerCase()) ? "" : generic;
 }
 
 function wrapText(
@@ -156,50 +172,26 @@ export async function buildConsultationReportPdf(
   drawText(spec, rightX - 12 - specW, y - 42, 10, false, rgb(0.4, 0.4, 0.4));
   y -= 76;
 
-  // Diagnosis / Notes boxes
-  const gap = 12;
-  const boxW = (contentWidth - gap) / 2;
-  // Line breaks are kept (Assessment holds one code per line), and the boxes grow
-  // to fit: a diagnosis must not be cut off at four lines on a printed prescription.
-  const boxLines = (text: string) =>
+  // Diagnosis, full width (the notes box beside it was removed on 2026-11-17, as
+  // in Practice). Line breaks are kept (Assessment holds one code per line), and
+  // the box grows to fit: a diagnosis must not be cut off on a prescription.
+  const boxLines = (text: string, width: number) =>
     text
       .split("\n")
-      .flatMap((line) => wrapText(pdfSafe(line), boxW - 20, font, 11))
+      .flatMap((line) => wrapText(pdfSafe(line), width - 20, font, 11))
       .slice(0, 16);
-  const diagLines = boxLines(input.diagnosis || "N/A");
-  const doctorNoteLines = boxLines(input.notes || "—");
-  const boxH = Math.max(
-    80,
-    40 + Math.max(diagLines.length, doctorNoteLines.length) * 14
-  );
+  const diagLines = boxLines(input.diagnosis || "N/A", contentWidth);
+  const boxH = Math.max(56, 40 + diagLines.length * 14);
   page.drawRectangle({
     x: margin,
     y: y - boxH,
-    width: boxW,
+    width: contentWidth,
     height: boxH,
     color: rgb(0.94, 0.97, 1),
-  });
-  page.drawRectangle({
-    x: margin + boxW + gap,
-    y: y - boxH,
-    width: boxW,
-    height: boxH,
-    color: rgb(1, 0.98, 0.92),
   });
   drawText("DIAGNOSIS", margin + 10, y - 14, 9, true, rgb(0.12, 0.25, 0.69));
   diagLines.forEach((line, i) => {
     drawText(line, margin + 10, y - 32 - i * 14, 11);
-  });
-  drawText(
-    "DOCTOR NOTES",
-    margin + boxW + gap + 10,
-    y - 14,
-    9,
-    true,
-    rgb(0.57, 0.25, 0.05)
-  );
-  doctorNoteLines.forEach((line, i) => {
-    drawText(line, margin + boxW + gap + 10, y - 32 - i * 14, 11);
   });
   y -= boxH + 22;
 
@@ -207,8 +199,9 @@ export async function buildConsultationReportPdf(
   drawText("Rx PRESCRIPTION", margin, y, 14, true);
   y -= 10;
   const col1 = margin;
-  const col2 = margin + contentWidth * 0.42;
-  const col3 = margin + contentWidth * 0.82;
+  const colType = margin + contentWidth * 0.36;
+  const col2 = margin + contentWidth * 0.5;
+  const col3 = margin + contentWidth * 0.84;
   const rowH = 22;
   const noteSize = 8.5;
   const noteLead = 11;
@@ -229,6 +222,7 @@ export async function buildConsultationReportPdf(
       color: rgb(0.09, 0.09, 0.09),
     });
     drawText("Medicine", col1 + 8, y - 15, 10, true, rgb(1, 1, 1));
+    drawText("Type", colType + 4, y - 15, 10, true, rgb(1, 1, 1));
     drawText("Dosage & Frequency", col2 + 4, y - 15, 10, true, rgb(1, 1, 1));
     drawText("Duration", col3 + 8, y - 15, 10, true, rgb(1, 1, 1));
     y -= rowH;
@@ -253,7 +247,8 @@ export async function buildConsultationReportPdf(
     const noteLines = note
       ? wrapText(note, col3 - col2 - 8, font, noteSize)
       : [];
-    const height = rowH + noteLines.length * noteLead;
+    const generic = pdfSafe(genericToShow(line));
+    const height = rowH + Math.max(noteLines.length, generic ? 1 : 0) * noteLead;
     // A medicine must never fall off the page: it continues on the next one.
     if (y - height < pageBottom) {
       startPage();
@@ -279,7 +274,18 @@ export async function buildConsultationReportPdf(
       .filter(Boolean)
       .join(" · ");
     const baseline = y + height - 15;
-    drawText(pdfSafe(line.name || "—").slice(0, 36), col1 + 8, baseline, 10);
+    drawText(pdfSafe(line.name || "—").slice(0, 30), col1 + 8, baseline, 10, true);
+    if (generic) {
+      drawText(
+        generic.slice(0, 40),
+        col1 + 8,
+        baseline - noteLead,
+        noteSize,
+        false,
+        rgb(0.4, 0.4, 0.4)
+      );
+    }
+    drawText(pdfSafe(formLabel(line.dosageForm) || "—").slice(0, 12), colType + 4, baseline, 10);
     drawText(pdfSafe(dose || "—").slice(0, 32), col2 + 4, baseline, 10);
     drawText(pdfSafe(formatDuration(line) || "—"), col3 + 8, baseline, 10);
     noteLines.forEach((text, i) => {
@@ -293,6 +299,43 @@ export async function buildConsultationReportPdf(
       );
     });
   });
+
+  // Clinical notes = the SOAP Plan, directly under the prescription.
+  const clinical = input.clinicalNotes?.trim() ?? "";
+  if (clinical) {
+    const lines = clinical
+      .split("\n")
+      .flatMap((l) => wrapText(pdfSafe(l), contentWidth - 20, font, 10));
+    y -= 14;
+    let first = true;
+    for (let i = 0; i < lines.length; ) {
+      const room = Math.floor((y - pageBottom - (first ? 30 : 10)) / 13);
+      if (room < 1) {
+        startPage();
+        continue;
+      }
+      const chunk = lines.slice(i, i + room);
+      const h = (first ? 30 : 10) + chunk.length * 13;
+      page.drawRectangle({
+        x: margin,
+        y: y - h,
+        width: contentWidth,
+        height: h,
+        borderColor: rgb(0.9, 0.9, 0.9),
+        borderWidth: 1,
+      });
+      let ty = y - 14;
+      if (first) {
+        drawText("CLINICAL NOTES", margin + 10, ty, 9, true);
+        ty -= 16;
+      }
+      chunk.forEach((t, j) => drawText(t, margin + 10, ty - j * 13, 10));
+      y -= h;
+      i += chunk.length;
+      first = false;
+      if (i < lines.length) startPage();
+    }
+  }
 
   // The footer stays whole: 28 + 22 for the rows, plus the detail under the date.
   if (y - 72 < pageBottom) startPage();

@@ -71,9 +71,11 @@ export function DurationInput({
   return (
     <View className="gap-1">
       <View
-        className={`h-11 flex-row items-center rounded-lg border bg-white ${
+        className={`flex-row items-center rounded-lg border bg-white ${
           error ? "border-red-400" : "border-neutral-300"
         }`}
+        // Pixels, not h-9: NativeWind's rem is 14px, so h-9 is 31.5.
+        style={{ height: 36 }}
       >
         <TextInput
           ref={inputRef}
@@ -111,13 +113,13 @@ export function DurationInput({
             setTimeout(() => setOpen(false), 150);
           }}
           className="text-base font-semibold text-neutral-900"
-          style={{ width: 52, height: 44, paddingHorizontal: 8, paddingVertical: 0 }}
+          style={{ width: 56, height: 34, paddingHorizontal: 10, paddingVertical: 0 }}
         />
         <Pressable
           onPress={() => setOpen((o) => !o)}
           className="h-full min-w-0 flex-1 justify-center pr-2"
         >
-          <Text numberOfLines={2} className="text-xs text-neutral-500">
+          <Text numberOfLines={1} className="text-sm text-neutral-500">
             {unitLabel}
           </Text>
         </Pressable>

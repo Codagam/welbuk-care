@@ -49,6 +49,14 @@ export interface Prescription {
   qtyPrescribed?: number | null;
   drugId?: string;
   isAttachment?: boolean;
+  /**
+   * Read-only, from the catalogue (GET /api/consult/prescription, 2026-11-17).
+   * The printout shows the form as the medicine's Type and the generic name
+   * under the brand. Never sent back on a write.
+   */
+  dosageForm?: string | null;
+  genericName?: string | null;
+  strength?: string | null;
 }
 
 export interface PrescriptionItemInput {

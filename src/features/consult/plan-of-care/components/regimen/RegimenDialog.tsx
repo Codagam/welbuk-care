@@ -216,10 +216,13 @@ function DoseFields({
 /**
  * Setting one line's dose (Practice regimen-dialog.tsx, `line` mode): opened for
  * every medicine added with no regimen, one after another, and by a row's Edit
- * button. One **Save** fills the line; "Update for all future prescriptions" ALSO
- * saves it as the doctor's regimen at this facility (a new version, so every
- * change keeps its history). The box starts ticked only when there is no regimen
- * yet; changing an existing one is always a deliberate tick.
+ * button. One **Save** always fills THIS patient's line; the "Also save as my
+ * regimen" box decides whether it ALSO becomes the doctor's regimen at this
+ * facility (a new version, so every change keeps its history). Unticked = this
+ * patient only, which keeps a child's or a kidney patient's dose out of the
+ * default. The box starts ticked only when there is no regimen yet; changing an
+ * existing one is always a deliberate tick. This is the ONLY place a regimen is
+ * saved from a consult: the table has no second checkbox.
  */
 export function RegimenDialog({
   drugName,
@@ -475,7 +478,7 @@ export function RegimenDialog({
               ) : null}
             </View>
 
-            {/* Update for all future prescriptions */}
+            {/* Also save as / update my regimen */}
             <Pressable
               onPress={() => setUpdateFuture((v) => !v)}
               disabled={busy || !canSaveRegimen}
@@ -494,15 +497,15 @@ export function RegimenDialog({
               </View>
               <View className="min-w-0 flex-1">
                 <Text className="text-sm font-medium text-neutral-900">
-                  Update for all future prescriptions
+                  {currentRegimen ? "Also update my regimen" : "Also save as my regimen"}
                 </Text>
                 <Text className="text-xs text-neutral-500">
                   {!canSaveRegimen
                     ? regimenLockedReason ??
                       "Only the consult's doctor can change their regimen."
                     : currentRegimen
-                      ? `Saves a new version of your regimen (now v${currentRegimen.version}). Prescriptions already issued are not changed.`
-                      : "Saves this as your regimen at this facility, so it fills in next time."}
+                      ? `Ticked: future prescriptions of ${drugName} start from this dose (v${currentRegimen.version} → v${currentRegimen.version + 1}). Unticked: this patient only. Prescriptions already issued never change.`
+                      : `Ticked: next time you prescribe ${drugName} at this facility, this dose fills in by itself. Unticked: this patient only.`}
                 </Text>
               </View>
             </Pressable>

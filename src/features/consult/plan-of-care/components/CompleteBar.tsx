@@ -12,15 +12,22 @@ import type { PickerAnchor } from "./regimen/pickerPlacement";
 /**
  * Plan-of-care action bar: Follow-up aligned to the top-right.
  * Complete lives in CompleteFooter at the bottom of the screen.
+ *
+ * Print prescription sits before Follow-up, as in Practice (2026-11-17). It is
+ * shown only once the consult is completed: before that the prescription is a
+ * draft, and printing it would hand the patient a document that may change.
  */
 export function CompleteBar({
   followUpSummaryLine,
   onFollowUp,
+  onPrintPrescription,
   locked = false,
 }: {
   followUpSummaryLine?: string | null;
   /** Gets where the button is on screen, so the panel can open under it. */
   onFollowUp: (anchor: PickerAnchor) => void;
+  /** Opens the prescription printout. Shown only when the consult is completed. */
+  onPrintPrescription?: () => void;
   locked?: boolean;
 }) {
   const booked = isBookedFollowUpSummaryLine(followUpSummaryLine);
@@ -50,6 +57,24 @@ export function CompleteBar({
             </Text>
           )}
         </View>
+
+        {locked && onPrintPrescription ? (
+          <Pressable
+            onPress={onPrintPrescription}
+            accessibilityRole="button"
+            accessibilityLabel="Print prescription"
+            style={{ flexShrink: 0 }}
+            className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-3 active:bg-neutral-50"
+          >
+            <Ionicons name="print-outline" size={18} color="#111827" />
+            <Text
+              numberOfLines={1}
+              className="text-base font-semibold text-neutral-900"
+            >
+              Print prescription
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View ref={anchorRef} collapsable={false}>
           <Pressable

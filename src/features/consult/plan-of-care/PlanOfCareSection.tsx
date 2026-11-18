@@ -337,6 +337,15 @@ export function PlanOfCareSection({
           setFollowUpAnchor(anchor);
           setFollowUpOpen(true);
         }}
+        onPrintPrescription={
+          patientId
+            ? () =>
+                router.push({
+                  pathname: "/patients/[id]/report",
+                  params: { id: patientId, consultationId, appointmentId: appointmentId ?? "" },
+                })
+            : undefined
+        }
         locked={locked}
       />
 
