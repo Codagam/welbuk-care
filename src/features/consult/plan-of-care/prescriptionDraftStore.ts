@@ -13,7 +13,8 @@ import * as SecureStore from "expo-secure-store";
 import type { PlanPrescription } from "./types";
 
 const PREFIX = "welbuk-consult-prescriptions";
-const INDEX_KEY = `${PREFIX}-index`;
+/** SecureStore can't enumerate keys — track draft ids so logout can wipe them. */
+const INDEX_KEY = `${PREFIX}.index`;
 
 function storageKey(consultationId: string): string {
   return `${PREFIX}-${consultationId}`;
@@ -22,39 +23,27 @@ function storageKey(consultationId: string): string {
 async function readIndex(): Promise<string[]> {
   try {
     const raw = await SecureStore.getItemAsync(INDEX_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     return Array.isArray(parsed)
-      ? parsed.filter((v): v is string => typeof v === "string")
+      ? parsed.filter((id): id is string => typeof id === "string")
       : [];
   } catch {
     return [];
   }
 }
 
-async function writeIndex(ids: string[]): Promise<void> {
+async function updateIndex(
+  fn: (ids: string[]) => string[]
+): Promise<void> {
   try {
-    if (ids.length === 0) {
+    const next = fn(await readIndex());
+    if (next.length) {
+      await SecureStore.setItemAsync(INDEX_KEY, JSON.stringify(next));
+    } else {
       await SecureStore.deleteItemAsync(INDEX_KEY);
-      return;
     }
-    await SecureStore.setItemAsync(INDEX_KEY, JSON.stringify(ids));
   } catch {
-    // best-effort
-  }
-}
-
-async function addToIndex(consultationId: string): Promise<void> {
-  const ids = await readIndex();
-  if (!ids.includes(consultationId)) {
-    await writeIndex([...ids, consultationId]);
-  }
-}
-
-async function removeFromIndex(consultationId: string): Promise<void> {
-  const ids = await readIndex();
-  if (ids.includes(consultationId)) {
-    await writeIndex(ids.filter((id) => id !== consultationId));
+    // ignore
   }
 }
 
@@ -89,7 +78,9 @@ export async function savePrescriptionDraft(
       storageKey(consultationId),
       JSON.stringify(prescriptions)
     );
-    await addToIndex(consultationId);
+    await updateIndex((ids) =>
+      ids.includes(consultationId) ? ids : [...ids, consultationId]
+    );
   } catch {
     // Best-effort; in-memory state still wins for the session.
   }
@@ -101,13 +92,13 @@ export async function clearPrescriptionDraft(
   if (!consultationId.trim()) return;
   try {
     await SecureStore.deleteItemAsync(storageKey(consultationId));
-    await removeFromIndex(consultationId);
+    await updateIndex((ids) => ids.filter((id) => id !== consultationId));
   } catch {
     // ignore
   }
 }
 
-/** Wipe every locally-stored prescription draft. Called on sign-out. */
+/** Delete every tracked draft (sign-out on a shared tablet). */
 export async function clearAllPrescriptionDrafts(): Promise<void> {
   const ids = await readIndex();
   await Promise.all(
@@ -115,18 +106,23 @@ export async function clearAllPrescriptionDrafts(): Promise<void> {
       SecureStore.deleteItemAsync(storageKey(id)).catch(() => {})
     )
   );
-  await writeIndex([]);
+  await SecureStore.deleteItemAsync(INDEX_KEY).catch(() => {});
 }
 
-/** Merge API structured lines with local draft (by id; API first). */
+/**
+ * Merge API structured lines with the local draft. A line in both takes the draft's
+ * copy: rows are edited in place now, and those edits live only in the draft until
+ * Complete, so taking the server's copy would undo them on the next open.
+ */
 export function mergePrescriptions(
   apiLines: PlanPrescription[],
   draftLines: PlanPrescription[]
 ): PlanPrescription[] {
   const structuredOnly = apiLines.filter((p) => !p.isAttachment);
   const apiIds = new Set(structuredOnly.map((p) => p.id));
+  const draftById = new Map(draftLines.map((p) => [p.id, p]));
   return [
-    ...structuredOnly,
+    ...structuredOnly.map((p) => draftById.get(p.id) ?? p),
     ...draftLines.filter((p) => !apiIds.has(p.id) && !p.isAttachment),
   ];
 }

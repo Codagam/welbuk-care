@@ -9,6 +9,7 @@ import {
   createPatient,
   getPatient,
   searchPatients,
+  searchPatientsByPhone,
   unlinkPatient,
   updatePatient,
 } from "@/lib/api/endpoints/patients";
@@ -27,6 +28,18 @@ import type {
 } from "./types";
 
 const PAGE_SIZE = 20;
+
+/** Records already on this 10-digit mobile (registration family/onboard card). */
+export function useSameMobilePatients(mobile10: string, enabled: boolean) {
+  const facilityId = useFacilityId();
+  const on = enabled && Boolean(facilityId) && /^\d{10}$/.test(mobile10);
+  return useQuery({
+    queryKey: ["patients-by-phone", facilityId, mobile10],
+    enabled: on,
+    staleTime: 30_000,
+    queryFn: ({ signal }) => searchPatientsByPhone(facilityId!, mobile10, signal),
+  });
+}
 
 /** Infinite, DB-paginated patient search scoped to the active facility. */
 export function usePatientSearch(search: string) {
@@ -160,19 +173,37 @@ export function usePatientAppointments(mongoPatientId: string | undefined) {
   });
 }
 
-export function usePatientReferrals(
-  mongoPatientId: string | undefined,
-  mode: "incoming" | "outgoing" = "outgoing"
-) {
+/**
+ * Both directions in one list, newest first — Practice's patient page merges
+ * incoming and outgoing and labels each row, rather than toggling.
+ */
+export function usePatientReferrals(mongoPatientId: string | undefined) {
   const facilityId = useFacilityId();
   return useQuery({
-    queryKey: ["patient-referrals", mongoPatientId, facilityId, mode],
+    queryKey: ["patient-referrals", mongoPatientId, facilityId],
     enabled: !!mongoPatientId && !!facilityId,
-    queryFn: () =>
-      listReferrals({
-        facilityId: facilityId!,
-        patientId: mongoPatientId!,
-        mode,
-      }),
+    queryFn: async () => {
+      const byMode = async (mode: "incoming" | "outgoing") =>
+        (
+          await listReferrals({
+            facilityId: facilityId!,
+            patientId: mongoPatientId!,
+            mode,
+          })
+        ).map((row) => ({ ...row, direction: mode }));
+      const [incoming, outgoing] = await Promise.all([
+        byMode("incoming"),
+        byMode("outgoing"),
+      ]);
+      const merged = [...incoming, ...outgoing];
+      const deduped = Array.from(
+        new Map(merged.map((r, i) => [r.id ?? `row-${i}`, r])).values()
+      );
+      const time = (v?: string) => {
+        const t = v ? new Date(v).getTime() : NaN;
+        return Number.isNaN(t) ? 0 : t;
+      };
+      return deduped.sort((a, b) => time(b.createdAt) - time(a.createdAt));
+    },
   });
 }

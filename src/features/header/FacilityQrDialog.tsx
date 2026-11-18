@@ -13,11 +13,7 @@ import { hasFacilityQrImage } from "@/lib/api/endpoints/facility-qr";
 import { useActiveFacility, useAuthUser } from "@/lib/auth/store";
 import { AppModal, Button } from "@/ui";
 
-import {
-  regenerateFacilityQr,
-  resolveFacilityQr,
-  type ResolvedFacilityQr,
-} from "./facilityQrCache";
+import { resolveFacilityQr, type ResolvedFacilityQr } from "./facilityQrCache";
 
 export function FacilityQrTriggerButton({
   onPress,
@@ -153,28 +149,6 @@ export function FacilityQrDialog({
                   Loaded from this device for your login
                 </Text>
               ) : null}
-              <Button
-                label="Regenerate QR code"
-                variant="outline"
-                size="md"
-                loading={generating}
-                onPress={() => {
-                  if (!facilityId) return;
-                  setGenerating(true);
-                  setError(null);
-                  void regenerateFacilityQr({
-                    user,
-                    facilityId,
-                    facilityName: facility?.name,
-                  })
-                    .then((next) => setResolved(next))
-                    .catch((e) => setError(describeError(e)))
-                    .finally(() => setGenerating(false));
-                }}
-              />
-              <Text className="text-center text-[11px] text-neutral-400">
-                Creates a new QR. Already-printed codes may stop working.
-              </Text>
             </View>
           ) : (
             <View className="gap-3 py-4">

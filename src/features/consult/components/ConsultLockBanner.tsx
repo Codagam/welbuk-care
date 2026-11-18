@@ -1,25 +1,25 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
-  View,
+  View
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 import { useCanWrite } from "@/features/permissions/hooks";
 import { describeError } from "@/lib/api/errors";
 import { AppModal, Button, TextField } from "@/ui";
 
-import type { ConsultLock } from "../consultPatient";
+import { AppAlert } from "@/ui/AppAlert";
 import {
   countReasonWords,
   formatConsultCompletedAt,
   MIN_REOPEN_WORDS,
 } from "../consultLock";
+import type { ConsultLock } from "../consultPatient";
 import { useReopenConsult } from "../useReopenConsult";
 
 export function ConsultLockBanner({
@@ -52,11 +52,11 @@ export function ConsultLockBanner({
     if (!ready || saving) return;
     try {
       await reopen.mutateAsync(reason);
-      Alert.alert("Reopened — this consultation can be edited again");
+      AppAlert.success("Reopened", "This consultation can be edited again.");
       setReason("");
       setSheetOpen(false);
     } catch (e) {
-      Alert.alert("Could not reopen", describeError(e));
+      AppAlert.alert("Could not reopen", describeError(e));
     }
   };
 

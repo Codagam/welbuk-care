@@ -166,6 +166,18 @@ export function shouldShowCheckIn(appointment: Appointment): boolean {
 }
 
 /**
+ * Desk "Add vital" — mirrors Practice appointment list: today, pre-consult
+ * status, and not a booked SCHEDULED visit (that one shows Check-in first).
+ */
+export function canAddVitalsFromList(appointment: Appointment): boolean {
+  if (isFollowUpAwaitingTimeSlot(appointment)) return false;
+  if (isTreatAsNoShow(appointment)) return false;
+  if (!isAppointmentOnToday(appointment)) return false;
+  if (!isPreConsultVitalStatus(appointment.status)) return false;
+  return !shouldShowCheckIn(appointment);
+}
+
+/**
  * Open appointment / consult from the list (vitals recorded inside consult).
  * Booked SCHEDULED must Check-in first; walk-ins and post-arrival statuses may open.
  */

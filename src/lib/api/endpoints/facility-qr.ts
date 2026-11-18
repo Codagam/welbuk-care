@@ -33,8 +33,7 @@ export async function fetchFacilityWrapperShare(
 }
 
 export async function postFacilityWrapperShare(
-  facilityMongoId: string,
-  regenerate = false
+  facilityMongoId: string
 ): Promise<FacilityWrapperShareResponse> {
   const body = await api<{
     facility?: FacilityWrapperShare;
@@ -43,7 +42,7 @@ export async function postFacilityWrapperShare(
   }>({
     path: "/api/facility/wrapper-share",
     method: "POST",
-    body: { facilityId: facilityMongoId, regenerate },
+    body: { facilityId: facilityMongoId, regenerate: false },
   });
   return {
     ...(body.facility ?? {}),
@@ -102,7 +101,7 @@ async function assertDownloadedImage(
     await FileSystem.deleteAsync(destUri, { idempotent: true });
     throw new Error(
       serverMessage ||
-        "The facility QR could not be loaded. Try regenerating the QR code."
+        "The facility QR could not be loaded. Please try again."
     );
   }
   const info = await FileSystem.getInfoAsync(destUri);

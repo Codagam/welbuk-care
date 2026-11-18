@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { AppModal, Button, TextField } from "@/ui";
@@ -8,6 +8,7 @@ import { isDoctorRole, isNurseRole } from "@/lib/auth/roles";
 import { useAuthUser } from "@/lib/auth/store";
 import { usePageStaff } from "../hooks";
 import type { PageWho } from "../types";
+import { AppAlert } from "@/ui/AppAlert";
 
 function PageTargetButton({
   label,
@@ -62,9 +63,11 @@ export function PageStaffButton({
       });
       close();
       if (out.fellBackToFacility) {
-        Alert.alert(
+        AppAlert.alert(
           "Paged the whole ward",
-          "Nobody is on duty for this bed, so everyone was rung. Set a duty nurse or roster the station."
+          "Nobody is on duty for this bed, so everyone was rung. Set a duty nurse or roster the station.",
+          undefined,
+          { tone: "warning", icon: "megaphone-outline", afterDismiss: true }
         );
         return;
       }
@@ -77,9 +80,9 @@ export function PageStaffButton({
             out.pushedToDevices === 1 ? "" : "s"
           } rang${out.stationName ? ` · ${out.stationName}` : ""}`
         : "No handsets are registered — they will see it on screen only.";
-      Alert.alert(`Paged ${people}`, handsets);
+      AppAlert.success(`Paged ${people}`, handsets);
     } catch (err) {
-      Alert.alert("Could not send the page", describeError(err));
+      AppAlert.alert("Could not send the page", describeError(err));
     }
   };
 

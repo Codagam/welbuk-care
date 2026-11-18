@@ -84,6 +84,24 @@ export function isNurseRole(user: AuthUser | null | undefined): boolean {
   );
 }
 
+/**
+ * Front-desk receptionist (Practice role slug `receptionist`) — not a doctor or
+ * elevated admin. When `facilityId` has an entry in `rolesByFacility`, only
+ * that facility's roles count.
+ */
+export function isReceptionistRole(
+  user: AuthUser | null | undefined,
+  facilityId?: string | null
+): boolean {
+  if (!user || isDoctorRole(user)) return false;
+  if (isSuperAdminUser(user) || isFacilityAdminUser(user)) return false;
+  const scoped = facilityId ? user.rolesByFacility?.[facilityId] : undefined;
+  const keys = scoped ? scoped.map(normalizeRoleKey) : userRoleKeys(user);
+  return keys.some(
+    (key) => key === "receptionist" || key.includes("receptionist")
+  );
+}
+
 /** Display name for greetings: displayName → name → email local-part. */
 export function userDisplayName(user: AuthUser | null | undefined): string {
   if (!user) return "";
@@ -94,13 +112,15 @@ export function userDisplayName(user: AuthUser | null | undefined): string {
   return email || "";
 }
 
-/** Greeting name: "Dr. …" only when the signed-in role is doctor. */
+const HONORIFIC_PREFIX_RE = /^(?:(?:dr|mr|mrs|ms)\.?(?:\/(?:mr|mrs|ms)\.?)?\s+)+/i;
+
+/** Greeting name: "Dr. …" for doctors, "Mr/Mrs. …" for everyone else. */
 export function userGreetingName(user: AuthUser | null | undefined): string {
   const raw = userDisplayName(user);
   if (!raw) return "";
-  const withoutPrefix = stripDoctorNamePrefix(raw);
+  const withoutPrefix = raw.replace(HONORIFIC_PREFIX_RE, "").trim();
   const name = withoutPrefix || raw;
-  return isDoctorRole(user) ? `Dr. ${name}` : name;
+  return isDoctorRole(user) ? `Dr. ${name}` : `Mr/Mrs. ${name}`;
 }
 
 export function timeOfDayGreeting(): string {

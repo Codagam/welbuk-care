@@ -6,7 +6,6 @@ export {
 export {
   clearFacilityQrCache,
   resolveFacilityQr,
-  regenerateFacilityQr,
   buildFacilityQrIdentity,
   facilityQrIdentityKey,
 } from "./facilityQrCache";

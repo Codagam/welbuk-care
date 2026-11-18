@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   Pressable,
   Text,
   type StyleProp,
@@ -63,7 +64,15 @@ export function Button({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={
+        onPress
+          ? () => {
+              // An action is done: put the keyboard away, on every button.
+              Keyboard.dismiss();
+              onPress();
+            }
+          : undefined
+      }
       disabled={isDisabled}
       style={[{ flexShrink: 0 }, style]}
       className={`flex-row items-center justify-center gap-2 rounded-xl ${

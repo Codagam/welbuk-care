@@ -1,9 +1,10 @@
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { Redirect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Button, Screen, TopBar } from "@/ui";
 import { useActiveFacility, useAuthStore, useFacilityId } from "@/lib/auth/store";
+import { AppAlert } from "@/ui/AppAlert";
 
 export default function SelectFacilityScreen() {
   const router = useRouter();
@@ -21,10 +22,15 @@ export default function SelectFacilityScreen() {
   const facilities = session?.facilities ?? [];
 
   const confirmSignOut = () => {
-    Alert.alert("Sign out?", "You'll need to sign in again to use the app.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign out", style: "destructive", onPress: () => signOut() },
-    ]);
+    AppAlert.alert(
+      "Sign out?",
+      "You'll need to sign in again to use the app.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign out", style: "destructive", onPress: () => signOut() },
+      ],
+      { icon: "log-out-outline" }
+    );
   };
 
   const choose = async (id: string) => {

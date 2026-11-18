@@ -1,21 +1,26 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   Text,
   View,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 
-import { writeConsultationReportPdfToCache } from "@/features/patients/buildConsultationReportPdf";
-import { usePatient } from "@/features/patients/hooks";
 import {
   useConsultation,
   usePrescriptions,
   useSummary,
 } from "@/features/consult/hooks";
+import {
+  followUpPrintDetail,
+  formatFollowUpForPrint,
+} from "@/features/consult/plan-of-care/followUp";
+import { formatDuration } from "@/features/consult/plan-of-care/sig";
+import { formatDiagnosisCodes } from "@/features/consult/soapText";
+import { writeConsultationReportPdfToCache } from "@/features/patients/buildConsultationReportPdf";
+import { usePatient } from "@/features/patients/hooks";
 import {
   NoAccess,
   SectionAccessLoading,
@@ -26,6 +31,7 @@ import { printLocalPdf } from "@/lib/api/printLocalPdf";
 import { shareLocalFileOrAlert } from "@/lib/api/shareLocalFile";
 import { useActiveFacility } from "@/lib/auth/store";
 import { Button, Screen, TopBar } from "@/ui";
+import { AppAlert } from "@/ui/AppAlert";
 
 function formatDateLabel(value?: string | null): string {
   if (!value) return "—";
@@ -69,6 +75,19 @@ function foodTimingLabel(value?: string | null): string | null {
   if (value === "AF") return "After Food";
   if (value === "BF") return "Before Food";
   return value;
+}
+
+/** "tablet" prints as "Tablet". */
+function formLabel(form?: string | null): string {
+  const f = form?.trim() ?? "";
+  return f ? f.charAt(0).toUpperCase() + f.slice(1) : "";
+}
+
+/** The generic under the brand, unless the line's own name already says it. */
+function genericToShow(line: { name?: string | null; genericName?: string | null }): string {
+  const generic = line.genericName?.trim() ?? "";
+  if (!generic) return "";
+  return (line.name ?? "").toLowerCase().includes(generic.toLowerCase()) ? "" : generic;
 }
 
 function isPrintCanceled(error: unknown): boolean {
@@ -120,7 +139,7 @@ export default function PatientAppointmentReportScreen() {
 
   useEffect(() => {
     if (consultAccessLoading || canAccessConsult) return;
-    Alert.alert(
+    AppAlert.alert(
       "You don't have permission",
       "Consult isn't available for your role. Ask a facility administrator if you need access."
     );
@@ -157,15 +176,16 @@ export default function PatientAppointmentReportScreen() {
     formatPatientAge(patientQ.data?.dob) ?? "—"
   }`;
   const doctorLabel = consultQ.data?.doctor?.name?.trim() || "Doctor";
-  const notes =
-    summaryQ.data?.doctorNotes?.trim() || "No doctor notes available.";
-  const diagnosis = (() => {
-    const codes = summaryQ.data?.diagnosisCodes ?? [];
-    if (Array.isArray(codes) && codes.length > 0) {
-      return codes.map((c) => c.code).filter(Boolean).join(", ");
-    }
-    return summaryQ.data?.assessment?.trim() || "N/A";
-  })();
+  // SOAP Plan, printed as "Clinical notes" under the prescription, as Practice
+  // prints it since 2026-11-17. Doctor Notes are no longer written, and the AI
+  // Conversation Summary is not printed: the patient's copy carries what the
+  // doctor wrote. Omitted when empty.
+  const clinicalNotes = summaryQ.data?.plan?.trim() ?? "";
+  // Saved codes first, as Practice prints them, then the Assessment text.
+  const diagnosis =
+    formatDiagnosisCodes(summaryQ.data?.diagnosisCodes) ||
+    summaryQ.data?.assessment?.trim() ||
+    "N/A";
   const timeLabel = formatTimeLabel(appointmentTime);
   const dateTimeLabel =
     consultDateLabel === "—"
@@ -185,9 +205,13 @@ export default function PatientAppointmentReportScreen() {
     patientMeta,
     doctorLabel,
     diagnosis,
-    notes,
+    clinicalNotes,
     prescriptionRows,
+    followUp: summaryQ.data?.followUp ?? null,
   };
+
+  const nextVisit = formatFollowUpForPrint(summaryQ.data?.followUp);
+  const nextVisitDetail = followUpPrintDetail(summaryQ.data?.followUp);
 
   const busy = downloading || printing;
 
@@ -202,7 +226,7 @@ export default function PatientAppointmentReportScreen() {
         dialogTitle: "Download PDF",
       });
     } catch (e) {
-      Alert.alert("Download failed", describeError(e));
+      AppAlert.alert("Download failed", describeError(e));
     } finally {
       setDownloading(false);
     }
@@ -216,7 +240,7 @@ export default function PatientAppointmentReportScreen() {
       await printLocalPdf(uri);
     } catch (e) {
       if (isPrintCanceled(e)) return;
-      Alert.alert("Print failed", describeError(e));
+      AppAlert.alert("Print failed", describeError(e));
     } finally {
       setPrinting(false);
     }
@@ -294,21 +318,11 @@ export default function PatientAppointmentReportScreen() {
                 </View>
               </View>
 
-              <View className="mt-4 flex-row flex-wrap gap-3">
-                <View className="min-h-[110px] min-w-[280px] flex-1 rounded-xl bg-blue-50 p-4">
-                  <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-800">
-                    Diagnosis
-                  </Text>
-                  <Text className="text-base text-neutral-800">{diagnosis}</Text>
-                </View>
-                <View className="min-h-[110px] min-w-[280px] flex-1 rounded-xl bg-amber-50 p-4">
-                  <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-                    Doctor Notes
-                  </Text>
-                  <Text className="text-base leading-6 text-neutral-800">
-                    {notes}
-                  </Text>
-                </View>
+              <View className="mt-4 rounded-xl bg-blue-50 p-4">
+                <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-800">
+                  Diagnosis
+                </Text>
+                <Text className="text-base text-neutral-800">{diagnosis}</Text>
               </View>
 
               <Text className="mt-4 text-2xl font-semibold tracking-wide text-neutral-900">
@@ -319,11 +333,14 @@ export default function PatientAppointmentReportScreen() {
                   <Text className="flex-[1.7] text-sm font-semibold text-white">
                     Medicine
                   </Text>
+                  <Text className="w-24 text-sm font-semibold text-white">
+                    Type
+                  </Text>
                   <Text className="flex-[1.3] text-sm font-semibold text-white">
                     Dosage & Frequency
                   </Text>
-                  <Text className="w-14 text-right text-sm font-semibold text-white">
-                    Days
+                  <Text className="w-24 text-right text-sm font-semibold text-white">
+                    Duration
                   </Text>
                 </View>
 
@@ -341,24 +358,52 @@ export default function PatientAppointmentReportScreen() {
                           : ""
                       }`}
                     >
-                      <Text className="flex-[1.7] text-base text-neutral-900">
-                        {line.name || "—"}
+                      <View className="flex-[1.7]">
+                        <Text className="text-base font-semibold text-neutral-900">
+                          {line.name || "—"}
+                        </Text>
+                        {genericToShow(line) ? (
+                          <Text className="text-sm text-neutral-500">
+                            {genericToShow(line)}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text className="w-24 text-base text-neutral-700">
+                        {formLabel(line.dosageForm) || "—"}
                       </Text>
-                      <Text className="flex-[1.3] text-base text-neutral-700">
-                        {[
-                          line.dosePattern,
-                          foodTimingLabel(line.foodTiming),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </Text>
-                      <Text className="w-14 text-right text-base text-neutral-700">
-                        {line.duration ? String(line.duration) : "—"}
+                      <View className="flex-[1.3]">
+                        <Text className="text-base text-neutral-700">
+                          {[
+                            line.dosePattern,
+                            foodTimingLabel(line.foodTiming),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </Text>
+                        {line.doseNote?.trim() ? (
+                          <Text className="mt-0.5 text-sm text-neutral-500">
+                            {line.doseNote.trim()}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text className="w-24 text-right text-base text-neutral-700">
+                        {formatDuration(line) || "—"}
                       </Text>
                     </View>
                   ))
                 )}
               </View>
+
+              {clinicalNotes ? (
+                <View className="mt-4 rounded-xl border border-neutral-200 p-4">
+                  <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-900">
+                    Clinical notes
+                  </Text>
+                  <Text className="text-base leading-6 text-neutral-800">
+                    {clinicalNotes}
+                  </Text>
+                </View>
+              ) : null}
 
               <View className="mt-5 flex-row items-end justify-between gap-4 border-t border-neutral-200 pt-4">
                 <View className="shrink-0 gap-1.5">
@@ -370,9 +415,14 @@ export default function PatientAppointmentReportScreen() {
                       className="text-base font-medium text-emerald-800"
                       numberOfLines={1}
                     >
-                      As advised
+                      {nextVisit}
                     </Text>
                   </View>
+                  {nextVisitDetail ? (
+                    <Text className="text-xs text-neutral-500">
+                      {nextVisitDetail}
+                    </Text>
+                  ) : null}
                 </View>
                 <View className="min-w-0 flex-1 items-end gap-1.5">
                   <Text className="text-xs uppercase tracking-wide text-neutral-500">
