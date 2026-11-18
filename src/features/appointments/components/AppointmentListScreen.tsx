@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
+  Platform,
   Pressable,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,14 +14,35 @@ import { useTranslation } from "react-i18next";
 
 import { Screen } from "@/ui";
 import { describeError } from "@/lib/api/errors";
-import { userGreetingName } from "@/lib/auth/roles";
+import {
+  isNurseRole,
+  isReceptionistRole,
+  userGreetingName,
+} from "@/lib/auth/roles";
 import { useActiveFacility, useAuthUser, useFacilityId } from "@/lib/auth/store";
 import { HeaderActions } from "@/features/header";
 import {
-  useCanAccessConsult,
-  useCanWrite,
-} from "@/features/permissions";
+  NotificationPanel,
+  NotificationRail,
+  notificationAppointmentId,
+} from "@/features/notifications/NotificationQueue";
+import { useNotificationPanelCollapsed } from "@/features/notifications/panelPreference";
+import type { StaffNotification } from "@/lib/api/endpoints/notifications";
+import { VitalsEditSheet } from "@/features/consult/components/VitalsEditSheet";
+import { useRealtimeToastStore } from "@/lib/realtime/toastStore";
+import { useVitalsRecordedStore } from "../vitalsRecordedStore";
+import { useCanBookWalkIn } from "@/features/walk-in";
+import { useCanAccessConsult } from "@/features/permissions";
 import { AppointmentCard } from "./AppointmentCard";
+import {
+  AppointmentActionsSheet,
+  type AppointmentActionKey,
+} from "./AppointmentActionsSheet";
+import {
+  AppointmentEditSheet,
+  type AppointmentEditMode,
+} from "./AppointmentEditSheet";
+import { CancelAppointmentSheet } from "./CancelAppointmentSheet";
 import { AppointmentSearchBar } from "./AppointmentSearchBar";
 import {
   useAppointmentList,
@@ -28,10 +50,17 @@ import {
   useCheckInAppointment,
   useLateArrivalAppointment,
   useOpenConsult,
+  useOpenConsultForVitals,
   useReadyForNext,
 } from "../hooks/useAppointmentList";
+import {
+  useAppointmentActionPermissions,
+  useDeleteAppointment,
+} from "../hooks/useAppointmentActions";
 import { canOpenAppointmentFromList } from "../lib/appointmentGates";
+import { resolveAppointmentActions } from "../lib/appointmentActions";
 import type { Appointment } from "../types";
+import { AppAlert } from "@/ui/AppAlert";
 
 function patientDisplayName(appt: Appointment): string {
   if (!appt.patient) return "this patient";
@@ -49,6 +78,18 @@ export function AppointmentListScreen() {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [fittingInId, setFittingInId] = useState<string | null>(null);
+  const canBookWalkIn = useCanBookWalkIn();
+  // Desk vitals popup: receptionist or nurse, without opening the consult screen.
+  const canAddVitals =
+    isReceptionistRole(user, facilityId) || isNurseRole(user);
+  const [openingVitalsId, setOpeningVitalsId] = useState<string | null>(null);
+  const [vitalsTarget, setVitalsTarget] = useState<{
+    consultationId: string;
+    appointmentId: string;
+    patientName: string;
+  } | null>(null);
+  const vitalsRecorded = useVitalsRecordedStore((s) => s.recorded);
+  const markVitalsRecorded = useVitalsRecordedStore((s) => s.markRecorded);
 
   const {
     search,
@@ -64,12 +105,21 @@ export function AppointmentListScreen() {
 
   const q = useAppointmentList(debouncedSearch, debouncedFilters);
   const open = useOpenConsult();
+  const openForVitals = useOpenConsultForVitals();
   const checkIn = useCheckInAppointment();
   const lateArrival = useLateArrivalAppointment();
   const readyForNext = useReadyForNext();
   const { canAccess: canAccessConsult, isLoading: consultAccessLoading } =
     useCanAccessConsult();
-  const canUpdateAppointment = useCanWrite("appointment");
+  const actionPerms = useAppointmentActionPermissions();
+  const canUpdateAppointment = actionPerms.canUpdate;
+  const deleteAppointment = useDeleteAppointment();
+  const [actionsTarget, setActionsTarget] = useState<Appointment | null>(null);
+  const [editTarget, setEditTarget] = useState<{
+    appointment: Appointment;
+    mode: AppointmentEditMode;
+  } | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
 
   const isDoctorLogin = Boolean(user?.doctorId);
   const canOpenConsult = canAccessConsult && !consultAccessLoading;
@@ -80,12 +130,36 @@ export function AppointmentListScreen() {
   );
   const totalCount = q.data?.pages[0]?.totalCount ?? 0;
 
+  // Landscape tablet: notifications dock beside the list instead of behind the bell.
+  const { width, height } = useWindowDimensions();
+  const splitView = width >= 900 && width > height;
+  const panelWidth = Math.round(Math.min(420, Math.max(320, width * 0.34)));
+  const [panelCollapsed, setPanelCollapsed] = useNotificationPanelCollapsed();
+
+  const listRef = useRef<FlatList<Appointment>>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
+
+  /** Tapping a notification scrolls to the visit it is about, when it is listed. */
+  const onNotificationSelect = (item: StaffNotification) => {
+    const appointmentId = notificationAppointmentId(item);
+    if (!appointmentId) return;
+    const index = appointments.findIndex((a) => a.id === appointmentId);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.2 });
+    setHighlightId(appointmentId);
+  };
+
   const greetName = userGreetingName(user);
   const welcomeSubtitle = greetName ? `Welcome, ${greetName}` : null;
 
   const onReadyForNext = async () => {
     if (!facilityId) {
-      Alert.alert(
+      AppAlert.alert(
         "Select a facility",
         "Choose a facility before notifying reception."
       );
@@ -93,12 +167,12 @@ export function AppointmentListScreen() {
     }
     try {
       await readyForNext.mutateAsync();
-      Alert.alert(
+      AppAlert.success(
         "Front desk notified",
         "Reception has been told you are ready for the next patient."
       );
     } catch (err) {
-      Alert.alert("Could not notify front desk", describeError(err));
+      AppAlert.alert("Could not notify front desk", describeError(err));
     }
   };
 
@@ -115,7 +189,7 @@ export function AppointmentListScreen() {
         },
       });
     } catch (err) {
-      Alert.alert("Could not open consult", describeError(err));
+      AppAlert.alert("Could not open consult", describeError(err));
     } finally {
       setOpeningId(null);
     }
@@ -124,14 +198,14 @@ export function AppointmentListScreen() {
   const onOpenConsult = async (appt: Appointment) => {
     if (consultAccessLoading) return;
     if (!canOpenConsult) {
-      Alert.alert(
+      AppAlert.alert(
         "You don't have permission",
         "Your role can't open consultations. Only doctors can consult a patient. Ask a facility administrator if you need access."
       );
       return;
     }
     if (!canOpenAppointmentFromList(appt)) {
-      Alert.alert(
+      AppAlert.alert(
         "Consult unavailable",
         "Check in the patient first when the visit is still Scheduled. Walk-ins and waiting visits can open directly. Follow-up fees and time slots must be completed first."
       );
@@ -140,14 +214,50 @@ export function AppointmentListScreen() {
     await navigateToConsult(appt);
   };
 
+  /** Same as Practice desk: resolve (or create) the visit's consultation, then record vitals on it. */
+  const onAddVitals = async (appt: Appointment) => {
+    if (openingVitalsId !== null) return;
+    setOpeningVitalsId(appt.id);
+    try {
+      const consult = await openForVitals.mutateAsync(appt.id);
+      setVitalsTarget({
+        consultationId: consult.id,
+        appointmentId: appt.id,
+        patientName: patientDisplayName(appt),
+      });
+    } catch (err) {
+      AppAlert.alert(t("appointments.failedToOpenVitals"), describeError(err), undefined, {
+        tone: "error",
+      });
+    } finally {
+      setOpeningVitalsId(null);
+    }
+  };
+
+  /** Receptionist / nurse confirmation — the sheet only opens behind `canAddVitals`. */
+  const onVitalsSaved = () => {
+    if (!vitalsTarget || !canAddVitals) return;
+    markVitalsRecorded(vitalsTarget.appointmentId);
+    useRealtimeToastStore.getState().show({
+      id: `vitals-${vitalsTarget.appointmentId}-${Date.now()}`,
+      title: t("appointments.vitalsSavedTitle"),
+      body: t("appointments.vitalsSavedBody", {
+        name: vitalsTarget.patientName,
+      }),
+      tone: "success",
+    });
+  };
+
   const performCheckIn = async (appt: Appointment) => {
     if (checkingInId !== null) return;
     setCheckingInId(appt.id);
     try {
       await checkIn.mutateAsync(appt.id);
-      Alert.alert(t("appointments.checkInSuccess"));
+      AppAlert.success(t("appointments.checkInSuccess"));
     } catch (err) {
-      Alert.alert(t("appointments.failedToCheckIn"), describeError(err));
+      AppAlert.alert(t("appointments.failedToCheckIn"), describeError(err), undefined, {
+        tone: "error",
+      });
     } finally {
       setCheckingInId(null);
     }
@@ -156,7 +266,7 @@ export function AppointmentListScreen() {
   const onCheckIn = (appt: Appointment) => {
     if (checkingInId !== null) return;
     const name = patientDisplayName(appt);
-    Alert.alert(
+    AppAlert.alert(
       t("appointments.checkInConfirmTitle"),
       t("appointments.checkInConfirmMessage", { name }),
       [
@@ -165,7 +275,8 @@ export function AppointmentListScreen() {
           text: t("appointments.checkIn"),
           onPress: () => void performCheckIn(appt),
         },
-      ]
+      ],
+      { tone: "confirm", icon: "log-in-outline" }
     );
   };
 
@@ -174,9 +285,11 @@ export function AppointmentListScreen() {
     setFittingInId(appt.id);
     try {
       await lateArrival.mutateAsync(appt.id);
-      Alert.alert(t("appointments.fitInSuccess"));
+      AppAlert.success(t("appointments.fitInSuccess"));
     } catch (err) {
-      Alert.alert(t("appointments.failedToFitIn"), describeError(err));
+      AppAlert.alert(t("appointments.failedToFitIn"), describeError(err), undefined, {
+        tone: "error",
+      });
     } finally {
       setFittingInId(null);
     }
@@ -185,6 +298,52 @@ export function AppointmentListScreen() {
   const onFitInNextSlot = (appt: Appointment) => {
     if (fittingInId !== null) return;
     void performFitInNextSlot(appt);
+  };
+
+  const confirmDelete = (appt: Appointment) => {
+    AppAlert.alert(
+      t("appointments.deleteConfirmTitle"),
+      t("appointments.deleteConfirmMessage", { name: patientDisplayName(appt) }),
+      [
+        { text: t("appointments.cancel"), style: "cancel" },
+        {
+          text: t("appointments.actions.delete"),
+          style: "destructive",
+          onPress: () => {
+            deleteAppointment.mutate(
+              { id: appt.id },
+              {
+                onSuccess: () => AppAlert.success(t("appointments.deleteSuccess")),
+                onError: (err) =>
+                  AppAlert.alert(
+                    t("appointments.failedToDelete"),
+                    describeError(err),
+                    undefined,
+                    { tone: "error" }
+                  ),
+              }
+            );
+          },
+        },
+      ],
+      { tone: "danger", icon: "trash" }
+    );
+  };
+
+  const onSelectAction = (key: AppointmentActionKey) => {
+    const appt = actionsTarget;
+    setActionsTarget(null);
+    if (!appt) return;
+    // iOS drops a modal (or Alert) presented while another is still
+    // dismissing, so the next step waits for the menu to finish closing.
+    setTimeout(
+      () => {
+        if (key === "cancel") setCancelTarget(appt);
+        else if (key === "delete") confirmDelete(appt);
+        else setEditTarget({ appointment: appt, mode: key });
+      },
+      Platform.OS === "ios" ? 350 : 0
+    );
   };
 
   const permissionDenied =
@@ -197,6 +356,102 @@ export function AppointmentListScreen() {
       ? `${totalCount} appointment${totalCount === 1 ? "" : "s"}`
       : "No appointments yet",
   ].filter(Boolean);
+
+  const listBody = (
+    <View className="flex-1">
+      <AppointmentSearchBar
+        search={search}
+        onSearchChange={setSearch}
+        filters={filters}
+        onFiltersChange={setFilters}
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((o) => !o)}
+        onClearFilters={clearFilters}
+      />
+
+      {q.isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#FD006A" />
+        </View>
+      ) : q.isError ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-center text-base font-medium text-red-500">
+            {permissionDenied
+              ? t("appointments.permissionDenied")
+              : t("appointments.errorLoading")}
+          </Text>
+          <Text className="mt-2 text-center text-sm text-neutral-500">
+            {permissionDenied
+              ? "Ask an admin for appointment.read access."
+              : describeError(q.error)}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={listRef}
+          data={appointments}
+          keyExtractor={(a) => a.id}
+          onScrollToIndexFailed={(info) => {
+            // Card heights vary, so a far row may not be measured yet: jump
+            // near it, then retry once it has rendered.
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+            setTimeout(() => {
+              listRef.current?.scrollToIndex({
+                index: info.index,
+                animated: true,
+                viewPosition: 0.2,
+              });
+            }, 250);
+          }}
+          contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
+          renderItem={({ item }) => (
+            <AppointmentCard
+              appointment={item}
+              opening={openingId === item.id}
+              checkingIn={checkingInId === item.id}
+              fittingIn={fittingInId === item.id}
+              checkInBlocked={
+                checkingInId !== null && checkingInId !== item.id
+              }
+              canOpenConsult={canOpenConsult}
+              canUpdateAppointment={canUpdateAppointment}
+              canAddVitals={canAddVitals}
+              openingVitals={openingVitalsId === item.id}
+              vitalsAdded={canAddVitals && Boolean(vitalsRecorded[item.id])}
+              onAddVitals={() => void onAddVitals(item)}
+              onCheckIn={() => onCheckIn(item)}
+              onOpenConsult={() => void onOpenConsult(item)}
+              onFitInNextSlot={() => onFitInNextSlot(item)}
+              actions={resolveAppointmentActions(item, actionPerms)}
+              onOpenActions={() => setActionsTarget(item)}
+              highlighted={highlightId === item.id}
+            />
+          )}
+          ListEmptyComponent={
+            <Text className="mt-10 text-center text-sm text-neutral-500">
+              {t("appointments.empty")}
+            </Text>
+          }
+          ListFooterComponent={
+            q.isFetchingNextPage ? (
+              <ActivityIndicator className="my-4" color="#FD006A" />
+            ) : null
+          }
+          refreshing={q.isRefetching && !q.isFetchingNextPage}
+          onRefresh={() => q.refetch()}
+          onEndReached={() => {
+            if (q.hasNextPage && !q.isFetchingNextPage) {
+              void q.fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.4}
+        />
+      )}
+    </View>
+  );
 
   return (
     <Screen edges={["left", "right", "bottom"]}>
@@ -221,7 +476,7 @@ export function AppointmentListScreen() {
               <Text className="text-sm text-white/70">No facility selected</Text>
             )}
           </View>
-          <HeaderActions light />
+          <HeaderActions light showNotifications={!splitView} />
         </View>
 
         <View className="mx-5 h-px bg-white/20" />
@@ -270,78 +525,88 @@ export function AppointmentListScreen() {
                 Notify reception when ready
               </Text>
             </View>
+          ) : canBookWalkIn ? (
+            <View className="shrink-0 items-end gap-1.5 pt-0.5">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("walkIn.book")}
+                disabled={!facilityId}
+                onPress={() => router.push("/walk-in")}
+                className={`h-10 min-w-[132px] flex-row items-center justify-center gap-2 rounded-lg bg-white px-4 shadow-sm active:bg-white/90 ${
+                  !facilityId ? "opacity-50" : ""
+                }`}
+              >
+                <Ionicons name="walk-outline" size={18} color="#FD006A" />
+                <Text className="text-sm font-semibold tracking-wide text-brand">
+                  {t("walkIn.book")}
+                </Text>
+              </Pressable>
+              <Text
+                className="text-right text-[11px] leading-4 text-white/65"
+                numberOfLines={1}
+              >
+                {t("walkIn.bookHint")}
+              </Text>
+            </View>
           ) : null}
         </View>
       </View>
 
-      <AppointmentSearchBar
-        search={search}
-        onSearchChange={setSearch}
-        filters={filters}
-        onFiltersChange={setFilters}
-        filtersOpen={filtersOpen}
-        onToggleFilters={() => setFiltersOpen((o) => !o)}
-        onClearFilters={clearFilters}
-      />
-
-      {q.isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#FD006A" />
-        </View>
-      ) : q.isError ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-center text-base font-medium text-red-500">
-            {permissionDenied
-              ? t("appointments.permissionDenied")
-              : t("appointments.errorLoading")}
-          </Text>
-          <Text className="mt-2 text-center text-sm text-neutral-500">
-            {permissionDenied
-              ? "Ask an admin for appointment.read access."
-              : describeError(q.error)}
-          </Text>
+      {splitView ? (
+        <View className="flex-1 flex-row">
+          {listBody}
+          <View
+            className="border-l border-neutral-200"
+            style={{ width: panelCollapsed ? 60 : panelWidth }}
+          >
+            {panelCollapsed ? (
+              <NotificationRail onExpand={() => setPanelCollapsed(false)} />
+            ) : (
+              <NotificationPanel
+                onSelect={onNotificationSelect}
+                onCollapse={() => setPanelCollapsed(true)}
+              />
+            )}
+          </View>
         </View>
       ) : (
-        <FlatList
-          data={appointments}
-          keyExtractor={(a) => a.id}
-          contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
-          renderItem={({ item }) => (
-            <AppointmentCard
-              appointment={item}
-              opening={openingId === item.id}
-              checkingIn={checkingInId === item.id}
-              fittingIn={fittingInId === item.id}
-              checkInBlocked={
-                checkingInId !== null && checkingInId !== item.id
-              }
-              canOpenConsult={canOpenConsult}
-              canUpdateAppointment={canUpdateAppointment}
-              onCheckIn={() => onCheckIn(item)}
-              onOpenConsult={() => void onOpenConsult(item)}
-              onFitInNextSlot={() => onFitInNextSlot(item)}
-            />
-          )}
-          ListEmptyComponent={
-            <Text className="mt-10 text-center text-sm text-neutral-500">
-              {t("appointments.empty")}
-            </Text>
-          }
-          ListFooterComponent={
-            q.isFetchingNextPage ? (
-              <ActivityIndicator className="my-4" color="#FD006A" />
-            ) : null
-          }
-          refreshing={q.isRefetching && !q.isFetchingNextPage}
-          onRefresh={() => q.refetch()}
-          onEndReached={() => {
-            if (q.hasNextPage && !q.isFetchingNextPage) {
-              void q.fetchNextPage();
-            }
-          }}
-          onEndReachedThreshold={0.4}
-        />
+        listBody
       )}
+
+      {actionsTarget ? (
+        <AppointmentActionsSheet
+          open
+          patientName={patientDisplayName(actionsTarget)}
+          actions={resolveAppointmentActions(actionsTarget, actionPerms)}
+          onSelect={onSelectAction}
+          onClose={() => setActionsTarget(null)}
+        />
+      ) : null}
+
+      {editTarget ? (
+        <AppointmentEditSheet
+          appointment={editTarget.appointment}
+          mode={editTarget.mode}
+          onClose={() => setEditTarget(null)}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelAppointmentSheet
+          appointment={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+        />
+      ) : null}
+
+      {canAddVitals && vitalsTarget ? (
+        <VitalsEditSheet
+          open
+          onClose={() => setVitalsTarget(null)}
+          consultationId={vitalsTarget.consultationId}
+          initialVitals={{}}
+          onSaved={onVitalsSaved}
+        />
+      ) : null}
     </Screen>
   );
 }

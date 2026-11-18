@@ -52,7 +52,11 @@ export type ConsultLoadResponse = {
   };
   patient?: ConsultPatient | null;
   appointment?: ConsultAppointment | null;
-  doctor?: { id?: string; name?: string | null } | null;
+  doctor?: {
+    id?: string;
+    name?: string | null;
+    specialization?: string | null;
+  } | null;
   facility?: { id?: string; name?: string | null } | null;
   patientId?: string;
   doctorId?: string;

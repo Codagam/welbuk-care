@@ -1,28 +1,30 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   RefreshControl,
   ScrollView,
   Text,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { useQueryClient } from "@tanstack/react-query";
 
-import { Button, Screen, TopBar } from "@/ui";
+import { DocumentsCard } from "@/features/consult/components/DocumentsCard";
+import { usePatient } from "@/features/patients/hooks";
+import { QuestionnaireSheet } from "@/features/patients/QuestionnaireSheet";
+import { AppointmentsCard } from "@/features/patients/sections/AppointmentsCard";
+import { LabReportsCard } from "@/features/patients/sections/LabReportsCard";
+import { MedicalHistoryCard } from "@/features/patients/sections/MedicalHistoryCard";
+import { PatientHeaderCard } from "@/features/patients/sections/PatientHeaderCard";
+import { ReferralsCard } from "@/features/patients/sections/ReferralsCard";
+import { FamilyCard } from "@/features/patients/sections/FamilyCard";
+import { PrescriptionHistoryCard } from "@/features/patients/sections/PrescriptionHistoryCard";
+import { VaccineWellnessCard } from "@/features/patients/vaccimon/VaccineWellnessCard";
+import { useCanWrite } from "@/features/permissions/hooks";
+import { Ionicons } from "@expo/vector-icons";
 import { describeError } from "@/lib/api/errors";
 import { useFacilityId } from "@/lib/auth/store";
-import { usePatient } from "@/features/patients/hooks";
-import { PatientHeaderCard } from "@/features/patients/sections/PatientHeaderCard";
-import { AppointmentsCard } from "@/features/patients/sections/AppointmentsCard";
-import { MedicalHistoryCard } from "@/features/patients/sections/MedicalHistoryCard";
-import { ReferralsCard } from "@/features/patients/sections/ReferralsCard";
-import { LabReportsCard } from "@/features/patients/sections/LabReportsCard";
-import { DocumentsCard } from "@/features/consult/components/DocumentsCard";
-import { QuestionnaireSheet } from "@/features/patients/QuestionnaireSheet";
-import { UnlinkPatientDialog } from "@/features/patients/UnlinkPatientDialog";
+import { Button, Screen, TopBar } from "@/ui";
 
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,8 +34,13 @@ export default function PatientDetailScreen() {
   const q = usePatient(id);
 
   const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
-  const [unlinkOpen, setUnlinkOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Family, vaccine and growth writes are gated on patient.write by Practice.
+  // A patient removed from this facility is view-only, even for the admin who
+  // can still open it (Practice does the same).
+  const canEditPatient =
+    useCanWrite("patient", facilityId) && !q.data?.removedFromFacility;
+  // Withdrawing a prescription is a clinical act; it follows consult write.
+  const canWithdrawRx = useCanWrite("consult", facilityId);
 
   const mongoId = q.data?.id;
   const routeId = id ?? "";
@@ -47,53 +54,34 @@ export default function PatientDetailScreen() {
       qc.invalidateQueries({ queryKey: ["patient-referrals", mongoId] }),
       qc.invalidateQueries({ queryKey: ["patient-lab-reports", mongoId] }),
       qc.invalidateQueries({ queryKey: ["patient-documents", mongoId] }),
+      qc.invalidateQueries({ queryKey: ["patient-family"] }),
+      qc.invalidateQueries({ queryKey: ["vaccimon"] }),
+      qc.invalidateQueries({ queryKey: ["prescription-issues"] }),
     ]);
   };
 
   return (
     <Screen>
       <TopBar
-        title="Patient"
+        title=""
+        backLabel="Back"
         right={
-          q.data ? (
-            <View className="flex-row items-center gap-2">
-              <Button
-                label="Edit"
-                size="md"
-                variant="primary"
-                onPress={() =>
-                  router.push({
-                    pathname: "/patients/[id]/edit",
-                    params: { id: routeId },
-                  })
-                }
-              />
-              <Pressable
-                onPress={() => setMenuOpen((v) => !v)}
-                hitSlop={10}
-                className="h-10 w-10 items-center justify-center rounded-full border border-neutral-200"
-                accessibilityLabel="More actions"
-              >
-                <Ionicons name="ellipsis-vertical" size={18} color="#404040" />
-              </Pressable>
-            </View>
+          q.data && canEditPatient ? (
+            <Button
+              label="Edit"
+              size="md"
+              variant="primary"
+              className="rounded-md"
+              onPress={() =>
+                router.push({
+                  pathname: "/patients/[id]/edit",
+                  params: { id: routeId },
+                })
+              }
+            />
           ) : undefined
         }
       />
-
-      {menuOpen && q.data ? (
-        <View className="absolute right-4 top-16 z-20 min-w-[180px] rounded-xl border border-neutral-200 bg-white shadow-lg">
-          <Pressable
-            onPress={() => {
-              setMenuOpen(false);
-              setUnlinkOpen(true);
-            }}
-            className="px-4 py-3 active:bg-neutral-50"
-          >
-            <Text className="text-sm text-red-600">Remove from facility</Text>
-          </Pressable>
-        </View>
-      ) : null}
 
       {q.isLoading ? (
         <View className="flex-1 items-center justify-center">
@@ -130,19 +118,76 @@ export default function PatientDetailScreen() {
             }}
             className="mx-auto w-full max-w-6xl flex-col gap-3"
           >
-            <PatientHeaderCard patient={q.data} />
+            {q.data.removedFromFacility ? (
+              <View
+                accessibilityRole="alert"
+                className="flex-row items-start gap-2.5 rounded-xl border border-amber-400/50 bg-amber-50 px-4 py-3"
+              >
+                <Ionicons name="warning-outline" size={16} color="#d97706" />
+                <Text className="min-w-0 flex-1 text-sm text-amber-900">
+                  This patient has been removed from the selected facility. You
+                  are viewing the record as an administrator; staff at this
+                  facility can no longer open it.
+                </Text>
+              </View>
+            ) : null}
+            <PatientHeaderCard
+              patient={q.data}
+              questionnairePatientId={routeId || mongoId!}
+            />
             {mongoId ? (
               <AppointmentsCard
                 mongoPatientId={mongoId}
                 routePatientId={routeId}
               />
             ) : null}
+            {facilityId ? (
+              <FamilyCard
+                patientId={routeId || mongoId!}
+                facilityId={facilityId}
+                patientName={[q.data.firstName, q.data.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+                canEdit={canEditPatient}
+              />
+            ) : null}
+            {facilityId ? (
+              <VaccineWellnessCard
+                patientId={routeId || mongoId!}
+                facilityId={facilityId}
+                canEdit={canEditPatient}
+                dateOfBirth={q.data.dob ? String(q.data.dob) : null}
+                gender={q.data.gender ?? null}
+              />
+            ) : null}
             <MedicalHistoryCard
               patientId={routeId || mongoId!}
+              canEdit={canEditPatient}
               onEdit={() => setQuestionnaireOpen(true)}
             />
-            {mongoId ? <ReferralsCard mongoPatientId={mongoId} /> : null}
-            {mongoId ? <LabReportsCard mongoPatientId={mongoId} /> : null}
+            {mongoId ? (
+              <ReferralsCard
+                mongoPatientId={mongoId}
+                patientName={[q.data.firstName, q.data.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+              />
+            ) : null}
+            {facilityId ? (
+              <PrescriptionHistoryCard
+                patientId={routeId || mongoId!}
+                facilityId={facilityId}
+                canWithdraw={canWithdrawRx}
+              />
+            ) : null}
+            {mongoId ? (
+              <LabReportsCard
+                mongoPatientId={mongoId}
+                patientName={[q.data.firstName, q.data.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+              />
+            ) : null}
             {mongoId ? <DocumentsCard patientId={mongoId} /> : null}
             {!facilityId ? (
               <Text className="text-xs text-amber-700">
@@ -154,21 +199,13 @@ export default function PatientDetailScreen() {
       )}
 
       {q.data && mongoId ? (
-        <>
-          <QuestionnaireSheet
-            open={questionnaireOpen}
-            onOpenChange={setQuestionnaireOpen}
-            patientId={routeId || mongoId}
-            mongoPatientId={mongoId}
-            onSaved={() => void refreshAll()}
-          />
-          <UnlinkPatientDialog
-            open={unlinkOpen}
-            onOpenChange={setUnlinkOpen}
-            patient={q.data}
-            onUnlinked={() => router.replace("/(app)/(tabs)/patients")}
-          />
-        </>
+        <QuestionnaireSheet
+          open={questionnaireOpen}
+          onOpenChange={setQuestionnaireOpen}
+          patientId={routeId || mongoId}
+          mongoPatientId={mongoId}
+          onSaved={() => void refreshAll()}
+        />
       ) : null}
     </Screen>
   );

@@ -7,10 +7,14 @@ import { create } from "zustand";
 
 import { setTokenProvider, setUnauthorizedHandler } from "@/lib/api/client";
 import { fetchMe } from "@/lib/api/endpoints/auth";
-import { clearFacilityQrCache } from "@/features/header/facilityQrCache";
 import { authProvider } from "./practice-provider";
 import { activeFacilityStorage, sessionStorage } from "./secure-storage";
 import type { Facility, LoginInput, Session } from "./types";
+import {
+  clearInMemoryUserData,
+  wipeLocalFiles,
+  wipeLocalUserData,
+} from "./wipeLocalData";
 
 type Status = "loading" | "authed" | "anon";
 
@@ -41,6 +45,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     ]);
     if (!session?.token) {
       set({ session: null, activeFacilityId: null, status: "anon" });
+      // Leftovers from a session that ended without a clean sign-out (app killed).
+      void wipeLocalFiles();
       return;
     }
 
@@ -61,6 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           status: "anon",
           sessionExpired: true,
         });
+        await wipeLocalUserData();
         return;
       }
       const updated: Session = {
@@ -116,12 +123,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // best-effort
     }
+    // Null the session first so nothing can refetch with the old token, then wipe.
+    set({ session: null, activeFacilityId: null, status: "anon", sessionExpired: false });
     await Promise.all([
       sessionStorage.clear(),
       activeFacilityStorage.clear(),
-      clearFacilityQrCache(),
+      wipeLocalUserData(),
     ]);
-    set({ session: null, activeFacilityId: null, status: "anon", sessionExpired: false });
   },
 
   setActiveFacility: async (id) => {
@@ -171,13 +179,14 @@ setTokenProvider(() => authProvider.resolveToken(useAuthStore.getState().session
 
 setUnauthorizedHandler(() => {
   if (useAuthStore.getState().status === "anon") return;
-  sessionStorage.clear().catch(() => {});
-  activeFacilityStorage.clear().catch(() => {});
-  clearFacilityQrCache().catch(() => {});
   useAuthStore.setState({
     session: null,
     activeFacilityId: null,
     status: "anon",
     sessionExpired: true,
   });
+  clearInMemoryUserData();
+  sessionStorage.clear().catch(() => {});
+  activeFacilityStorage.clear().catch(() => {});
+  wipeLocalFiles().catch(() => {});
 });

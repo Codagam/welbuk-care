@@ -1,21 +1,29 @@
 import { useState, type ReactNode } from "react";
 import { Text, TextInput, type TextInputProps, View } from "react-native";
 
+import { FieldLabel } from "./FieldLabel";
+
 export interface TextFieldProps extends TextInputProps {
   label?: string;
+  /** Shows a red `*` after the label. */
+  required?: boolean;
   error?: string;
   containerClassName?: string;
   labelClassName?: string;
   /** Renders inside the field on the right (e.g. password visibility toggle). */
   rightAccessory?: ReactNode;
+  /** Multiline only: grow to fill the parent's height (parent must flex). */
+  fill?: boolean;
 }
 
 export function TextField({
   label,
+  required,
   error,
   containerClassName = "",
   labelClassName = "text-neutral-700",
   rightAccessory,
+  fill = false,
   multiline,
   style,
   onFocus,
@@ -31,11 +39,15 @@ export function TextField({
       : "border-neutral-300";
 
   return (
-    <View className={`gap-1.5 ${containerClassName}`}>
+    <View className={`gap-1.5 ${fill ? "flex-1" : ""} ${containerClassName}`}>
       {label ? (
-        <Text className={`text-sm font-medium ${labelClassName}`}>{label}</Text>
+        <FieldLabel
+          label={label}
+          required={required}
+          className={labelClassName}
+        />
       ) : null}
-      <View className="relative justify-center">
+      <View className={`relative justify-center ${fill ? "flex-1" : ""}`}>
         <TextInput
           placeholderTextColor="#9ca3af"
           multiline={multiline}
@@ -52,6 +64,7 @@ export function TextField({
                   paddingVertical: 0,
                 },
             rightAccessory ? { paddingRight: 48 } : null,
+            fill && multiline ? { flex: 1, minHeight: 96 } : null,
             style,
           ]}
           {...props}

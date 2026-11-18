@@ -14,27 +14,36 @@ import type {
 
 const TONE: Record<
   RealtimeToastTone,
-  { bg: string; border: string; icon: keyof typeof Ionicons.glyphMap }
+  {
+    bg: string;
+    border: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    color: string;
+  }
 > = {
   info: {
     bg: "bg-white",
     border: "border-brand/30",
     icon: "notifications-outline",
+    color: "#FD006A",
   },
   success: {
     bg: "bg-emerald-50",
     border: "border-emerald-200",
-    icon: "checkmark-circle-outline",
+    icon: "checkmark-circle",
+    color: "#059669",
   },
   warning: {
     bg: "bg-amber-50",
     border: "border-amber-200",
-    icon: "alert-circle-outline",
+    icon: "alert-circle",
+    color: "#D97706",
   },
   error: {
     bg: "bg-red-50",
     border: "border-red-200",
-    icon: "close-circle-outline",
+    icon: "close-circle",
+    color: "#DC2626",
   },
 };
 
@@ -53,7 +62,7 @@ function ToastCard({
       accessibilityLabel={`${toast.title}. ${toast.body ?? ""}`}
       className={`mx-4 flex-row items-start gap-3 rounded-2xl border px-3.5 py-3 shadow-sm ${tone.bg} ${tone.border}`}
     >
-      <Ionicons name={tone.icon} size={20} color="#FD006A" />
+      <Ionicons name={tone.icon} size={20} color={tone.color} />
       <View className="min-w-0 flex-1 gap-0.5">
         <Text className="text-sm font-semibold text-neutral-900">
           {toast.title}

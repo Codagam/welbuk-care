@@ -12,8 +12,25 @@ export {
   useCheckInAppointment,
   useLateArrivalAppointment,
   useOpenConsult,
+  useOpenConsultForVitals,
   useReadyForNext,
 } from "./hooks/useAppointmentList";
+export {
+  useAppointmentActionPermissions,
+  useCancelAppointment,
+  useDeleteAppointment,
+  useDoctorDaySlots,
+  useUpdateAppointment,
+} from "./hooks/useAppointmentActions";
+export {
+  hasAnyAppointmentAction,
+  isAppointmentMovable,
+  resolveAppointmentActions,
+} from "./lib/appointmentActions";
+export type {
+  AppointmentActionPermissions,
+  AppointmentActions,
+} from "./lib/appointmentActions";
 export { buildSearchParams, defaultListFilters } from "./lib/buildSearchParams";
 export {
   canOpenAppointmentFromList,

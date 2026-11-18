@@ -16,6 +16,7 @@ import {
   useAuthUser,
 } from "@/lib/auth/store";
 import { Screen } from "@/ui";
+import { AppAlert } from "@/ui/AppAlert";
 
 const APP_VERSION = "1.0.0";
 
@@ -142,6 +143,22 @@ export default function SettingsScreen() {
     user?.globalRole ||
     user?.role ||
     null;
+
+  const confirmSignOut = () => {
+    AppAlert.alert(
+      t("common.signOutConfirmTitle"),
+      t("common.signOutConfirmMessage"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("common.signOut"),
+          style: "destructive",
+          onPress: () => signOut(),
+        },
+      ],
+      { icon: "log-out-outline" }
+    );
+  };
 
   return (
     <Screen edges={["left", "right", "bottom"]}>
@@ -295,7 +312,7 @@ export default function SettingsScreen() {
               label={t("common.signOut")}
               destructive
               last
-              onPress={() => signOut()}
+              onPress={confirmSignOut}
             />
           </MenuCard>
         </View>

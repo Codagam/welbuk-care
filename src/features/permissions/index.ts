@@ -13,6 +13,7 @@ export {
   useCanAccessInpatient,
   useInpatientAvailability,
   useCanAccessConsult,
+  useCanCreatePatient,
 } from "./hooks";
 export { NoAccess, SectionAccessLoading } from "./NoAccess";
 export { SectionAccessGate } from "./SectionAccessGate";

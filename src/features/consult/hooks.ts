@@ -11,6 +11,7 @@ import {
   deletePrescriptionLine,
   finalizePrescription,
   getConversation,
+  getDetectedSymptoms,
   getPatientHistory,
   getPrescriptions,
   getSummary,
@@ -18,7 +19,6 @@ import {
   patchReportAttachmentUrls,
   saveSummary,
   saveVitals,
-  searchDiagnosisCodes,
 } from "@/lib/api/endpoints/consult-data";
 import {
   listPatientDocuments,
@@ -86,14 +86,18 @@ export function useSaveSummary(id: string) {
   });
 }
 
-/** Load ICD-10 codes when the field is open; empty `q` returns the default list. */
-export function useDiagnosisSearch(q: string, open = false) {
+// ---- Detected Symptoms ------------------------------------------------
+
+export function detectedSymptomsKey(id: string) {
+  return ["detected-symptoms", id] as const;
+}
+
+/** Replaced server-side by Summarise / Promote; invalidate after either. */
+export function useDetectedSymptoms(id: string) {
   return useQuery({
-    queryKey: ["diagnosis-codes", q.trim()],
-    enabled: open,
-    queryFn: ({ signal }) => searchDiagnosisCodes(q.trim(), signal),
-    staleTime: 5 * 60_000,
-    placeholderData: (prev) => prev,
+    queryKey: detectedSymptomsKey(id),
+    enabled: !!id,
+    queryFn: () => getDetectedSymptoms(id),
   });
 }
 

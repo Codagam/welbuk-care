@@ -67,7 +67,6 @@ export async function loginRequest(input: LoginInput): Promise<{
   });
 
   // Debug: login payload (no doctorId here — /me supplies it).
-  // console.log("[auth] POST /api/auth/login response", JSON.stringify(data, null, 2));
   // console.log("[auth] login key fields", {
   //   name: data.user?.name,
   //   displayName: data.user?.displayName,
@@ -95,8 +94,8 @@ export async function loginRequest(input: LoginInput): Promise<{
         facilities: me.facilities ?? data.facilities ?? [],
       };
     }
-  } catch (err) {
-    console.log("[auth] /me failed after login, falling back to login user", err);
+  } catch {
+    // Fall back to the login user (no doctorId until the next /me).
   }
 
   return { token, user: data.user, facilities: data.facilities ?? [] };

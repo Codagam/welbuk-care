@@ -1,12 +1,23 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
+import {
+  followUpPrintDetail,
+  formatFollowUpForPrint,
+} from "@/features/consult/plan-of-care/followUp";
+import { formatDuration } from "@/features/consult/plan-of-care/sig";
+
 export type ReportPdfRxLine = {
   id: string;
   name?: string | null;
   dosePattern?: string | null;
   foodTiming?: string | null;
   duration?: string | number | null;
+  durationValue?: number | null;
+  durationUnit?: string | null;
+  doseNote?: string | null;
+  dosageForm?: string | null;
+  genericName?: string | null;
 };
 
 export type ConsultationReportPdfInput = {
@@ -18,15 +29,42 @@ export type ConsultationReportPdfInput = {
   patientMeta: string;
   doctorLabel: string;
   diagnosis: string;
-  notes: string;
+  /** SOAP Plan, printed as "Clinical notes" under the prescription. Omitted when empty. */
+  clinicalNotes?: string | null;
   prescriptionRows: ReportPdfRxLine[];
+  /** The summary's follow-up line. Empty prints "As advised". */
+  followUp?: string | null;
 };
+
+/**
+ * The standard PDF fonts encode WinAnsi only, and pdf-lib THROWS on anything else,
+ * which would lose the whole PDF over one character in a free-text note. ¼ ½ ¾ and
+ * · are inside the range. Other scripts print as "?", so a gap shows on the paper.
+ */
+function pdfSafe(text: string): string {
+  return text
+    .replace(/\s/g, " ")
+    .replace(/[^\x20-\x7E -ÿ–—‘’“”•…]/g, "?");
+}
 
 function foodTimingLabel(value?: string | null): string {
   if (!value) return "";
   if (value === "AF") return "After Food";
   if (value === "BF") return "Before Food";
   return value;
+}
+
+/** "tablet" prints as "Tablet". */
+function formLabel(form?: string | null): string {
+  const f = form?.trim() ?? "";
+  return f ? f.charAt(0).toUpperCase() + f.slice(1) : "";
+}
+
+/** The generic under the brand, unless the line's own name already says it. */
+function genericToShow(line: { name?: string | null; genericName?: string | null }): string {
+  const generic = line.genericName?.trim() ?? "";
+  if (!generic) return "";
+  return (line.name ?? "").toLowerCase().includes(generic.toLowerCase()) ? "" : generic;
 }
 
 function wrapText(
@@ -59,7 +97,7 @@ export async function buildConsultationReportPdf(
   input: ConsultationReportPdfInput
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([612, 792]); // US Letter
+  let page = pdf.addPage([612, 792]); // US Letter
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
@@ -134,62 +172,62 @@ export async function buildConsultationReportPdf(
   drawText(spec, rightX - 12 - specW, y - 42, 10, false, rgb(0.4, 0.4, 0.4));
   y -= 76;
 
-  // Diagnosis / Notes boxes
-  const gap = 12;
-  const boxW = (contentWidth - gap) / 2;
-  const boxH = 80;
+  // Diagnosis, full width (the notes box beside it was removed on 2026-11-17, as
+  // in Practice). Line breaks are kept (Assessment holds one code per line), and
+  // the box grows to fit: a diagnosis must not be cut off on a prescription.
+  const boxLines = (text: string, width: number) =>
+    text
+      .split("\n")
+      .flatMap((line) => wrapText(pdfSafe(line), width - 20, font, 11))
+      .slice(0, 16);
+  const diagLines = boxLines(input.diagnosis || "N/A", contentWidth);
+  const boxH = Math.max(56, 40 + diagLines.length * 14);
   page.drawRectangle({
     x: margin,
     y: y - boxH,
-    width: boxW,
+    width: contentWidth,
     height: boxH,
     color: rgb(0.94, 0.97, 1),
   });
-  page.drawRectangle({
-    x: margin + boxW + gap,
-    y: y - boxH,
-    width: boxW,
-    height: boxH,
-    color: rgb(1, 0.98, 0.92),
-  });
   drawText("DIAGNOSIS", margin + 10, y - 14, 9, true, rgb(0.12, 0.25, 0.69));
-  const diagLines = wrapText(input.diagnosis || "N/A", boxW - 20, font, 11);
-  diagLines.slice(0, 4).forEach((line, i) => {
+  diagLines.forEach((line, i) => {
     drawText(line, margin + 10, y - 32 - i * 14, 11);
-  });
-  drawText(
-    "DOCTOR NOTES",
-    margin + boxW + gap + 10,
-    y - 14,
-    9,
-    true,
-    rgb(0.57, 0.25, 0.05)
-  );
-  const noteLines = wrapText(input.notes || "—", boxW - 20, font, 11);
-  noteLines.slice(0, 4).forEach((line, i) => {
-    drawText(line, margin + boxW + gap + 10, y - 32 - i * 14, 11);
   });
   y -= boxH + 22;
 
   // Prescription
   drawText("Rx PRESCRIPTION", margin, y, 14, true);
   y -= 10;
-  const tableTop = y;
   const col1 = margin;
-  const col2 = margin + contentWidth * 0.42;
-  const col3 = margin + contentWidth * 0.82;
+  const colType = margin + contentWidth * 0.36;
+  const col2 = margin + contentWidth * 0.5;
+  const col3 = margin + contentWidth * 0.84;
   const rowH = 22;
-  page.drawRectangle({
-    x: margin,
-    y: tableTop - rowH,
-    width: contentWidth,
-    height: rowH,
-    color: rgb(0.09, 0.09, 0.09),
-  });
-  drawText("Medicine", col1 + 8, tableTop - 15, 10, true, rgb(1, 1, 1));
-  drawText("Dosage & Frequency", col2 + 4, tableTop - 15, 10, true, rgb(1, 1, 1));
-  drawText("Days", col3 + 8, tableTop - 15, 10, true, rgb(1, 1, 1));
-  y = tableTop - rowH;
+  const noteSize = 8.5;
+  const noteLead = 11;
+  /** Nothing may be drawn below this: the watermark sits under it. */
+  const pageBottom = 60;
+
+  const startPage = () => {
+    page = pdf.addPage([612, 792]);
+    y = page.getHeight() - margin;
+  };
+
+  const drawTableHeader = () => {
+    page.drawRectangle({
+      x: margin,
+      y: y - rowH,
+      width: contentWidth,
+      height: rowH,
+      color: rgb(0.09, 0.09, 0.09),
+    });
+    drawText("Medicine", col1 + 8, y - 15, 10, true, rgb(1, 1, 1));
+    drawText("Type", colType + 4, y - 15, 10, true, rgb(1, 1, 1));
+    drawText("Dosage & Frequency", col2 + 4, y - 15, 10, true, rgb(1, 1, 1));
+    drawText("Duration", col3 + 8, y - 15, 10, true, rgb(1, 1, 1));
+    y -= rowH;
+  };
+  drawTableHeader();
 
   const rows =
     input.prescriptionRows.length > 0
@@ -205,14 +243,24 @@ export async function buildConsultationReportPdf(
         ];
 
   rows.forEach((line, idx) => {
-    y -= rowH;
-    if (y < 90) return;
+    const note = pdfSafe(line.doseNote?.trim() ?? "");
+    const noteLines = note
+      ? wrapText(note, col3 - col2 - 8, font, noteSize)
+      : [];
+    const generic = pdfSafe(genericToShow(line));
+    const height = rowH + Math.max(noteLines.length, generic ? 1 : 0) * noteLead;
+    // A medicine must never fall off the page: it continues on the next one.
+    if (y - height < pageBottom) {
+      startPage();
+      drawTableHeader();
+    }
+    y -= height;
     if (idx % 2 === 1) {
       page.drawRectangle({
         x: margin,
         y,
         width: contentWidth,
-        height: rowH,
+        height,
         color: rgb(0.98, 0.98, 0.98),
       });
     }
@@ -225,15 +273,72 @@ export async function buildConsultationReportPdf(
     const dose = [line.dosePattern, foodTimingLabel(line.foodTiming)]
       .filter(Boolean)
       .join(" · ");
-    drawText((line.name || "—").slice(0, 36), col1 + 8, y + 7, 10);
-    drawText((dose || "—").slice(0, 32), col2 + 4, y + 7, 10);
-    drawText(
-      line.duration != null && String(line.duration) ? String(line.duration) : "—",
-      col3 + 8,
-      y + 7,
-      10
-    );
+    const baseline = y + height - 15;
+    drawText(pdfSafe(line.name || "—").slice(0, 30), col1 + 8, baseline, 10, true);
+    if (generic) {
+      drawText(
+        generic.slice(0, 40),
+        col1 + 8,
+        baseline - noteLead,
+        noteSize,
+        false,
+        rgb(0.4, 0.4, 0.4)
+      );
+    }
+    drawText(pdfSafe(formLabel(line.dosageForm) || "—").slice(0, 12), colType + 4, baseline, 10);
+    drawText(pdfSafe(dose || "—").slice(0, 32), col2 + 4, baseline, 10);
+    drawText(pdfSafe(formatDuration(line) || "—"), col3 + 8, baseline, 10);
+    noteLines.forEach((text, i) => {
+      drawText(
+        text,
+        col2 + 4,
+        baseline - noteLead * (i + 1),
+        noteSize,
+        false,
+        rgb(0.4, 0.4, 0.4)
+      );
+    });
   });
+
+  // Clinical notes = the SOAP Plan, directly under the prescription.
+  const clinical = input.clinicalNotes?.trim() ?? "";
+  if (clinical) {
+    const lines = clinical
+      .split("\n")
+      .flatMap((l) => wrapText(pdfSafe(l), contentWidth - 20, font, 10));
+    y -= 14;
+    let first = true;
+    for (let i = 0; i < lines.length; ) {
+      const room = Math.floor((y - pageBottom - (first ? 30 : 10)) / 13);
+      if (room < 1) {
+        startPage();
+        continue;
+      }
+      const chunk = lines.slice(i, i + room);
+      const h = (first ? 30 : 10) + chunk.length * 13;
+      page.drawRectangle({
+        x: margin,
+        y: y - h,
+        width: contentWidth,
+        height: h,
+        borderColor: rgb(0.9, 0.9, 0.9),
+        borderWidth: 1,
+      });
+      let ty = y - 14;
+      if (first) {
+        drawText("CLINICAL NOTES", margin + 10, ty, 9, true);
+        ty -= 16;
+      }
+      chunk.forEach((t, j) => drawText(t, margin + 10, ty - j * 13, 10));
+      y -= h;
+      i += chunk.length;
+      first = false;
+      if (i < lines.length) startPage();
+    }
+  }
+
+  // The footer stays whole: 28 + 22 for the rows, plus the detail under the date.
+  if (y - 72 < pageBottom) startPage();
 
   y -= 28;
   page.drawLine({
@@ -249,29 +354,35 @@ export async function buildConsultationReportPdf(
   const authLabelW = fontBold.widthOfTextAtSize(authLabel, 9);
   drawText(authLabel, rightX - authLabelW, y, 9, true, rgb(0.45, 0.45, 0.45));
   y -= 22;
+  const nextVisit = pdfSafe(formatFollowUpForPrint(input.followUp));
+  const nextVisitDetail = pdfSafe(followUpPrintDetail(input.followUp));
   page.drawRectangle({
     x: margin,
     y: y - 4,
-    width: 90,
+    width: Math.max(90, font.widthOfTextAtSize(nextVisit, 11) + 20),
     height: 22,
     color: rgb(0.93, 0.99, 0.96),
   });
-  drawText("As advised", margin + 10, y + 2, 11, false, rgb(0.02, 0.37, 0.27));
+  drawText(nextVisit, margin + 10, y + 2, 11, false, rgb(0.02, 0.37, 0.27));
+  if (nextVisitDetail) {
+    drawText(nextVisitDetail, margin, y - 16, 9, false, rgb(0.4, 0.4, 0.4));
+  }
   const docW2 = fontBold.widthOfTextAtSize(input.doctorLabel, 12);
   drawText(input.doctorLabel, rightX - docW2, y + 2, 12, true);
 
-  // Watermark
+  // Watermark, on every page
   const watermark = "Powered by Welbuk";
   const wmSize = 11;
   const wmW = font.widthOfTextAtSize(watermark, wmSize);
-  drawText(
-    watermark,
-    (pageWidth - wmW) / 2,
-    36,
-    wmSize,
-    false,
-    rgb(0.64, 0.64, 0.64)
-  );
+  for (const p of pdf.getPages()) {
+    p.drawText(watermark, {
+      x: (pageWidth - wmW) / 2,
+      y: 36,
+      size: wmSize,
+      font,
+      color: rgb(0.64, 0.64, 0.64),
+    });
+  }
 
   return pdf.save();
 }

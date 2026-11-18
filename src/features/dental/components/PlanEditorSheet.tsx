@@ -21,10 +21,14 @@ import {
     normalizeTimeHHmm,
     providerFeeSum,
     randomId,
+    planRowNetFeesByName,
     selectedActualsTreatmentFee,
+    feeForTreatmentName,
     toDateOnly,
     todayYmd,
 } from "../utils";
+import { useDentalConsult } from "../DentalConsultContext";
+import { PAID_LOCK_MESSAGE } from "../useDentalDiagnosis";
 import { ProviderFeeSplitEditor } from "./ProviderFeeSplitEditor";
 import { ToothBadge } from "./ToothBadge";
 
@@ -46,9 +50,11 @@ function feesMapFrom(
   finding?: DiagnosisDetailsEntry | null,
   summary?: DentalTreatmentPlanRow["findingSummary"]
 ): Record<string, number> | undefined {
+  // The summary is hydrated with the row's own net fees layered over the
+  // finding's (see the draft effect), so it is the more specific source.
   return (
-    finding?.suggestedTreatmentFees ??
     summary?.suggestedTreatmentFees ??
+    finding?.suggestedTreatmentFees ??
     undefined
   );
 }
@@ -172,6 +178,7 @@ export function PlanEditorSheet({
 }: Props) {
   const [draft, setDraft] = useState<DentalTreatmentPlanRow | null>(null);
   const [pickQuery, setPickQuery] = useState("");
+  const paidLocked = useDentalConsult().isRowPaidLocked(row?.id);
 
   useEffect(() => {
     if (!visible || !row) {
@@ -191,9 +198,15 @@ export function PlanEditorSheet({
     const findingSummary = row.findingSummary
       ? {
           ...row.findingSummary,
-          suggestedTreatmentFees:
-            row.findingSummary.suggestedTreatmentFees ??
-            finding?.suggestedTreatmentFees,
+          // Net fee per treated item, most authoritative last: the saved
+          // snapshot, the live finding, then the row's own
+          // original × (1 − discount%) — the figure Practice bills. Never the
+          // catalogue's gross price when a discounted net is known.
+          suggestedTreatmentFees: {
+            ...(row.findingSummary.suggestedTreatmentFees ?? {}),
+            ...(finding?.suggestedTreatmentFees ?? {}),
+            ...planRowNetFeesByName(row),
+          },
         }
       : row.findingSummary;
     setDraft({
@@ -238,6 +251,32 @@ export function PlanEditorSheet({
   const selectedActuals = draft.selectedActuals ?? [];
   const remainingSuggested = suggestedOptions.filter(
     (opt) => !selectedActuals.some((a) => a.name === opt)
+  );
+  // Same fee lookup and de-duplication as selectedActualsTreatmentFee, so the
+  // rows add up to the treatment part of the total.
+  const treatedRows = (() => {
+    const fees = feesMapFrom(finding, draft.findingSummary);
+    const seen = new Set<string>();
+    const out: { name: string; dateLabel: string; fee: number }[] = [];
+    for (const a of selectedActuals) {
+      const name = String(a.name ?? "").trim();
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        name,
+        dateLabel: formatPlanRowDate(a.date),
+        fee: feeForTreatmentName(name, fees, catalog),
+      });
+    }
+    return out;
+  })();
+  const planTotal = combinedPlanTotal(
+    draft.providers,
+    selectedActuals,
+    finding,
+    draft.findingSummary,
+    catalog
   );
   const treatmentCost = selectedActualsTreatmentFee(
     selectedActuals,
@@ -311,7 +350,7 @@ export function PlanEditorSheet({
   };
 
   const handleSave = () => {
-    if (!canSave) return;
+    if (!canSave || paidLocked) return;
     const providers = draft.providers.map((p) => ({
       doctorId: p.doctorId || "",
       role: p.role?.trim() || "Primary",
@@ -370,6 +409,17 @@ export function PlanEditorSheet({
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 16 }}
         >
+          {paidLocked ? (
+            <View className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <Text className="text-xs text-emerald-900">
+                {PAID_LOCK_MESSAGE}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* DONE + PAID: readable and scrollable, but nothing below can be tapped.
+              The server refuses the same change. */}
+          <View pointerEvents={paidLocked ? "none" : "auto"} style={{ gap: 16 }}>
           {/* Condition banner (linked) */}
           {isLinked && draft.findingSummary?.conditionsText ? (
             <View className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
@@ -612,10 +662,55 @@ export function PlanEditorSheet({
                 );
                 setDraft((d) => (d ? { ...d, providers, totalFee } : d));
               }}
-              showTotal
+              showTotal={false}
               hideTitle
               hideAddProvider={isLinked}
             />
+
+            {/* Practice's "Treated list": each treated procedure with its
+                date and fee, so the total below is explained line by line. */}
+            {treatedRows.length > 0 ? (
+              <View className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">
+                <View className="flex-row border-b border-neutral-200 px-3 py-2">
+                  <Text className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Treated list
+                  </Text>
+                  <Text className="w-24 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Date
+                  </Text>
+                  <Text className="w-24 text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Fee
+                  </Text>
+                </View>
+                {treatedRows.map((row, i) => (
+                  <View
+                    key={row.name}
+                    className={`flex-row items-center px-3 py-2 ${
+                      i < treatedRows.length - 1
+                        ? "border-b border-neutral-200"
+                        : ""
+                    }`}
+                  >
+                    <Text
+                      className="flex-1 pr-2 text-xs text-neutral-900"
+                      numberOfLines={1}
+                    >
+                      {row.name}
+                    </Text>
+                    <Text className="w-24 text-xs text-neutral-500">
+                      {row.dateLabel}
+                    </Text>
+                    <Text className="w-24 text-right text-xs font-medium text-neutral-900">
+                      ₹ {row.fee.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            <Text className="text-right text-sm font-semibold text-brand">
+              Total: ₹{" "}
+              {planTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            </Text>
           </View>
 
           {!canSave && usesSuggestedPicker ? (
@@ -623,17 +718,24 @@ export function PlanEditorSheet({
               Add at least one treatment under Treated before saving.
             </Text>
           ) : null}
+          </View>
         </ScrollView>
 
         {/* Footer */}
         <View className="gap-2 border-t border-neutral-200 bg-white px-4 py-3">
+          {paidLocked ? null : (
+            <Button
+              label="Save"
+              loading={saving}
+              disabled={!canSave}
+              onPress={handleSave}
+            />
+          )}
           <Button
-            label="Save"
-            loading={saving}
-            disabled={!canSave}
-            onPress={handleSave}
+            label={paidLocked ? "Close" : "Cancel"}
+            variant="outline"
+            onPress={onClose}
           />
-          <Button label="Cancel" variant="outline" onPress={onClose} />
         </View>
       </View>
     </AppModal>
