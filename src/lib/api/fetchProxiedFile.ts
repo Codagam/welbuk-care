@@ -1,6 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 
-import { getAuthToken } from "@/lib/api/client";
+import { practiceHeaders } from "@/lib/api/client";
 import { fileProxyUrl } from "@/lib/api/endpoints/recording";
 
 const CACHE_DIR = `${FileSystem.cacheDirectory ?? ""}welbuk-proxy/`;
@@ -36,8 +36,8 @@ export async function fetchProxiedFileToCache(
   const trimmed = storageUrl?.trim() ?? "";
   if (!trimmed) throw new Error("File URL is required");
 
-  const token = await getAuthToken();
-  if (!token) throw new Error("Not signed in");
+  const headers = await practiceHeaders();
+  if (!headers.Authorization) throw new Error("Not signed in");
 
   if (!FileSystem.cacheDirectory) {
     throw new Error("File cache is unavailable on this device");
@@ -53,7 +53,7 @@ export async function fetchProxiedFileToCache(
   const proxy = fileProxyUrl(trimmed);
 
   const result = await FileSystem.downloadAsync(proxy, dest, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
   });
 
   if (result.status < 200 || result.status >= 300) {

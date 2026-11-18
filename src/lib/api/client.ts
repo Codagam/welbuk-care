@@ -9,7 +9,7 @@
  * - Maps failures to typed `ApiError`s and fires a global 401 handler so the
  *   auth layer can force a re-login.
  */
-import { config } from "@/lib/config";
+import { config, isPracticeUrl, vercelBypassHeaders } from "@/lib/config";
 import { ApiError, mapErrorCode } from "./errors";
 
 type TokenProvider = () => Promise<string | null> | string | null;
@@ -24,6 +24,30 @@ export function setTokenProvider(fn: TokenProvider): void {
 /** Resolve the current bearer token (for Image/proxy headers outside `api()`). */
 export async function getAuthToken(): Promise<string | null> {
   return tokenProvider();
+}
+
+/**
+ * THE single source of headers for every Practice API request — `api()` and
+ * the native file transfers (`File.upload`, `FileSystem.downloadAsync`) that
+ * can't go through `fetch`. Add any new global header here and it reaches
+ * every call.
+ *
+ * - Vercel deployment-protection bypass (only for Practice URLs; empty when
+ *   `EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS` is unset).
+ * - `Authorization: Bearer <token>` unless `skipAuth`.
+ */
+export async function practiceHeaders(
+  opts: { url?: string; skipAuth?: boolean } = {}
+): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  if (!opts.url || isPracticeUrl(opts.url)) {
+    Object.assign(headers, vercelBypassHeaders());
+  }
+  if (!opts.skipAuth) {
+    const token = await tokenProvider();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 export function setUnauthorizedHandler(fn: (() => void) | null): void {
@@ -91,12 +115,11 @@ export async function api<T = unknown>(req: ApiRequest): Promise<T> {
   const isForm =
     typeof FormData !== "undefined" && req.body instanceof FormData;
 
-  const headers: Record<string, string> = { Accept: "application/json", ...(req.headers ?? {}) };
-
-  if (!req.skipAuth) {
-    const token = await tokenProvider();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...(req.headers ?? {}),
+    ...(await practiceHeaders({ url, skipAuth: req.skipAuth })),
+  };
 
   let body: BodyInit | undefined;
   if (req.body != null) {

@@ -1,6 +1,6 @@
 import { File, UploadType } from "expo-file-system";
 
-import { api, getAuthToken } from "@/lib/api/client";
+import { api, practiceHeaders } from "@/lib/api/client";
 import { ApiError, mapErrorCode } from "@/lib/api/errors";
 import { config } from "@/lib/config";
 import type { Recording } from "@/features/consult/types";
@@ -50,7 +50,6 @@ export async function uploadFile(
   purpose: UploadPurpose,
   ctx: UploadContext
 ): Promise<string[]> {
-  const token = await getAuthToken();
   const url = `${config.practiceUrl}/api/upload`;
 
   const parameters: Record<string, string> = { purpose };
@@ -68,7 +67,7 @@ export async function uploadFile(
     parameters,
     headers: {
       Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(await practiceHeaders({ url })),
     },
   });
 

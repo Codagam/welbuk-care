@@ -1,6 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 
-import { api, getAuthToken } from "@/lib/api/client";
+import { api, practiceHeaders } from "@/lib/api/client";
 import { ApiError, mapErrorCode } from "@/lib/api/errors";
 import { config } from "@/lib/config";
 
@@ -172,13 +172,13 @@ export async function downloadFacilityQrImageToFile(
     return;
   }
 
-  const token = await getAuthToken();
   const baseHeaders = { Accept: "image/png,image/*,*/*" };
+  const proxyUrl = wrapperQrProxyUrl(trimmed);
 
   try {
-    await downloadToFile(wrapperQrProxyUrl(trimmed), destUri, {
+    await downloadToFile(proxyUrl, destUri, {
       ...baseHeaders,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(await practiceHeaders({ url: proxyUrl })),
     });
   } catch (err) {
     if (isHttpUrl(trimmed) && proxyRejectedUrl(err)) {

@@ -64,4 +64,25 @@ export const config = {
     process.env.EXPO_PUBLIC_WS_URL,
     DEV_WS_URL
   ),
+  /** Only for a password-protected Vercel preview backend; empty otherwise. */
+  vercelProtectionBypass: (
+    process.env.EXPO_PUBLIC_VERCEL_PROTECTION_BYPASS ?? ""
+  ).trim(),
 } as const;
+
+/**
+ * Header that lets a request through Vercel deployment protection (same as
+ * Welbuk Health's `vercelBypassHeaders`). Empty when the variable is unset, so
+ * normal backends never receive it. Attach only to Practice API requests —
+ * never to third-party URLs.
+ */
+export function vercelBypassHeaders(): Record<string, string> {
+  return config.vercelProtectionBypass
+    ? { "x-vercel-protection-bypass": config.vercelProtectionBypass }
+    : {};
+}
+
+/** True when `url` points at the configured Practice API origin. */
+export function isPracticeUrl(url: string): boolean {
+  return url === config.practiceUrl || url.startsWith(`${config.practiceUrl}/`);
+}
