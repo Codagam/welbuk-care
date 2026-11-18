@@ -91,11 +91,32 @@ export type OrderSendResult = {
   unpriced: number;
 };
 
-export function getConsultOrders(consultationId: string): Promise<OrdersView> {
-  return api<OrdersView>({
+/**
+ * Practice 00cd7b3b (2026-11-17) changed each recent pick from a name to
+ * `{ name, source, lastAt }`; older builds (production) still send names.
+ * Reduced to names here so the card works against either.
+ */
+type RecentPickWire = string | { name?: unknown } | null | undefined;
+
+function recentNames(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return (list as RecentPickWire[])
+    .map((p) => (typeof p === "string" ? p : p?.name))
+    .filter((n): n is string => typeof n === "string" && n.trim() !== "");
+}
+
+export async function getConsultOrders(
+  consultationId: string
+): Promise<OrdersView> {
+  const view = await api<OrdersView>({
     path: "/api/consult/orders",
     query: { consultationId },
   });
+  const recent = {} as OrdersView["recent"];
+  for (const [kind, list] of Object.entries(view.recent ?? {})) {
+    recent[kind as OrderKind] = recentNames(list);
+  }
+  return { ...view, recent };
 }
 
 export function addConsultOrderLine(body: {
