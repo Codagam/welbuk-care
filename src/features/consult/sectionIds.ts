@@ -7,6 +7,7 @@ export const CONSULT_SECTION_IDS = {
   wellChild: "consult-section-well-child",
   recordings: "consult-section-recordings",
   plan: "consult-section-plan",
+  orders: "consult-section-orders",
 } as const;
 
 export type ConsultSectionId =

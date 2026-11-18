@@ -30,7 +30,6 @@ import { CONSULT_LOCKED_COMPLETE_REASON } from "@/features/consult/consultLock";
 import { CompleteBar } from "./components/CompleteBar";
 import { CompleteFooter } from "./components/CompleteFooter";
 import { FollowUpSheet } from "./components/FollowUpSheet";
-import { LabsCard } from "./components/LabsCard";
 import {
   ConversationSummaryCard,
   FinalSummaryCard,
@@ -45,11 +44,7 @@ import {
 } from "./hooks/usePrescriptionDraft";
 import type { AllergyRecordLike } from "./types";
 import { AppAlert } from "@/ui/AppAlert";
-import { ConsultOrdersCard } from "@/features/consult/orders/ConsultOrdersCard";
-import {
-  useConsultReferrals,
-  useInvalidateConsultOrders,
-} from "@/features/consult/orders/hooks";
+import { useInvalidateConsultOrders } from "@/features/consult/orders/hooks";
 import { sendAllConsultOrders } from "@/lib/api/endpoints/orders";
 
 function normalizeAllergies(
@@ -114,7 +109,6 @@ export function PlanOfCareSection({
     patientId,
     consultationId
   );
-  const referralsQ = useConsultReferrals(facilityId, patientId);
   const invalidateOrders = useInvalidateConsultOrders(consultationId);
   const saveSummary = useSaveSummary(consultationId);
 
@@ -139,12 +133,8 @@ export function PlanOfCareSection({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const labReports = historyQ.data?.labReports ?? [];
   const followUpLine = summaryQ.data?.followUp ?? null;
 
-  const patientLine =
-    patientName ||
-    (patientId ? `Patient ${patientId.slice(-6)}` : "Patient");
 
   const goToQueueAfterComplete = (detail?: string | null) => {
     const message = detail?.trim()
@@ -373,22 +363,8 @@ export function PlanOfCareSection({
         />
       </View>
 
-      {/* 2. Labs — full width, never shares a row with notes */}
-      <View style={styles.block}>
-        <LabsCard
-          labReports={labReports}
-          patientName={patientName || patientLine}
-          referrals={referralsQ.data ?? []}
-          ordersPanel={
-            facilityId ? (
-              <ConsultOrdersCard
-                consultationId={consultationId}
-                facilityId={facilityId}
-              />
-            ) : undefined
-          }
-        />
-      </View>
+      {/* Labs, orders and referrals moved to their own section after this one
+          (OrdersReferralsSection), as in Practice. */}
 
       {/* 3. Conversation Summary (AI, read-only) + Final Summary, as in Practice */}
       {tablet ? (

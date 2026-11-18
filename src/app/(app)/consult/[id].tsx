@@ -21,6 +21,7 @@ import {
 import { ConsultSectionCard } from "@/features/consult/components/ConsultSectionCard";
 import { ConsultLockBanner } from "@/features/consult/components/ConsultLockBanner";
 import { SectionNavigator } from "@/features/consult/components/SectionNavigator";
+import { OrdersReferralsSection } from "@/features/consult/orders/OrdersReferralsSection";
 import { PlanOfCareSection } from "@/features/consult/plan-of-care/PlanOfCareSection";
 import {
   CONSULT_SECTION_IDS,
@@ -80,6 +81,7 @@ function buildNavItems(
     items.push({ id: CONSULT_SECTION_IDS.wellChild, label: "Well-child check" });
   }
   items.push({ id: CONSULT_SECTION_IDS.plan, label: "Plan of care" });
+  items.push({ id: CONSULT_SECTION_IDS.orders, label: "Orders & referrals" });
   return items;
 }
 
@@ -394,7 +396,7 @@ export default function ConsultScreen() {
       <ConsultSectionCard
         id={CONSULT_SECTION_IDS.plan}
         title="Plan of care"
-        subtitle="Prescription, labs, notes, and follow-up"
+        subtitle="Prescription, notes, and follow-up"
         onLayoutY={onSectionLayout}
       >
         <PlanOfCareSection
@@ -410,6 +412,19 @@ export default function ConsultScreen() {
           onStickyFooter={setStickyFooter}
           locked={isLocked}
           flushNotes={() => notesFlushRef.current?.() ?? Promise.resolve(true)}
+        />
+      </ConsultSectionCard>
+
+      <ConsultSectionCard
+        id={CONSULT_SECTION_IDS.orders}
+        title="Orders & referrals"
+        subtitle="Lab tests, scans and referrals for this visit"
+        onLayoutY={onSectionLayout}
+      >
+        <OrdersReferralsSection
+          consultationId={id}
+          patientId={resolvedPatientId}
+          patientName={header?.name}
         />
       </ConsultSectionCard>
     </View>
